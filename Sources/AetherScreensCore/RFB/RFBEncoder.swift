@@ -1,0 +1,79 @@
+import Foundation
+
+/// Encodes client-to-server messages according to the RFB 3.8 specification.
+public enum RFBEncoder {
+
+    /// Encode `SetPixelFormat` (message-type 0)
+    public static func encodeSetPixelFormat(_ format: RFBPixelFormat) -> Data {
+        var data = Data(capacity: 20)
+        data.append(RFBConstants.ClientMessageType.setPixelFormat.rawValue)
+        data.append(contentsOf: [0, 0, 0]) // 3 bytes padding
+        data.append(format.serializedData)
+        return data
+    }
+
+    /// Encode `SetEncodings` (message-type 2)
+    public static func encodeSetEncodings(_ encodings: [RFBConstants.EncodingType]) -> Data {
+        var data = Data(capacity: 4 + encodings.count * 4)
+        data.append(RFBConstants.ClientMessageType.setEncodings.rawValue)
+        data.append(0) // padding
+        let count = UInt16(encodings.count).bigEndian
+        data.append(contentsOf: withUnsafeBytes(of: count) { Array($0) })
+
+        for enc in encodings {
+            let encRaw = enc.rawValue.bigEndian
+            data.append(contentsOf: withUnsafeBytes(of: encRaw) { Array($0) })
+        }
+        return data
+    }
+
+    /// Encode `FramebufferUpdateRequest` (message-type 3)
+    public static func encodeFramebufferUpdateRequest(
+        incremental: Bool,
+        x: UInt16,
+        y: UInt16,
+        width: UInt16,
+        height: UInt16
+    ) -> Data {
+        var data = Data(capacity: 10)
+        data.append(RFBConstants.ClientMessageType.framebufferUpdateRequest.rawValue)
+        data.append(incremental ? 1 : 0)
+        data.append(contentsOf: withUnsafeBytes(of: x.bigEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: y.bigEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: width.bigEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: height.bigEndian) { Array($0) })
+        return data
+    }
+
+    /// Encode `KeyEvent` (message-type 4)
+    public static func encodeKeyEvent(down: Bool, keySym: UInt32) -> Data {
+        var data = Data(capacity: 8)
+        data.append(RFBConstants.ClientMessageType.keyEvent.rawValue)
+        data.append(down ? 1 : 0)
+        data.append(contentsOf: [0, 0]) // 2 bytes padding
+        data.append(contentsOf: withUnsafeBytes(of: keySym.bigEndian) { Array($0) })
+        return data
+    }
+
+    /// Encode `PointerEvent` (message-type 5)
+    public static func encodePointerEvent(buttonMask: RFBConstants.ButtonMask, x: UInt16, y: UInt16) -> Data {
+        var data = Data(capacity: 6)
+        data.append(RFBConstants.ClientMessageType.pointerEvent.rawValue)
+        data.append(buttonMask.rawValue)
+        data.append(contentsOf: withUnsafeBytes(of: x.bigEndian) { Array($0) })
+        data.append(contentsOf: withUnsafeBytes(of: y.bigEndian) { Array($0) })
+        return data
+    }
+
+    /// Encode `ClientCutText` (message-type 6) - Clipboard sync
+    public static func encodeClientCutText(_ text: String) -> Data {
+        let textData = Data(text.utf8)
+        var data = Data(capacity: 8 + textData.count)
+        data.append(RFBConstants.ClientMessageType.clientCutText.rawValue)
+        data.append(contentsOf: [0, 0, 0]) // 3 bytes padding
+        let length = UInt32(textData.count).bigEndian
+        data.append(contentsOf: withUnsafeBytes(of: length) { Array($0) })
+        data.append(textData)
+        return data
+    }
+}

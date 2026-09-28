@@ -1,0 +1,19 @@
+# Xcode / Swift
+.DS_Store
+/.build
+/Packages
+/DerivedData
+*.xcodeproj
+*.xcworkspace
+*.xcuserstate
+.swiftpm/
+
+# App & Logs
+*.log
+.system_generated
+
+# Build outputs
+/build/
+
+# Local signing identity (not committed)
+scripts/signing.local.env

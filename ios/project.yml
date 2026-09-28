@@ -1,0 +1,51 @@
+name: AetherScreensIOS
+options:
+  bundleIdPrefix: com.aethernative
+packages:
+  AetherScreens:
+    path: ..
+targets:
+  AetherScreensIOS:
+    type: application
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources:
+      - AetherScreensIOSApp.swift
+    dependencies:
+      - package: AetherScreens
+        product: AetherScreensCore
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: AetherScreens
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocalNetworkUsageDescription: 'Discover nearby computers for remote screen sharing.'
+        NSBonjourServices:
+          - _rfb._tcp
+          - _apple-sas._tcp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios
+        TARGETED_DEVICE_FAMILY: '1,2'
+        SWIFT_VERSION: '5.9'
+  AetherScreensIOSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources:
+      - UITests
+    dependencies:
+      - target: AetherScreensIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios.uitests
+        SWIFT_VERSION: '5.9'
