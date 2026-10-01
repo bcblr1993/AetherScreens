@@ -11,6 +11,7 @@ public struct RemoteDesktopView: View {
     @State private var lastDragLocation: CGPoint?
     @State private var isDraggingMouse: Bool = false
     @State private var showingLogs: Bool = false
+    @State private var showingKeyboardCustomization = false
     private let managesSessionLifecycle: Bool
     private let onDisconnect: (() -> Void)?
 
@@ -42,11 +43,15 @@ public struct RemoteDesktopView: View {
                 VStack {
                     floatingTopBar
                         .padding(.top, 12)
+                    if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .top {
+                        MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
+                            .transition(.move(edge: .top))
+                    }
                     Spacer()
 
                     // Bottom Mac Keyboard Toolbar (if toggled)
-                    if viewModel.isKeyboardVisible {
-                        MacKeyboardToolbar(viewModel: viewModel)
+                    if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .bottom {
+                        MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
                             .transition(.move(edge: .bottom))
                     }
                 }
@@ -79,6 +84,9 @@ public struct RemoteDesktopView: View {
         }
         .sheet(isPresented: $showingLogs) {
             DiagnosticLogView()
+        }
+        .sheet(isPresented: $showingKeyboardCustomization) {
+            KeyboardToolbarSettingsView(configuration: $viewModel.keyboardConfiguration)
         }
     }
 

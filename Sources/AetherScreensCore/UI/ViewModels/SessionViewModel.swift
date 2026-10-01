@@ -78,14 +78,24 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     private var frameCountSinceLastSnapshot: Int = 0
 
     public let isTemporary: Bool
+    @Published public var keyboardConfiguration: KeyboardToolbarConfiguration {
+        didSet {
+            // A hidden sticky key must never leave the remote modifier held.
+            if keyboardConfiguration.items != oldValue.items { releaseAllModifiers() }
+            if !isTemporary { keyboardStore.save(keyboardConfiguration, for: device.id) }
+        }
+    }
+    private let keyboardStore: KeyboardToolbarStore
     public var canRememberPassword: Bool { !isTemporary }
     private let deviceStore: DeviceStore
 
     public init(device: RemoteDevice, password: String?, isTemporary: Bool = false,
-                deviceStore: DeviceStore = .shared) {
+                deviceStore: DeviceStore = .shared, keyboardStore: KeyboardToolbarStore = .shared) {
         self.device = device
         self.isTemporary = isTemporary
         self.deviceStore = deviceStore
+        self.keyboardStore = keyboardStore
+        self.keyboardConfiguration = isTemporary ? KeyboardToolbarConfiguration() : keyboardStore.load(for: device.id)
         let rfb = RFBClient(
             host: device.host,
             port: device.port,

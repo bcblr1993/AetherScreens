@@ -22,7 +22,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Secure connections / SSH keys | External Tailscale transport, device import client and Keychain | Real Tailnet route/import acceptance; integrated SSH tunnel/key handling |
 | File transfers | No transfer implementation | Bidirectional transfer and received-file verification |
 | Data / credential synchronization | Local persistence and Keychain migration | Cross-device synchronization and conflict handling |
-| Toolbar customization / keyboard options | Fixed toolbar | Per-device button size, keyboard position, visible buttons/spacers and reordering; keyboard mapping preferences and cross-device persistence |
+| Toolbar customization / keyboard options | Per-computer button size, top/bottom position, visibility, ordering and multiple spacers implemented. Installed Mac position/size/menu switching, hiding, moving, adding spacers, relaunch persistence and remote arrow/delete delivery passed. Temporary settings remain in memory; hiding a held modifier releases it. | Physical iPhone customization acceptance; keyboard mapping preferences and cross-device synchronization |
 | On-disconnect actions | Disconnect only | Per-connection Mac hot-corner, lock and logout actions before disconnect; proof on an isolated acceptance desktop |
 | URL schemes / automation | No app URL handler | Saved and temporary connection URLs, account/VNC parameters and Observe selection; SSH-key URL support with real tunnel implementation; applicable shortcuts/widgets |
 | AirPlay / external display / Pencil | Not implemented | iOS display routing and peripheral acceptance |
@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests and iOS simulator language switch/persistence pass, Mac switch passes | Physical iPhone acceptance; iPhone 17 and mini switch/persistence and narrow layouts passed |
-| Release readiness | 90 latest-source tests (4 environment skips) pass under both package build systems; Mac release and iOS simulator builds pass; resource fix passed CI; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
+| Release readiness | 95 latest-source tests (4 environment skips) pass under both package build systems; Mac release and iOS simulator builds pass; multi-window commit passed CI; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -50,3 +50,11 @@ Reference detail checked on 2026-10-01: [Toolbar customization](https://help.edo
 and [URL schemes](https://help.edovia.com/en/screens-5/features/url-schemes).
 The remaining-work cells retain these concrete behaviors; existence of a
 settings sheet or parser alone is not completion of the corresponding feature.
+
+Live toolbar/menu acceptance exposed a metrics deadlock: the network thread
+published an observable bandwidth value while holding the metrics lock and
+waited for SwiftUI's main thread; Metal drawing on the main thread waited for
+that lock. The repair publishes on the main thread after releasing accumulator
+locks. Regression tests cover observable notification reentering frame recording
+and main-thread publication from a network thread. The previously stuck native
+position menu and continued remote key delivery passed in the installed repair.

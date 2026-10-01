@@ -7,10 +7,11 @@ public struct MacKeyboardToolbar: View {
     @ObservedObject public var viewModel: SessionViewModel
     @State private var showingTextInput: Bool = false
     @State private var showingFunctionKeys: Bool = false
-    @State private var textInput: String = ""
+    @Binding private var showingCustomization: Bool
 
-    public init(viewModel: SessionViewModel) {
+    public init(viewModel: SessionViewModel, showingCustomization: Binding<Bool>) {
         self.viewModel = viewModel
+        _showingCustomization = showingCustomization
     }
 
     public var body: some View {
@@ -23,13 +24,13 @@ public struct MacKeyboardToolbar: View {
                     Image(systemName: "keyboard")
                         .foregroundColor(.secondary)
 
-                    TextField(AppLocalization.string("Type or paste text to send to Mac..."), text: $textInput)
+                    TextField(AppLocalization.string("Type or paste text to send to Mac..."), text: $viewModel.textInputBuffer)
                         .textFieldStyle(.plain)
                         .onSubmit {
                             sendEnteredText()
                         }
 
-                    if !textInput.isEmpty {
+                    if !viewModel.textInputBuffer.isEmpty {
                         Button {
                             sendEnteredText()
                         } label: {
@@ -78,160 +79,19 @@ public struct MacKeyboardToolbar: View {
             // Main Primary Keyboard Bar
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    // Actions Menu (Spotlight, App Switcher, Mission Control, etc.)
-                    Menu {
-                        ForEach(MacKeyMap.MacShortcut.allCases) { shortcut in
-                            Button {
-                                viewModel.executeShortcut(shortcut)
-                            } label: {
-                                Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "command")
-                            Text(AppLocalization.string("Actions"))
-                                .font(.system(size: 13, weight: .medium))
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 10))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color.accentColor.opacity(0.15))
-                        .foregroundColor(.accentColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    ForEach(viewModel.keyboardConfiguration.items.filter(\.isVisible)) { item in
+                        configuredButton(item.action)
                     }
-
-                    // 3-State Sticky Modifiers (Screens style: tap once = next key, double tap = locked 🔒)
-                    Group {
-                        ModifierKeyButton(
-                            symbol: "⌘",
-                            label: "Cmd",
-                            state: viewModel.cmdState
-                        ) {
-                            viewModel.cycleCmd()
-                        }
-
-                        ModifierKeyButton(
-                            symbol: "⌥",
-                            label: "Opt",
-                            state: viewModel.optState
-                        ) {
-                            viewModel.cycleOption()
-                        }
-
-                        ModifierKeyButton(
-                            symbol: "⌃",
-                            label: "Ctrl",
-                            state: viewModel.ctrlState
-                        ) {
-                            viewModel.cycleControl()
-                        }
-
-                        ModifierKeyButton(
-                            symbol: "⇧",
-                            label: "Shift",
-                            state: viewModel.shiftState
-                        ) {
-                            viewModel.cycleShift()
-                        }
-                    }
-
-                    Divider()
-                        .frame(height: 24)
-
-                    // Special Single-Tap Mac Keys
-                    Group {
-                        ActionButton(title: "esc") {
-                            viewModel.sendKeyTap(MacKeyMap.escape)
-                        }
-
-                        ActionButton(title: "tab") {
-                            viewModel.sendKeyTap(MacKeyMap.tab)
-                        }
-
-                        ActionButton(title: "space") {
-                            viewModel.sendKeyTap(MacKeyMap.space)
-                        }
-
-                        ActionButton(title: "return") {
-                            viewModel.sendKeyTap(MacKeyMap.return)
-                        }
-
-                        ActionButton(title: "del") {
-                            viewModel.sendKeyTap(MacKeyMap.delete)
-                        }
-                    }
-
-                    Divider()
-                        .frame(height: 24)
-
-                    // Directional Arrows
-                    Group {
-                        ActionButton(icon: "arrow.left") {
-                            viewModel.sendKeyTap(MacKeyMap.arrowLeft)
-                        }
-                        ActionButton(icon: "arrow.up") {
-                            viewModel.sendKeyTap(MacKeyMap.arrowUp)
-                        }
-                        ActionButton(icon: "arrow.down") {
-                            viewModel.sendKeyTap(MacKeyMap.arrowDown)
-                        }
-                        ActionButton(icon: "arrow.right") {
-                            viewModel.sendKeyTap(MacKeyMap.arrowRight)
-                        }
-                    }
-
-                    Divider()
-                        .frame(height: 24)
-
-                    // F1-F12 Toggle Button
                     Button {
-                        withAnimation { showingFunctionKeys.toggle() }
+                        showingCustomization = true
                     } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "slider.horizontal.3")
-                            Text(AppLocalization.string("Fn"))
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 7)
-                        .background(showingFunctionKeys ? Color.accentColor : Color.secondary.opacity(0.12))
-                        .foregroundColor(showingFunctionKeys ? .white : .primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        Image(systemName: "slider.horizontal.3")
+                            .padding(8)
                     }
+                    .accessibilityLabel(AppLocalization.string("Customize Keyboard Toolbar"))
+                    .help(AppLocalization.string("Customize Keyboard Toolbar"))
+                    .buttonStyle(.plain)
 
-                    // Direct Text Input Drawer Toggle
-                    Button {
-                        withAnimation { showingTextInput.toggle() }
-                    } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "character.cursor.ibeam")
-                            Text(AppLocalization.string("Type"))
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 7)
-                        .background(showingTextInput ? Color.accentColor : Color.secondary.opacity(0.12))
-                        .foregroundColor(showingTextInput ? .white : .primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-
-                    // Clipboard Paste to Mac
-                    Button {
-                        viewModel.syncClipboardToMac()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "doc.on.clipboard")
-                            Text(AppLocalization.string("Paste Text"))
-                                .font(.system(size: 12))
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 7)
-                        .background(Color.secondary.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-                    .help(AppLocalization.string("Insert local clipboard text into the focused remote field"))
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -239,12 +99,60 @@ public struct MacKeyboardToolbar: View {
             .background(.bar)
         }
         .background(.regularMaterial)
+        .environment(\.keyboardButtonHeight, buttonHeight)
+    }
+
+    private var buttonHeight: CGFloat {
+        switch viewModel.keyboardConfiguration.size {
+        case .small: return 36
+        case .medium: return 44
+        case .large: return 52
+        }
+    }
+
+    @ViewBuilder private func configuredButton(_ action: KeyboardToolbarConfiguration.Action) -> some View {
+        switch action {
+        case .actions:
+            Menu {
+                ForEach(MacKeyMap.MacShortcut.allCases) { shortcut in
+                    Button { viewModel.executeShortcut(shortcut) } label: {
+                        Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
+                    }
+                }
+            } label: {
+                Label(AppLocalization.string("Actions"), systemImage: "command")
+                    .padding(.horizontal, 10).frame(minHeight: buttonHeight)
+                    .background(Color.accentColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+            }
+        case .command: ModifierKeyButton(symbol: "⌘", label: "Cmd", state: viewModel.cmdState) { viewModel.cycleCmd() }
+        case .option: ModifierKeyButton(symbol: "⌥", label: "Opt", state: viewModel.optState) { viewModel.cycleOption() }
+        case .control: ModifierKeyButton(symbol: "⌃", label: "Ctrl", state: viewModel.ctrlState) { viewModel.cycleControl() }
+        case .shift: ModifierKeyButton(symbol: "⇧", label: "Shift", state: viewModel.shiftState) { viewModel.cycleShift() }
+        case .escape: ActionButton(title: "esc") { viewModel.sendKeyTap(MacKeyMap.escape) }
+        case .tab: ActionButton(title: "tab") { viewModel.sendKeyTap(MacKeyMap.tab) }
+        case .space: ActionButton(title: "space") { viewModel.sendKeyTap(MacKeyMap.space) }
+        case .enter: ActionButton(title: "return") { viewModel.sendKeyTap(MacKeyMap.return) }
+        case .delete: ActionButton(title: "del") { viewModel.sendKeyTap(MacKeyMap.delete) }
+        case .left: ActionButton(icon: "arrow.left") { viewModel.sendKeyTap(MacKeyMap.arrowLeft) }
+        case .up: ActionButton(icon: "arrow.up") { viewModel.sendKeyTap(MacKeyMap.arrowUp) }
+        case .down: ActionButton(icon: "arrow.down") { viewModel.sendKeyTap(MacKeyMap.arrowDown) }
+        case .right: ActionButton(icon: "arrow.right") { viewModel.sendKeyTap(MacKeyMap.arrowRight) }
+        case .functionKeys:
+            ActionButton(title: "Fn") { withAnimation { showingFunctionKeys.toggle() } }
+        case .text:
+            ActionButton(title: "Type") { withAnimation { showingTextInput.toggle() } }
+        case .paste:
+            ActionButton(title: "Paste Text") { viewModel.syncClipboardToMac() }
+                .help(AppLocalization.string("Insert local clipboard text into the focused remote field"))
+        case .spacer:
+            Color.clear.frame(width: 12, height: buttonHeight).accessibilityHidden(true)
+        }
     }
 
     private func sendEnteredText() {
-        guard !textInput.isEmpty else { return }
-        viewModel.sendTextString(textInput)
-        textInput = ""
+        guard !viewModel.textInputBuffer.isEmpty else { return }
+        viewModel.sendTextString(viewModel.textInputBuffer)
+        viewModel.textInputBuffer = ""
     }
 
     private func fKeySym(for num: Int) -> UInt32 {
@@ -268,6 +176,7 @@ public struct MacKeyboardToolbar: View {
 
 /// Screens-style 3-state modifier key button: Inactive, Active Once, Locked 🔒
 private struct ModifierKeyButton: View {
+    @Environment(\.keyboardButtonHeight) private var buttonHeight
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     let symbol: String
     let label: String
@@ -288,7 +197,7 @@ private struct ModifierKeyButton: View {
                 }
             }
             .padding(.horizontal, 9)
-            .padding(.vertical, 7)
+            .frame(minWidth: buttonHeight, minHeight: buttonHeight)
             .background(backgroundColor)
             .foregroundColor(foregroundColor)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -324,6 +233,7 @@ private struct ModifierKeyButton: View {
 }
 
 private struct ActionButton: View {
+    @Environment(\.keyboardButtonHeight) private var buttonHeight
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     var title: String? = nil
     var icon: String? = nil
@@ -341,11 +251,19 @@ private struct ActionButton: View {
                 }
             }
             .padding(.horizontal, 9)
-            .padding(.vertical, 7)
+            .frame(minWidth: buttonHeight, minHeight: buttonHeight)
             .background(Color.secondary.opacity(0.12))
             .foregroundColor(.primary)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct KeyboardButtonHeightKey: EnvironmentKey { static let defaultValue: CGFloat = 44 }
+private extension EnvironmentValues {
+    var keyboardButtonHeight: CGFloat {
+        get { self[KeyboardButtonHeightKey.self] }
+        set { self[KeyboardButtonHeightKey.self] = newValue }
     }
 }
