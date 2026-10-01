@@ -66,14 +66,16 @@ public final class DeviceListViewModel: ObservableObject {
         port: UInt16,
         type: RemoteDevice.DeviceType,
         password: String?,
-        macAddress: String? = nil
+        macAddress: String? = nil,
+        username: String? = nil
     ) {
         let dev = RemoteDevice(
             name: name,
             host: host,
             port: port,
             deviceType: type,
-            authMethod: password == nil ? .none : .vncPassword,
+            authMethod: username == nil ? (password == nil ? .none : .vncPassword) : .macAccount,
+            username: username,
             isOnline: true,
             macAddress: macAddress
         )

@@ -10,6 +10,7 @@ public struct AddDeviceSheet: View {
     @State private var portString: String = "5900"
     @State private var deviceType: RemoteDevice.DeviceType = .mac
     @State private var password: String = ""
+    @State private var username: String = ""
     @State private var macAddress: String = ""
 
     public init(viewModel: DeviceListViewModel) {
@@ -46,9 +47,14 @@ public struct AddDeviceSheet: View {
 
                 Section(
                     header: Text("Authentication"),
-                    footer: Text("For macOS Screen Sharing, set a VNC password under System Settings > General > Sharing > Screen Sharing > Computer Settings.")
+                    footer: Text("Enter your Mac account username and password. Leave Username empty to use a VNC password.")
                 ) {
-                    SecureField("VNC Password (Optional)", text: $password)
+                    TextField("Username (Mac account, optional)", text: $username)
+                        .autocorrectionDisabled()
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                    SecureField(username.isEmpty ? "VNC Password (Optional)" : "Mac Account Password", text: $password)
                 }
 
                 Section(
@@ -81,7 +87,8 @@ public struct AddDeviceSheet: View {
                             port: port,
                             type: deviceType,
                             password: password.isEmpty ? nil : password,
-                            macAddress: macAddress.isEmpty ? nil : macAddress
+                            macAddress: macAddress.isEmpty ? nil : macAddress,
+                            username: username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : username.trimmingCharacters(in: .whitespacesAndNewlines)
                         )
                         dismiss()
                     }
@@ -90,7 +97,7 @@ public struct AddDeviceSheet: View {
             }
         }
         #if os(macOS)
-        .frame(width: 540, height: 600)
+        .frame(width: 540, height: 660)
         #endif
     }
 }

@@ -21,7 +21,8 @@ RELEASE_BIN="$(swift build -c release --arch arm64 --show-bin-path)/AetherScreen
 APP_DIR="$STAGE/AetherScreens.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$RELEASE_BIN" "$APP_DIR/Contents/MacOS/AetherScreens"
-cp AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+cp assets/branding/AppIcon-v1.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+cp assets/licenses/BigInt-MIT.txt "$APP_DIR/Contents/Resources/BigInt-MIT.txt"
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

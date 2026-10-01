@@ -4,9 +4,11 @@ import SwiftUI
 public struct PerformanceHUDView: View {
     @ObservedObject public var metrics: PerformanceMetrics
     @State private var isExpanded: Bool = false
+    public let isTailscale: Bool
 
-    public init(metrics: PerformanceMetrics = .shared) {
+    public init(metrics: PerformanceMetrics = .shared, isTailscale: Bool = false) {
         self.metrics = metrics
+        self.isTailscale = isTailscale
     }
 
     public var body: some View {
@@ -18,7 +20,7 @@ public struct PerformanceHUDView: View {
             HStack(spacing: 8) {
                 // Optimal Status Light
                 Circle()
-                    .fill(metrics.isOptimal ? Color.green : Color.orange)
+                    .fill(metrics.latencyMs > 0 ? (metrics.isOptimal ? Color.green : Color.orange) : Color.secondary)
                     .frame(width: 7, height: 7)
 
                 // FPS Counter
@@ -35,7 +37,7 @@ public struct PerformanceHUDView: View {
 
                 // Latency Counter
                 HStack(spacing: 2) {
-                    Text("\(Int(metrics.latencyMs))")
+                    Text(metrics.latencyMs > 0 ? "\(Int(metrics.latencyMs))" : "—")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                     Text("ms")
                         .font(.system(size: 9, weight: .semibold))
@@ -59,7 +61,7 @@ public struct PerformanceHUDView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "point.3.connected.trianglepath.dotted")
                             .font(.system(size: 8))
-                        Text("Tailscale")
+                        Text(isTailscale ? "Tailscale" : "LAN / Host")
                             .font(.system(size: 9, weight: .semibold))
                     }
                     .foregroundColor(.accentColor)
@@ -78,10 +80,10 @@ public struct PerformanceHUDView: View {
     }
 
     private var bandwidthText: String {
-        if metrics.bandwidthKbps > 1024 {
-            return String(format: "%.1f MB/s", metrics.bandwidthKbps / 1024.0)
+        if metrics.bandwidthKbps / 8 > 1024 {
+            return String(format: "%.1f MB/s", metrics.bandwidthKbps / (8 * 1024.0))
         } else {
-            return "\(Int(metrics.bandwidthKbps)) KB/s"
+            return "\(Int(metrics.bandwidthKbps / 8)) KB/s"
         }
     }
 }

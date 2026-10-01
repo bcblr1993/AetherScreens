@@ -47,13 +47,13 @@ public enum MacKeyMap {
 
     /// Convert a single Character into an X11 KeySym.
     public static func keySym(for char: Character) -> UInt32? {
-        guard let scalar = char.unicodeScalars.first else { return nil }
+        guard char.unicodeScalars.count == 1, let scalar = char.unicodeScalars.first else { return nil }
         let val = scalar.value
-        // ASCII range 0x20..0x7E maps 1:1 to KeySym
-        if val >= 0x20 && val <= 0x7E {
+        // Printable Latin-1 maps directly; other Unicode scalars use X11 Unicode keysyms.
+        if val >= 0x20 && val <= 0xFF {
             return UInt32(val)
         }
-        return nil
+        return val >= 0x100 ? 0x01000000 | val : nil
     }
 
     /// Predefined Mac Shortcuts (combination of modifier keys and target key)

@@ -4,6 +4,7 @@ import SwiftUI
 public struct PasswordPromptSheet: View {
     public let deviceName: String
     public let host: String
+    public let username: String?
     public let errorMessage: String?
     public let onSubmit: (String, Bool) -> Void
     public let onCancel: () -> Void
@@ -15,12 +16,14 @@ public struct PasswordPromptSheet: View {
     public init(
         deviceName: String,
         host: String,
+        username: String? = nil,
         errorMessage: String? = nil,
         onSubmit: @escaping (String, Bool) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.deviceName = deviceName
         self.host = host
+        self.username = username
         self.errorMessage = errorMessage
         self.onSubmit = onSubmit
         self.onCancel = onCancel
@@ -42,7 +45,7 @@ public struct PasswordPromptSheet: View {
                 Text("Authentication Required")
                     .font(.system(size: 18, weight: .bold))
 
-                Text("Enter the VNC password for \(deviceName)")
+                Text(username == nil ? "Enter the VNC password for \(deviceName)" : "Enter the Mac account password for \(username!)")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)

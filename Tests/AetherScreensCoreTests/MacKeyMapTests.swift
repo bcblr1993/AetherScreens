@@ -10,6 +10,13 @@ final class MacKeyMapTests: XCTestCase {
         XCTAssertEqual(MacKeyMap.keySym(for: " "), 0x0020)
     }
 
+    func testUnicodeCharacterMapping() {
+        XCTAssertEqual(MacKeyMap.keySym(for: "中"), 0x01004E2D)
+        XCTAssertEqual(MacKeyMap.keySym(for: "é"), 0xE9)
+        XCTAssertEqual(MacKeyMap.keySym(for: "😀"), 0x0101F600)
+        XCTAssertNil(MacKeyMap.keySym(for: "👨‍👩‍👧"))
+    }
+
     func testModifiersValues() {
         XCTAssertEqual(MacKeyMap.shiftLeft, 0xFFE1)
         XCTAssertEqual(MacKeyMap.controlLeft, 0xFFE3)

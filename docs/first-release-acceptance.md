@@ -4,7 +4,7 @@ Candidate: 1.0.0 (build 1), Apple silicon macOS 14+.
 
 ## Verified on 2026-10-01
 
-- Swift unit suite: 63 tests, zero failures; live tests skip without an explicit target.
+- Swift unit suite: 73 tests, zero failures; live tests skip without an explicit target.
 - Real macOS Screen Sharing server: RFB 3.889 banner, VNC authentication, 3840 × 2160 framebuffer, 60 seconds connected, clean intentional disconnect.
 - iOS signed device build: iPhone 12 Pro.
 - iPhone simulator primary UI: add computer, Tailscale settings, diagnostic logs, edit computer. Screenshots reviewed.
@@ -13,13 +13,17 @@ Candidate: 1.0.0 (build 1), Apple silicon macOS 14+.
 
 ## Required before publication
 
-- macOS installed-app local network permission and real rendered-session UI acceptance, keyboard controls and disconnect. The host OS denied local network access to the signed app; protocol tests from the test runner do not replace this check.
+- Recheck the final installed candidate after signing changes. Earlier installed GUI account sessions, native clicking, typing, dragging, zoom and wheel delivery passed; protocol tests do not replace the final installed-app check.
 - Physical iPhone session UI acceptance requires an unlocked paired device. Device build success and simulator UI are recorded separately.
 - Recheck final candidate signature, notarization, mounted DMG and checksums after code changes.
 - Push scoped code, wait for CI, publish matching release assets, sync website, verify public download and version page.
 
 ## Distribution scope
 
-The public download is macOS only. iOS is available as source for a signed Xcode installation; there is no App Store / TestFlight release in this version. VNC password authentication is implemented; macOS account authentication is not. Lock Remote Mac sends the system shortcut and is not a curtain privacy feature.
+The public download is macOS only. iOS is available as source for a signed Xcode installation; there is no App Store / TestFlight release in this version. VNC password and Mac account (Apple ARD type 30) authentication are implemented. Username selects Mac account authentication; an empty username selects VNC. Lock Remote Mac sends the system shortcut and is not a curtain privacy feature.
 
 Keep private addresses, passwords and real desktop screenshots out of published evidence. Do not mark blocked checks as passed.
+
+## Additional functional gate (2026-10-01)
+
+See `functional-qa.md` for the controlled remote event fixture. Account authentication plus real click and wheel event delivery passed after fixing Apple cursor-position handling. GUI Chinese text drawer delivery passed. GUI Paste Text insertion passed with Chinese clipboard text. Lock/password input/desktop restoration passed in the installed GUI. Direct physical IME and physical iPhone acceptance are still being verified; the draft release must not be published based only on handshake success.

@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import zlib
 
 /// High-level client managing an RFB 3.8 remote desktop session over TCP (Network.framework).
 public final class RFBClient: @unchecked Sendable {
@@ -17,6 +18,7 @@ public final class RFBClient: @unchecked Sendable {
     public let host: String
     public let port: UInt16
     public var password: String?
+    public let username: String?
     public let framebuffer: Framebuffer
 
     public private(set) var state: State = .disconnected {
@@ -30,22 +32,28 @@ public final class RFBClient: @unchecked Sendable {
     public var onFrameUpdated: (@Sendable () -> Void)?
     public var onClipboardReceived: (@Sendable (String) -> Void)?
     public var onRequestPassword: (@Sendable (@escaping @Sendable (String?) -> Void) -> Void)?
+    public var onBytesReceived: (@Sendable (Int) -> Void)?
     public var onDownloadProgress: (@Sendable (Double, Double) -> Void)?
 
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "com.aethernative.aetherscreens.rfbclient", qos: .userInteractive)
     private var readBuffer = Data()
     private let zlibDecompressor = ZlibDecompressor()
+    private var nextWheelDeadline = DispatchTime.now()
+    private var extendedClipboard = false
+    private var pendingClipboard: String?
 
     public init(
         host: String,
         port: UInt16 = RFBConstants.defaultPort,
         password: String? = nil,
+        username: String? = nil,
         framebuffer: Framebuffer = Framebuffer()
     ) {
         self.host = host
         self.port = port
         self.password = password
+        self.username = username
         self.framebuffer = framebuffer
     }
 
@@ -58,6 +66,10 @@ public final class RFBClient: @unchecked Sendable {
             return
         }
 
+        readBuffer.removeAll()
+        zlibDecompressor.reset()
+        extendedClipboard = false
+        pendingClipboard = nil
         state = .connecting
         AppLogger.shared.info("Initiating connection to \(host):\(port)...", category: "Network")
 
@@ -78,7 +90,7 @@ public final class RFBClient: @unchecked Sendable {
                 AppLogger.shared.info("TCP socket established with \(self.host):\(self.port)", category: "Network")
                 self.startHandshake()
             case .waiting(let error):
-                self.handleFailure("Network unavailable: \(error.localizedDescription). Allow AetherScreens in System Settings > Privacy & Security > Local Network, and check your LAN or Tailscale connection.")
+                AppLogger.shared.info("Waiting for network: \(error.localizedDescription)", category: "Network")
             case .failed(let error):
                 AppLogger.shared.error("TCP connection failed: \(error.localizedDescription)", category: "Network")
                 self.handleFailure("Connection failed: \(error.localizedDescription)")
@@ -92,8 +104,12 @@ public final class RFBClient: @unchecked Sendable {
 
         conn.start(queue: queue)
         queue.asyncAfter(deadline: .now() + 20) { [weak self, weak conn] in
-            guard let self = self, let conn = conn, self.connection === conn, self.state == .connecting else { return }
-            self.handleFailure("Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection.")
+            guard let self = self, let conn = conn, self.connection === conn else { return }
+            switch self.state {
+            case .connecting, .negotiatingVersion, .authenticating, .initializing: break
+            default: return
+            }
+            self.handleFailure("Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network.")
         }
     }
 
@@ -165,7 +181,14 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     private func selectSecurityType(from types: [RFBConstants.SecurityType]) {
-        if types.contains(.vncAuth) {
+        if let username = username, !username.isEmpty {
+            guard types.contains(.ardDiffieHellman) else {
+                handleFailure("Server does not support Mac account authentication. Leave Username empty to use a VNC password.")
+                return
+            }
+            AppLogger.shared.info("Selecting Mac account authentication (Type 30)", category: "Security")
+            sendData(Data([30])) { self.performARDAuth(username: username) }
+        } else if types.contains(.vncAuth) {
             AppLogger.shared.info("Selecting VNC Authentication (Type 2)", category: "Security")
             // Select VNC Auth (2)
             sendData(Data([RFBConstants.SecurityType.vncAuth.rawValue])) {
@@ -181,6 +204,45 @@ public final class RFBClient: @unchecked Sendable {
             let offeredStr = types.map { "\($0.rawValue)" }.joined(separator: ", ")
             AppLogger.shared.error("No compatible security type. Offered: [\(offeredStr)]", category: "Security")
             handleFailure("No compatible security type supported by server. Offered: [\(offeredStr)]")
+        }
+    }
+
+    private func performARDAuth(username: String) {
+        let authenticate: @Sendable (String) -> Void = { [weak self] password in
+            guard let self = self else { return }
+            self.readExact(4) { header in
+                guard let header = header else { return }
+                let generator = UInt16(header[0]) << 8 | UInt16(header[1])
+                let length = Int(header[2]) << 8 | Int(header[3])
+                guard (16...512).contains(length) else {
+                    self.handleFailure("Unsupported Mac account authentication key length")
+                    return
+                }
+                self.readExact(length * 2) { challenge in
+                    guard let challenge = challenge else { return }
+                    do {
+                        let response = try ARDAuthCrypto.response(generator: generator,
+                            prime: Data(challenge.prefix(length)), peer: Data(challenge.suffix(length)),
+                            username: username, password: password)
+                        self.sendData(response) { self.handleSecurityResult(type: .ardDiffieHellman) }
+                    } catch {
+                        self.handleFailure("Mac account authentication challenge could not be processed")
+                    }
+                }
+            }
+        }
+        if let password = password, !password.isEmpty {
+            authenticate(password)
+        } else if let request = onRequestPassword {
+            request { [weak self] entered in
+                guard let entered = entered, !entered.isEmpty else {
+                    self?.handleFailure("Mac account password required")
+                    return
+                }
+                authenticate(entered)
+            }
+        } else {
+            handleFailure("Mac account password required")
         }
     }
 
@@ -301,6 +363,7 @@ public final class RFBClient: @unchecked Sendable {
             .zlib,
             .copyRect,
             .desktopSize,
+            RFBConstants.EncodingType(rawValue: -308),
             .raw
         ])
         sendData(encodingsData)
@@ -453,17 +516,77 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     private func handleServerCutText() {
-        // [pad: 3 bytes] [length: 4 bytes]
-        readExact(7) { [weak self] headerData in
-            guard let self = self, let headerData = headerData else { return }
-            let length = Int(headerData.subdata(in: 3..<7).withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
-            self.readExact(length) { textData in
-                if let textData = textData,
-                   let text = String(data: textData, encoding: .utf8) ?? String(data: textData, encoding: .isoLatin1) {
+        readExact(7) { [weak self] header in
+            guard let self = self, let header = header else { return }
+            let raw = header.suffix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+            let signed = Int32(bitPattern: raw)
+            let length = abs(Int64(signed))
+            guard length <= 1_048_576 else {
+                self.handleFailure("Remote clipboard exceeds the supported size")
+                return
+            }
+            self.readExact(Int(length)) { payload in
+                guard let payload = payload else { return }
+                if signed < 0 {
+                    self.handleExtendedClipboard(payload)
+                } else if let text = String(data: payload, encoding: .isoLatin1) {
                     self.onClipboardReceived?(text)
                 }
                 self.startMessageLoop()
             }
+        }
+    }
+
+    private func sendExtendedClipboard(flags: UInt32, payload: Data = Data()) {
+        var body = Data()
+        body.append(contentsOf: withUnsafeBytes(of: flags.bigEndian) { Array($0) })
+        body.append(payload)
+        var data = Data([6, 0, 0, 0])
+        let length = Int32(-body.count).bigEndian
+        data.append(contentsOf: withUnsafeBytes(of: length) { Array($0) })
+        data.append(body)
+        sendData(data)
+    }
+
+    func handleExtendedClipboard(_ payload: Data) {
+        guard payload.count >= 4 else { return }
+        let flags = payload.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        let action = flags & 0xFF000000
+        if action & 0x01000000 != 0 {
+            extendedClipboard = true
+            AppLogger.shared.info("Extended UTF-8 clipboard available", category: "RFB")
+            sendExtendedClipboard(flags: 0x1F000001, payload: Data(repeating: 0, count: 4))
+        } else if action == 0x02000000, flags & 1 != 0, let text = pendingClipboard {
+            let utf8 = Data(text.utf8) + Data([0])
+            var plain = Data()
+            plain.append(contentsOf: withUnsafeBytes(of: UInt32(utf8.count).bigEndian) { Array($0) })
+            plain.append(utf8)
+            var size = compressBound(uLong(plain.count))
+            var compressed = [UInt8](repeating: 0, count: Int(size))
+            let result = plain.withUnsafeBytes { raw in
+                compress2(&compressed, &size, raw.bindMemory(to: UInt8.self).baseAddress!, uLong(plain.count), Z_DEFAULT_COMPRESSION)
+            }
+            if result == Z_OK {
+                sendExtendedClipboard(flags: 0x10000001, payload: Data(compressed.prefix(Int(size))))
+            }
+        } else if action == 0x04000000 {
+            sendExtendedClipboard(flags: 0x08000000 | (pendingClipboard == nil ? 0 : 1))
+        } else if action == 0x08000000, flags & 1 != 0 {
+            sendExtendedClipboard(flags: 0x02000001)
+        } else if action == 0x10000000, flags & 1 != 0 {
+            guard payload.count > 4 else { return }
+            var size: uLongf = 1_048_576
+            var plain = [UInt8](repeating: 0, count: Int(size))
+            let compressed = Data(payload.dropFirst(4))
+            let result = compressed.withUnsafeBytes { raw in
+                uncompress(&plain, &size, raw.bindMemory(to: UInt8.self).baseAddress!, uLong(compressed.count))
+            }
+            guard result == Z_OK, size >= 4 else { return }
+            let count = plain.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+            guard count > 0, Int(count) <= Int(size) - 4 else { return }
+            var bytes = Data(plain[4..<(4 + Int(count))])
+            if bytes.last == 0 { bytes.removeLast() }
+            if let text = String(data: bytes, encoding: .utf8) { onClipboardReceived?(text) }
         }
     }
 
@@ -484,7 +607,25 @@ public final class RFBClient: @unchecked Sendable {
     /// Send mouse movement or button press.
     public func sendPointerEvent(buttonMask: RFBConstants.ButtonMask, x: UInt16, y: UInt16) {
         let data = RFBEncoder.encodePointerEvent(buttonMask: buttonMask, x: x, y: y)
-        sendData(data)
+        guard buttonMask.rawValue & 0x78 != 0 else {
+            sendData(data)
+            return
+        }
+        // Apple's server applies wheel ticks at its current cursor position.
+        // Establish that position before sending spaced press/release pulses.
+        queue.async { [weak self] in
+            guard let self = self, let connection = self.connection else { return }
+            let move = RFBEncoder.encodePointerEvent(buttonMask: [], x: x, y: y)
+            self.sendData(move)
+            let earliest = DispatchTime.now() + .milliseconds(25)
+            let deadline = self.nextWheelDeadline > earliest ? self.nextWheelDeadline : earliest
+            self.nextWheelDeadline = deadline + .milliseconds(16)
+            self.queue.asyncAfter(deadline: deadline) { [weak self, weak connection] in
+                guard let self = self, let connection = connection, self.connection === connection else { return }
+                self.sendData(data)
+                self.sendData(move)
+            }
+        }
     }
 
     /// Send a key press or release.
@@ -493,10 +634,33 @@ public final class RFBClient: @unchecked Sendable {
         sendData(data)
     }
 
+    /// Send committed text as complete key strokes rather than overlapping held keys.
+    public func sendText(_ text: String) {
+        let normalized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        for scalar in normalized.unicodeScalars {
+            let key: UInt32
+            switch scalar.value {
+            case 10, 13: key = MacKeyMap.return
+            case 9: key = MacKeyMap.tab
+            case 0x20...0xFF: key = scalar.value
+            case 0x100...0x10FFFF: key = 0x01000000 | scalar.value
+            default: continue
+            }
+            sendKeyEvent(down: true, keySym: key)
+            sendKeyEvent(down: false, keySym: key)
+        }
+    }
+
     /// Send clipboard text to remote Mac.
     public func sendCutText(_ text: String) {
-        let data = RFBEncoder.encodeClientCutText(text)
-        sendData(data)
+        guard text.utf8.count <= 1_048_000 else { return }
+        if extendedClipboard {
+            pendingClipboard = text
+            sendExtendedClipboard(flags: 0x08000001)
+        } else {
+            let data = RFBEncoder.encodeClientCutText(text)
+            sendData(data)
+        }
     }
 
     // MARK: - Socket Helpers
@@ -534,6 +698,7 @@ public final class RFBClient: @unchecked Sendable {
             let receivedBytes = content?.count ?? 0
             if receivedBytes > 0 {
                 self.readBuffer.append(content!)
+                self.onBytesReceived?(receivedBytes)
             }
 
             if count > 100000 && self.readBuffer.count % 2097152 < receivedBytes {

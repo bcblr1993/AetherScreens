@@ -2,7 +2,7 @@
 name: AetherScreens
 order: 6
 repo: https://github.com/bcblr1993/AetherScreens
-icon: ./media/icon.png
+icon: ./media/icon-v1.png
 minimumSystemVersion: "14.0"
 tech: [Swift, SwiftUI, Metal, Network.framework, RFB 3.8]
 
@@ -23,8 +23,8 @@ platforms:
     requirement: { zh: iPhone / iPad · iOS 17+, en: iPhone / iPad · iOS 17+ }
 
 cardStats:
-  - value: "0 依赖"
-    label: { zh: 纯 Swift 实现, en: Pure Swift }
+  - value: "Swift"
+    label: { zh: 原生协议实现, en: Native protocol }
   - value: "Metal"
     label: { zh: GPU 画面渲染, en: GPU Rendering }
   - value: "iOS + Mac"
@@ -41,8 +41,8 @@ hero:
     en: "Client: Apple silicon Mac (macOS 14+) or iPhone / iPad (iOS 17+) · Remote: a Mac with Screen Sharing on"
 
 notice:
-  zh: macOS 首版现已提供下载；iPhone / iPad 暂需通过 Xcode 安装。目前需要在被控 Mac 的屏幕共享设置里开启「VNC 使用者可以使用密码控制屏幕」。
-  en: The first macOS release is available; iPhone / iPad currently require an Xcode installation. The remote Mac needs “VNC viewers may control screen with password” enabled in Screen Sharing settings.
+  zh: macOS 首版现已提供下载；iPhone / iPad 暂需通过 Xcode 安装。可使用 Mac 账号密码连接，也可在屏幕共享设置中单独启用 VNC 密码。
+  en: The first macOS release is available; iPhone / iPad currently require an Xcode installation. Connect with a Mac account, or separately enable a VNC password in Screen Sharing settings.
 
 features:
   eyebrow: { zh: 功能, en: Features }
@@ -74,7 +74,7 @@ features:
         en: Tap, two-finger tap, long-press drag and two-finger scroll on iPhone and iPad; the toolbar adds sticky ⌘ ⌥ ⌃ ⇧ modifiers, F1–F12 and common system shortcuts.
       details:
         - { zh: 在 Mac 上直接透传物理键盘、修饰键和鼠标滚轮。, en: On the Mac, the physical keyboard, modifiers and scroll wheel pass straight through. }
-        - { zh: 可把本机剪贴板文字发送到远端 Mac。, en: Sends clipboard text to the remote Mac. }
+        - { zh: 可把本机剪贴板文字插入远端输入框；暂不支持双向剪贴板同步。, en: Inserts local clipboard text into the remote field; bidirectional clipboard sync is not supported. }
 
 faq:
   eyebrow: FAQ

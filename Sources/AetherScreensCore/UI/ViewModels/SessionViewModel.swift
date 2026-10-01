@@ -64,6 +64,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public var passwordPromptError: String? = nil
     private var passwordContinuation: ((String?) -> Void)? = nil
 
+    @Published public var actualSizeZoomScale: CGFloat = 2
+    @Published public var isPanningViewport: Bool = false
     private var frameCountSinceLastSnapshot: Int = 0
 
     public init(device: RemoteDevice, password: String?) {
@@ -71,13 +73,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         let rfb = RFBClient(
             host: device.host,
             port: device.port,
-            password: password
+            password: password,
+            username: device.username
         )
         self.client = rfb
         self.trackpadEngine = TrackpadEngine(remoteWidth: 1920, remoteHeight: 1080)
         self.curtainManager = CurtainModeManager()
         self.multiDisplayManager = MultiDisplayManager()
-        self.metrics = PerformanceMetrics.shared
+        self.metrics = PerformanceMetrics()
 
         let renderer = MetalScreenRenderer(metrics: self.metrics)
         renderer?.framebuffer = rfb.framebuffer
@@ -150,6 +153,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 self.isPromptingPassword = true
             }
         }
+
+        let sessionMetrics = metrics
+        client.onBytesReceived = { count in sessionMetrics.recordBytesReceived(count) }
 
         // Handle incoming frame download progress
         client.onDownloadProgress = { [weak self] current, total in
@@ -365,9 +371,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Send arbitrary text string cleanly to remote Mac
     public func sendTextString(_ text: String) {
-        for char in text {
-            sendCharacter(char)
-        }
+        client.sendText(text)
+        releaseActiveOnceModifiers()
     }
 
     /// Execute a predefined Mac shortcut
@@ -379,28 +384,29 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         releaseActiveOnceModifiers()
     }
 
-    /// Double-tap to toggle between Fit (1.0x) and 1:1 Actual Size (2.0x)
+    /// Double-tap toggles fit and one remote pixel per local display pixel.
     public func handleDoubleTapZoom() {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             if zoomScale > 1.1 {
                 zoomScale = 1.0
                 viewOffset = .zero
             } else {
-                zoomScale = 2.0
+                zoomScale = actualSizeZoomScale
             }
         }
         triggerHaptic()
     }
 
-    /// Sync iOS/Mac clipboard text to remote Mac
+    /// Insert local clipboard text into the focused remote field. Apple Screen Sharing
+    /// does not accept legacy ClientCutText in the tested account session.
     public func syncClipboardToMac() {
         #if canImport(UIKit)
         if let string = UIPasteboard.general.string {
-            client.sendCutText(string)
+            sendTextString(string)
         }
         #elseif canImport(AppKit)
         if let string = NSPasteboard.general.string(forType: .string) {
-            client.sendCutText(string)
+            sendTextString(string)
         }
         #endif
     }

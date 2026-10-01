@@ -139,7 +139,7 @@ final class TailscaleLiveHandshakeTests: XCTestCase {
         let frameExpectation = expectation(description: "Receive at least 1 screen frame from remote Mac")
         frameExpectation.assertForOverFulfill = false
 
-        let client = RFBClient(host: targetHost, port: targetPort, password: pwd)
+        let client = RFBClient(host: targetHost, port: targetPort, password: pwd, username: ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_USERNAME"])
         client.onStateChanged = { state in
             print("[TailscaleLiveHandshakeTests] Client state changed: \(state)")
         }

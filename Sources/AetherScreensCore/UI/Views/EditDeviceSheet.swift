@@ -11,6 +11,7 @@ public struct EditDeviceSheet: View {
     @State private var portString: String = "5900"
     @State private var deviceType: RemoteDevice.DeviceType = .mac
     @State private var password: String = ""
+    @State private var username: String = ""
     @State private var macAddress: String = ""
     @State private var isPasswordModified: Bool = false
 
@@ -51,7 +52,12 @@ public struct EditDeviceSheet: View {
                     header: Text("Authentication"),
                     footer: Text("Saved in the system Keychain. Enter a new password to update or leave unchanged.")
                 ) {
-                    SecureField("VNC Password", text: $password)
+                    TextField("Username (Mac account, optional)", text: $username)
+                        .autocorrectionDisabled()
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                    SecureField(username.isEmpty ? "VNC Password" : "Mac Account Password", text: $password)
                         .onChange(of: password) { _, _ in
                             isPasswordModified = true
                         }
@@ -84,6 +90,8 @@ public struct EditDeviceSheet: View {
                         updatedDev.name = name.trimmingCharacters(in: .whitespaces).isEmpty ? host : name
                         updatedDev.host = host.trimmingCharacters(in: .whitespaces)
                         updatedDev.port = port
+                        updatedDev.username = username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : username.trimmingCharacters(in: .whitespacesAndNewlines)
+                        updatedDev.authMethod = updatedDev.username == nil ? .vncPassword : .macAccount
                         updatedDev.deviceType = deviceType
                         updatedDev.macAddress = macAddress.isEmpty ? nil : macAddress
                         
@@ -97,6 +105,7 @@ public struct EditDeviceSheet: View {
                 }
             }
             .onAppear {
+                username = device.username ?? ""
                 name = device.name
                 host = device.host
                 portString = "\(device.port)"
@@ -109,7 +118,7 @@ public struct EditDeviceSheet: View {
             }
         }
         #if os(macOS)
-        .frame(width: 540, height: 600)
+        .frame(width: 540, height: 660)
         #endif
     }
 }

@@ -5,12 +5,15 @@ A native remote desktop client for Apple silicon Mac, iPhone and iPad, using mac
 ## First release
 
 - macOS 14+ on Apple silicon; iOS / iPadOS 17+.
-- VNC password authentication. Enable “VNC viewers may control screen with password” in the remote Mac’s Screen Sharing settings. macOS account authentication is not implemented.
+- Mac account authentication: enter your Mac username and account password. A username selects Apple ARD authentication.
+- VNC password authentication: leave Username empty and enable “VNC viewers may control screen with password” in the remote Mac’s Screen Sharing settings.
 - Metal rendering with Raw, CopyRect and Zlib decoding.
 - Native Mac keyboard / mouse input; touch and virtual trackpad input on iOS.
-- Keyboard toolbar, sticky modifiers, common Mac shortcuts and clipboard text transfer.
+- Keyboard toolbar, sticky modifiers, common Mac shortcuts and insertion of local clipboard text into remote fields.
 - Bonjour discovery, Tailscale device import, saved computers and Keychain passwords.
 - Fit / actual-size zoom, desktop thumbnails and diagnostic logs.
+
+Bidirectional clipboard synchronization and supplementary-plane emoji input are not supported by the tested Mac server.
 
 “Lock Remote Mac” sends the system lock shortcut. It does not hide the physical display while leaving the desktop unlocked. Display regions are inferred from framebuffer dimensions; physical monitor enumeration is not implemented. Performance depends on the remote server, network and device.
 
@@ -57,3 +60,5 @@ Website source is in `website_content/apps/aetherscreens/`. Run `scripts/sync_to
 Bundle IDs: `com.aethernative.aetherscreens` (Mac), `com.aethernative.aetherscreens.ios` (iOS).
 
 MIT license; see [LICENSE](LICENSE).
+
+Mac account authentication uses [BigInt 5.7.0](https://github.com/attaswift/BigInt/tree/v5.7.0) for server-provided DH groups. Its MIT license is bundled with the app. Authentication protects credentials; it does not encrypt the subsequent framebuffer session.

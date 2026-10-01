@@ -222,7 +222,7 @@ public struct MacKeyboardToolbar: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "doc.on.clipboard")
-                            Text("Paste to Mac")
+                            Text("Paste Text")
                                 .font(.system(size: 12))
                         }
                         .padding(.horizontal, 8)
@@ -230,12 +230,14 @@ public struct MacKeyboardToolbar: View {
                         .background(Color.secondary.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
+                    .help("Insert local clipboard text into the focused remote field")
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
             .background(.bar)
         }
+        .background(.regularMaterial)
     }
 
     private func sendEnteredText() {

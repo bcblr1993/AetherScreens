@@ -18,12 +18,12 @@ let package = Package(
         )
     ],
     dependencies: [
-        // Pure Swift, zero external dependencies for maximum stability, performance, and security
+        .package(url: "https://github.com/attaswift/BigInt.git", exact: "5.7.0")
     ],
     targets: [
         .target(
             name: "AetherScreensCore",
-            dependencies: [],
+            dependencies: [.product(name: "BigInt", package: "BigInt")],
             path: "Sources/AetherScreensCore"
         ),
         .executableTarget(

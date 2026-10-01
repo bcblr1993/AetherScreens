@@ -1,11 +1,11 @@
 import SwiftUI
 import CoreGraphics
 
-/// Interactive Remote Desktop viewport providing 60/120fps Metal rendering, gesture inputs,
-/// Screens-style Curtain Mode, Multi-Display switching, and real-time performance HUD.
+/// Metal-backed remote desktop with native input, viewport controls and session diagnostics.
 public struct RemoteDesktopView: View {
     @ObservedObject public var viewModel: SessionViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.displayScale) private var displayScale
 
     @State private var lastDragLocation: CGPoint?
     @State private var isDraggingMouse: Bool = false
@@ -57,6 +57,7 @@ public struct RemoteDesktopView: View {
             PasswordPromptSheet(
                 deviceName: viewModel.device.name,
                 host: viewModel.device.host,
+                username: viewModel.device.username,
                 errorMessage: viewModel.passwordPromptError,
                 onSubmit: { pwd, saveToKeychain in
                     viewModel.submitPassword(pwd, rememberInKeychain: saveToKeychain)
@@ -107,6 +108,14 @@ public struct RemoteDesktopView: View {
             MacNativeInputRepresentable(
                 remoteWidth: imageWidth > 0 ? imageWidth : 1920,
                 remoteHeight: imageHeight > 0 ? imageHeight : 1080,
+                isPanning: viewModel.isPanningViewport,
+                onPan: { dx, dy in
+                    let limitX = max(0, (canvasWidth - geometry.size.width) / 2)
+                    let limitY = max(0, (canvasHeight - geometry.size.height) / 2)
+                    viewModel.viewOffset.width = max(-limitX, min(limitX, viewModel.viewOffset.width + dx))
+                    viewModel.viewOffset.height = max(-limitY, min(limitY, viewModel.viewOffset.height + dy))
+                },
+                onTextEvent: { text in viewModel.sendTextString(text) },
                 onPointerEvent: { mask, x, y in
                     viewModel.sendNativePointer(buttonMask: mask, x: x, y: y)
                 },
@@ -114,7 +123,8 @@ public struct RemoteDesktopView: View {
                     viewModel.sendNativeKey(down: down, keySym: keySym)
                 }
             )
-            .opacity(0.001)
+            .frame(width: canvasWidth, height: canvasHeight)
+            .position(x: originX + canvasWidth / 2, y: originY + canvasHeight / 2)
             #endif
 
             // Virtual Cursor Overlay (in Trackpad mode on iOS)
@@ -164,6 +174,9 @@ public struct RemoteDesktopView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        .onChange(of: fitScale, initial: true) { _, scale in
+            viewModel.actualSizeZoomScale = max(1, 1 / max(0.001, scale * displayScale))
+        }
         #if canImport(UIKit)
         .onContinuousHover { phase in
             switch phase {
@@ -178,7 +191,6 @@ public struct RemoteDesktopView: View {
                 break
             }
         }
-        #endif
         .gesture(
             // Pan / Drag gesture with tactile haptics
             DragGesture(minimumDistance: 1)
@@ -232,6 +244,7 @@ public struct RemoteDesktopView: View {
                     viewModel.zoomScale = max(1.0, min(scale, 4.0))
                 }
         )
+        #endif
     }
 
     // MARK: - Connecting State
@@ -381,7 +394,7 @@ public struct RemoteDesktopView: View {
             .clipShape(Capsule())
 
             #if os(macOS)
-            PerformanceHUDView(metrics: viewModel.metrics)
+            PerformanceHUDView(metrics: viewModel.metrics, isTailscale: viewModel.device.isTailscaleNode)
             #endif
 
             Spacer()
@@ -400,6 +413,29 @@ public struct RemoteDesktopView: View {
                     Label("Diagnostic Logs", systemImage: "list.bullet.rectangle")
                 }
                 #endif
+                Button("Fit to Window") {
+                    viewModel.zoomScale = 1
+                    viewModel.viewOffset = .zero
+                    viewModel.isPanningViewport = false
+                }
+                Button("Actual Size") {
+                    viewModel.zoomScale = viewModel.actualSizeZoomScale
+                }
+                Button("Zoom In") {
+                    viewModel.zoomScale = min(max(4, viewModel.actualSizeZoomScale), viewModel.zoomScale * 1.25)
+                }
+                Button("Zoom Out") {
+                    viewModel.zoomScale = max(1, viewModel.zoomScale / 1.25)
+                    if viewModel.zoomScale == 1 {
+                        viewModel.viewOffset = .zero
+                        viewModel.isPanningViewport = false
+                    }
+                }
+                #if os(macOS)
+                Toggle("Pan View", isOn: $viewModel.isPanningViewport)
+                    .disabled(viewModel.zoomScale <= 1)
+                #endif
+                Divider()
                 ForEach(viewModel.multiDisplayManager.availableDisplays) { display in
                     Button {
                         viewModel.multiDisplayManager.selectDisplay(id: display.id)
@@ -428,15 +464,7 @@ public struct RemoteDesktopView: View {
             .accessibilityLabel("Session Options")
 
             // Touch vs Trackpad Mode Toggle
-            #if os(macOS)
-            Picker("Mode", selection: $viewModel.inputMode) {
-                Image(systemName: "hand.point.up.left.fill").tag(TrackpadEngine.Mode.trackpad)
-                Image(systemName: "hand.tap.fill").tag(TrackpadEngine.Mode.touch)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 80)
-            #else
+            #if canImport(UIKit)
             Menu {
                 Picker("Input Mode", selection: $viewModel.inputMode) {
                     Label("Trackpad", systemImage: "hand.point.up.left.fill").tag(TrackpadEngine.Mode.trackpad)
