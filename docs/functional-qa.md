@@ -75,3 +75,24 @@ For repeatable response measurements, add `AETHERSCREENS_QA_LATENCY=1` to the
 fixture test and run a release build with `swift test -c release --filter LiveFunctionalTests`.
 The click handler changes a static background pixel; unrelated animation cannot
 satisfy the response check. The test prints all ten response samples.
+
+## Chinese / English localization acceptance (2026-10-01)
+
+- Core suite: 87 tests, four external-environment skips, zero failures. Tests
+  load both bundled catalogs, compare key sets and format argument types, check
+  language fallback/persistence, and preserve original server error details.
+- iPhone 17 simulator: primary workflow and Chinese-to-English settings switch
+  passed. The same open sheet updated, Quick Connect changed language, and
+  English persisted after terminating and relaunching the app. Evidence:
+  `build/ios-localization.xcresult` and exported screenshots.
+- Reviewed Chinese dashboard/Quick Connect and English settings screenshots.
+  The existing compact iPhone navigation title truncates beside four actions;
+  retain this as a UI issue to resolve before final acceptance.
+- Installed standalone Mac candidate loads the package resource bundle and
+  follows the Chinese system preference. Switching to English updates the open
+  settings sheet and main dashboard without rebuilding session state; English
+  also persisted after quitting and relaunching the Mac app.
+- App-owned labels, prompts, status/errors and local-network permission text
+  have English and Simplified Chinese resources. OS-owned menus/dialogs follow
+  the system's application language; remote names and server diagnostics remain
+  original data. Physical iPhone localization acceptance remains pending unlock.

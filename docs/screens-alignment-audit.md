@@ -30,7 +30,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Wake-on-LAN | Packet construction tests and send-success notice | Real wake verification on an appropriately configured sleeping Mac |
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
-| English / Simplified Chinese | Requested on 2026-10-01 | Follow-system and manual language selection; localized interface/errors/permissions; both-language layout and interaction acceptance |
+| English / Simplified Chinese | Implemented; core/catalog tests and iOS simulator language switch/persistence pass, Mac switch passes | Physical iPhone acceptance and compact navigation title polish remain |
 | Release readiness | 82 latest-source tests (4 environment skips); Observe commit passed CI; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are

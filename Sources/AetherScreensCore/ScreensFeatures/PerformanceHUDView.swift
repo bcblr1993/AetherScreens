@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Screens-style performance diagnostic badge displaying real-time FPS, Latency, and Throughput.
 public struct PerformanceHUDView: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var metrics: PerformanceMetrics
     @State private var isExpanded: Bool = false
     public let isTailscale: Bool
@@ -61,7 +62,7 @@ public struct PerformanceHUDView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "point.3.connected.trianglepath.dotted")
                             .font(.system(size: 8))
-                        Text(isTailscale ? "Tailscale" : "LAN / Host")
+                        Text(AppLocalization.string(isTailscale ? "Tailscale" : "LAN / Host"))
                             .font(.system(size: 9, weight: .semibold))
                     }
                     .foregroundColor(.accentColor)

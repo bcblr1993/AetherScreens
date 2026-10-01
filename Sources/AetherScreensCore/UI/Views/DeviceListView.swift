@@ -22,6 +22,7 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
 /// Main dashboard displaying remote machines, Bonjour nearby discovery, Tailscale sync, and quick connect.
 /// Fully optimized for both iOS (iPhone & iPad) and macOS (Apple Silicon Mac).
 public struct DeviceListView: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @StateObject private var viewModel = DeviceListViewModel()
     @State private var selectedCategory: DeviceCategory = .all
     @State private var showingAddSheet = false
@@ -39,13 +40,14 @@ public struct DeviceListView: View {
     public init() {}
 
     public var body: some View {
+        Group {
         #if os(macOS)
         NavigationSplitView {
             sidebarContent
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
         } detail: {
             mainGridView
-                .navigationTitle(selectedCategory.rawValue)
+                .navigationTitle(AppLocalization.string(selectedCategory.rawValue))
         }
         .sheet(item: $activeSessionVM, onDismiss: { viewModel.reload() }) { sessionVM in
             RemoteDesktopView(viewModel: sessionVM)
@@ -69,7 +71,7 @@ public struct DeviceListView: View {
         #else
         NavigationStack {
             mainGridView
-                .navigationTitle("AetherScreens")
+                .navigationTitle(AppLocalization.string("AetherScreens"))
                 .navigationBarTitleDisplayMode(.inline)
                 .fullScreenCover(item: $activeSessionVM, onDismiss: { viewModel.reload() }) { sessionVM in
                     RemoteDesktopView(viewModel: sessionVM)
@@ -91,6 +93,8 @@ public struct DeviceListView: View {
                 }
         }
         #endif
+        }
+        .environment(\.locale, languageSettings.locale)
     }
 
     // MARK: - Sidebar (macOS)
@@ -99,7 +103,7 @@ public struct DeviceListView: View {
     private var sidebarContent: some View {
         List(DeviceCategory.allCases, selection: $selectedCategory) { category in
             HStack {
-                Label(category.rawValue, systemImage: category.icon)
+                Label(AppLocalization.string(category.rawValue), systemImage: category.icon)
                 Spacer()
                 if category == .nearby && !viewModel.discoveredNearbyMacs.isEmpty {
                     Text("\(viewModel.discoveredNearbyMacs.count)")
@@ -136,7 +140,7 @@ public struct DeviceListView: View {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.orange)
-                        Text(err)
+                        Text(AppLocalization.message(err))
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                         Spacer()
@@ -152,7 +156,7 @@ public struct DeviceListView: View {
                     HStack {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
-                        Text(notice)
+                        Text(AppLocalization.message(notice))
                             .font(.system(size: 13))
                             .foregroundColor(.primary)
                         Spacer()
@@ -183,7 +187,7 @@ public struct DeviceListView: View {
                 } else if !devices.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         if !viewModel.discoveredNearbyMacs.isEmpty {
-                            Text("Your computers")
+                            Text(AppLocalization.string("Your computers"))
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal, 20)
@@ -200,20 +204,20 @@ public struct DeviceListView: View {
                                     Button {
                                         openSession(for: device)
                                     } label: {
-                                        Label("Connect", systemImage: "arrow.up.right.video")
+                                        Label(AppLocalization.string("Connect"), systemImage: "arrow.up.right.video")
                                     }
 
                                     Button {
                                         editingDevice = device
                                     } label: {
-                                        Label("Edit Computer...", systemImage: "pencil")
+                                        Label(AppLocalization.string("Edit Computer..."), systemImage: "pencil")
                                     }
 
                                     if let mac = device.macAddress, !mac.isEmpty {
                                         Button {
                                             viewModel.wakeDevice(device)
                                         } label: {
-                                            Label("Wake Mac (WOL)", systemImage: "bolt.fill")
+                                            Label(AppLocalization.string("Wake Mac (WOL)"), systemImage: "bolt.fill")
                                         }
                                     }
 
@@ -222,7 +226,7 @@ public struct DeviceListView: View {
                                     Button(role: .destructive) {
                                         viewModel.deleteDevice(device)
                                     } label: {
-                                        Label("Delete", systemImage: "trash")
+                                        Label(AppLocalization.string("Delete"), systemImage: "trash")
                                     }
                                 }
                             }
@@ -234,7 +238,7 @@ public struct DeviceListView: View {
             .padding(.vertical, 24)
         }
         .background(dashboardBackground)
-        .searchable(text: $viewModel.searchText, prompt: "Search computers or Tailscale IP")
+        .searchable(text: $viewModel.searchText, prompt: AppLocalization.string("Search computers or Tailscale IP"))
         .refreshable {
             await viewModel.syncTailscale()
         }
@@ -246,8 +250,8 @@ public struct DeviceListView: View {
                 } label: {
                     Image(systemName: "list.bullet.rectangle")
                 }
-                .help("View Diagnostic Logs")
-                .accessibilityLabel("Diagnostic Logs")
+                .help(AppLocalization.string("View Diagnostic Logs"))
+                .accessibilityLabel(AppLocalization.string("Diagnostic Logs"))
 
                 // Sync Tailscale Button
                 Button {
@@ -262,8 +266,8 @@ public struct DeviceListView: View {
                         Image(systemName: "arrow.triangle.2.circlepath")
                     }
                 }
-                .help("Sync Tailscale Online Nodes")
-                .accessibilityLabel("Sync Tailscale Devices")
+                .help(AppLocalization.string("Sync Tailscale Online Nodes"))
+                .accessibilityLabel(AppLocalization.string("Sync Tailscale Devices"))
 
                 // Temporary or optionally saved connection
                 Button {
@@ -271,8 +275,8 @@ public struct DeviceListView: View {
                 } label: {
                     Image(systemName: "bolt.horizontal.circle")
                 }
-                .help("Quick Connect")
-                .accessibilityLabel("Quick Connect")
+                .help(AppLocalization.string("Quick Connect"))
+                .accessibilityLabel(AppLocalization.string("Quick Connect"))
 
                 // Add Computer Button
                 Button {
@@ -280,8 +284,8 @@ public struct DeviceListView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
-                .help("Add Computer Manually")
-                .accessibilityLabel("Add Computer")
+                .help(AppLocalization.string("Add Computer Manually"))
+                .accessibilityLabel(AppLocalization.string("Add Computer"))
             }
 
             #if canImport(UIKit)
@@ -291,7 +295,7 @@ public struct DeviceListView: View {
                 } label: {
                     Image(systemName: "gear")
                 }
-                .accessibilityLabel("Settings")
+                .accessibilityLabel(AppLocalization.string("Settings"))
             }
             #endif
         }
@@ -302,19 +306,19 @@ public struct DeviceListView: View {
     private var dashboardHeader: some View {
         HStack(alignment: .bottom, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("WORKSPACE")
+                Text(AppLocalization.string("WORKSPACE"))
                     .font(.system(size: 10, weight: .bold, design: .rounded))
                     .tracking(2)
                     .foregroundStyle(.secondary)
-                Text("Your screens")
+                Text(AppLocalization.string("Your screens"))
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .tracking(-0.7)
-                Text("Connect to your computers from anywhere.")
+                Text(AppLocalization.string("Connect to your computers from anywhere."))
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Text("\(viewModel.filteredDevices.count) computers")
+            Text(AppLocalization.format("%d computers", viewModel.filteredDevices.count))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 11)
@@ -330,10 +334,10 @@ public struct DeviceListView: View {
             HStack(spacing: 6) {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .foregroundColor(.accentColor)
-                Text("Nearby Macs (Local Wi-Fi)")
+                Text(AppLocalization.string("Nearby Macs (Local Wi-Fi)"))
                     .font(.system(size: 15, weight: .bold))
                 Spacer()
-                Text("\(viewModel.discoveredNearbyMacs.count) discovered")
+                Text(AppLocalization.format("%d discovered", viewModel.discoveredNearbyMacs.count))
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }
@@ -378,7 +382,7 @@ public struct DeviceListView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Add \(discovered.name)")
+                        .accessibilityLabel(AppLocalization.format("Add %@", discovered.name))
                     }
                 }
                 .padding(.horizontal, 20)
@@ -438,10 +442,10 @@ public struct DeviceListView: View {
                 .frame(width: 88, height: 88)
                 .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 24))
 
-            Text(viewModel.searchText.isEmpty ? "No computers here yet" : "No matching computers")
+            Text(AppLocalization.string(viewModel.searchText.isEmpty ? "No computers here yet" : "No matching computers"))
                 .font(.system(size: 20, weight: .semibold))
 
-            Text(viewModel.searchText.isEmpty ? "Add a computer to start a remote session. You can also sync devices from your tailnet." : "Try a different name or address.")
+            Text(AppLocalization.string(viewModel.searchText.isEmpty ? "Add a computer to start a remote session. You can also sync devices from your tailnet." : "Try a different name or address."))
                 .font(.system(size: 14))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -451,7 +455,7 @@ public struct DeviceListView: View {
                 Button {
                     showingAddSheet = true
                 } label: {
-                    Label("Add computer", systemImage: "plus")
+                    Label(AppLocalization.string("Add computer"), systemImage: "plus")
                         .font(.system(size: 15, weight: .semibold))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -468,29 +472,38 @@ public struct DeviceListView: View {
 
 /// Settings sheet for configuring Tailscale API credentials
 public struct TailscaleSettingsSheet: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: DeviceListViewModel
     @Environment(\.dismiss) private var dismiss
 
     public var body: some View {
         NavigationStack {
             Form {
+                Section(header: Text(AppLocalization.string("Language"))) {
+                    Picker(AppLocalization.string("App Language"), selection: $languageSettings.language) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.displayName).tag(language)
+                        }
+                    }
+                    .accessibilityIdentifier("app-language")
+                }
                 Section(
-                    header: Text("Tailscale API Credentials"),
-                    footer: Text("Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices.")
+                    header: Text(AppLocalization.string("Tailscale API Credentials")),
+                    footer: Text(AppLocalization.string("Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices."))
                 ) {
-                    SecureField("API Access Token (tskey-api-...)", text: $viewModel.tailscaleApiKey)
-                    TextField("Tailnet Name (Optional, e.g. example.com)", text: $viewModel.tailnetName)
+                    SecureField(AppLocalization.string("API Access Token (tskey-api-...)"), text: $viewModel.tailscaleApiKey)
+                    TextField(AppLocalization.string("Tailnet Name (Optional, e.g. example.com)"), text: $viewModel.tailnetName)
                 }
 
-                Section(header: Text("About macOS Screen Sharing")) {
+                Section(header: Text(AppLocalization.string("About macOS Screen Sharing"))) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("1. Open System Settings on Mac > General > Sharing.")
+                        Text(AppLocalization.string("1. Open System Settings on Mac > General > Sharing."))
                             .font(.system(size: 13))
-                        Text("2. Turn on Screen Sharing.")
+                        Text(AppLocalization.string("2. Turn on Screen Sharing."))
                             .font(.system(size: 13))
-                        Text("3. Click ℹ️ > Computer Settings > Enable 'VNC viewers may control screen with password'.")
+                        Text(AppLocalization.string("3. Use your Mac account, or enable password access for VNC viewers in Computer Settings."))
                             .font(.system(size: 13))
-                        Text("4. Ensure Tailscale is running on both client and host.")
+                        Text(AppLocalization.string("4. For connections across networks, run Tailscale on both devices."))
                             .font(.system(size: 13))
                     }
                     .foregroundColor(.secondary)
@@ -498,13 +511,13 @@ public struct TailscaleSettingsSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Tailscale Settings")
+            .navigationTitle(AppLocalization.string("Tailscale Settings"))
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button(AppLocalization.string("Done")) {
                         dismiss()
                     }
                 }

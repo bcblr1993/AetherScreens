@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Real-time diagnostic log inspector for troubleshooting network, RFB handshake, and authentication.
 public struct DiagnosticLogView: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject private var logger = AppLogger.shared
     @Environment(\.dismiss) private var dismiss
 
@@ -29,7 +30,7 @@ public struct DiagnosticLogView: View {
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.secondary)
-                        TextField("Filter logs...", text: $filterText)
+                        TextField(AppLocalization.string("Filter logs..."), text: $filterText)
                             .textFieldStyle(.plain)
                         if !filterText.isEmpty {
                             Button {
@@ -45,10 +46,10 @@ public struct DiagnosticLogView: View {
                     .background(Color.primary.opacity(0.06))
                     .cornerRadius(8)
 
-                    Picker("Level", selection: $selectedLevel) {
-                        Text("All Levels").tag(AppLogger.LogLevel?.none)
+                    Picker(AppLocalization.string("Level"), selection: $selectedLevel) {
+                        Text(AppLocalization.string("All Levels")).tag(AppLogger.LogLevel?.none)
                         ForEach(AppLogger.LogLevel.allCases, id: \.self) { level in
-                            Text(level.rawValue).tag(AppLogger.LogLevel?.some(level))
+                            Text(AppLocalization.string(level.rawValue)).tag(AppLogger.LogLevel?.some(level))
                         }
                     }
                     .pickerStyle(.menu)
@@ -65,7 +66,7 @@ public struct DiagnosticLogView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 4) {
                             if filteredEntries.isEmpty {
-                                Text("No log entries match the current filter.")
+                                Text(AppLocalization.string("No log entries match the current filter."))
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundColor(.white.opacity(0.65))
                                     .padding(20)
@@ -105,14 +106,14 @@ public struct DiagnosticLogView: View {
 
                 // Bottom Action Toolbar
                 HStack {
-                    Text("\(filteredEntries.count) events")
+                    Text(AppLocalization.format("%d events", filteredEntries.count))
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
 
                     Spacer()
 
                     if copiedNotice {
-                        Text("Copied to Clipboard!")
+                        Text(AppLocalization.string("Copied to Clipboard!"))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.green)
                             .transition(.opacity)
@@ -121,26 +122,26 @@ public struct DiagnosticLogView: View {
                     Button {
                         copyLogsToClipboard()
                     } label: {
-                        Label("Copy Logs", systemImage: "doc.on.doc")
+                        Label(AppLocalization.string("Copy Logs"), systemImage: "doc.on.doc")
                     }
 
                     Button(role: .destructive) {
                         logger.clear()
                     } label: {
-                        Label("Clear", systemImage: "trash")
+                        Label(AppLocalization.string("Clear"), systemImage: "trash")
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
                 .background(Color.primary.opacity(0.04))
             }
-            .navigationTitle("Diagnostic Logs")
+            .navigationTitle(AppLocalization.string("Diagnostic Logs"))
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
+                    Button(AppLocalization.string("Close")) {
                         dismiss()
                     }
                 }

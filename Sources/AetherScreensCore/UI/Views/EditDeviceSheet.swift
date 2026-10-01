@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Sheet for editing an existing computer's connection details, VNC password, and Wake-on-LAN settings.
 public struct EditDeviceSheet: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     public let device: RemoteDevice
     @ObservedObject public var viewModel: DeviceListViewModel
     @Environment(\.dismiss) private var dismiss
@@ -23,18 +24,18 @@ public struct EditDeviceSheet: View {
     public var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Device Information")) {
-                    TextField("Name", text: $name)
-                    TextField("Tailscale IP / Host (e.g. 100.80.1.25)", text: $host)
+                Section(header: Text(AppLocalization.string("Device Information"))) {
+                    TextField(AppLocalization.string("Name"), text: $name)
+                    TextField(AppLocalization.string("Tailscale IP / Host (e.g. 100.80.1.25)"), text: $host)
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         #endif
-                    LabeledContent("Port") {
-                        TextField("Port", text: $portString)
+                    LabeledContent(AppLocalization.string("Port")) {
+                        TextField(AppLocalization.string("Port"), text: $portString)
                             .labelsHidden()
-                            .accessibilityLabel("Port")
+                            .accessibilityLabel(AppLocalization.string("Port"))
                             .frame(minWidth: 80)
                             .multilineTextAlignment(.trailing)
                             #if canImport(UIKit)
@@ -43,34 +44,34 @@ public struct EditDeviceSheet: View {
                     }
                 }
 
-                Section(header: Text("Operating System")) {
-                    Picker("Device Type", selection: $deviceType) {
+                Section(header: Text(AppLocalization.string("Operating System"))) {
+                    Picker(AppLocalization.string("Device Type"), selection: $deviceType) {
                         ForEach(RemoteDevice.DeviceType.allCases, id: \.self) { type in
-                            Label(type.rawValue, systemImage: type.systemIcon).tag(type)
+                            Label(AppLocalization.string(type.rawValue), systemImage: type.systemIcon).tag(type)
                         }
                     }
                 }
 
                 Section(
-                    header: Text("Authentication"),
-                    footer: Text("Saved in the system Keychain. Enter a new password to update or leave unchanged.")
+                    header: Text(AppLocalization.string("Authentication")),
+                    footer: Text(AppLocalization.string("Saved in the system Keychain. Enter a new password to update or leave unchanged."))
                 ) {
-                    TextField("Username (Mac account, optional)", text: $username)
+                    TextField(AppLocalization.string("Username (Mac account, optional)"), text: $username)
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .textInputAutocapitalization(.never)
                         #endif
-                    SecureField(username.isEmpty ? "VNC Password" : "Mac Account Password", text: $password)
+                    SecureField(AppLocalization.string(username.isEmpty ? "VNC Password" : "Mac Account Password"), text: $password)
                         .onChange(of: password) { _, _ in
                             isPasswordModified = true
                         }
                 }
 
                 Section(
-                    header: Text("Wake-on-LAN (Optional)"),
-                    footer: Text("Hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake this Mac remotely.")
+                    header: Text(AppLocalization.string("Wake-on-LAN (Optional)")),
+                    footer: Text(AppLocalization.string("Hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake this Mac remotely."))
                 ) {
-                    TextField("MAC Address", text: $macAddress)
+                    TextField(AppLocalization.string("MAC Address"), text: $macAddress)
                         .autocorrectionDisabled()
                 }
             }
@@ -78,19 +79,19 @@ public struct EditDeviceSheet: View {
             #if canImport(UIKit)
             .scrollDismissesKeyboard(.interactively)
             #endif
-            .navigationTitle("Edit Computer")
+            .navigationTitle(AppLocalization.string("Edit Computer"))
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(AppLocalization.string("Cancel")) {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(AppLocalization.string("Save")) {
                         guard let port = UInt16(portString), port > 0 else { return }
                         var updatedDev = device
                         updatedDev.name = name.trimmingCharacters(in: .whitespaces).isEmpty ? host : name

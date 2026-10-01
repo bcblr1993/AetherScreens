@@ -3,6 +3,7 @@ import CoreGraphics
 
 /// Metal-backed remote desktop with native input, viewport controls and session diagnostics.
 public struct RemoteDesktopView: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: SessionViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
@@ -151,13 +152,13 @@ public struct RemoteDesktopView: View {
                 VStack {
                     HStack(spacing: 8) {
                         Image(systemName: "eye.slash.fill")
-                        Text("Lock Screen shortcut sent")
+                        Text(AppLocalization.string("Lock Screen shortcut sent"))
                             .font(.system(size: 12, weight: .semibold))
 
                         Button {
                             viewModel.curtainManager.toggleCurtain()
                         } label: {
-                            Text("Dismiss")
+                            Text(AppLocalization.string("Dismiss"))
                                 .font(.system(size: 11, weight: .bold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
@@ -167,14 +168,14 @@ public struct RemoteDesktopView: View {
                         Button {
                             viewModel.reconnectSession()
                         } label: {
-                            Text("Reconnect")
+                            Text(AppLocalization.string("Reconnect"))
                                 .font(.system(size: 11, weight: .semibold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
                                 .background(Color.white.opacity(0.2), in: Capsule())
                         }
                         .buttonStyle(.plain)
-                        .help("Restore the session if input stops responding after unlocking")
+                        .help(AppLocalization.string("Restore the session if input stops responding after unlocking"))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
@@ -277,7 +278,7 @@ public struct RemoteDesktopView: View {
                     .tint(.white)
             }
 
-            Text(statusDescription)
+            Text(AppLocalization.string(statusDescription))
                 .font(.system(size: 15, weight: .medium))
                 .foregroundColor(.white.opacity(0.85))
 
@@ -290,14 +291,14 @@ public struct RemoteDesktopView: View {
                 .foregroundColor(.white.opacity(0.5))
 
             if case .failed(let err) = viewModel.sessionState {
-                Text(err)
+                Text(AppLocalization.message(err))
                     .font(.system(size: 13))
                     .foregroundColor(.red.opacity(0.8))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
 
                 HStack(spacing: 12) {
-                    Button("Retry Connection") {
+                    Button(AppLocalization.string("Retry Connection")) {
                         viewModel.startSession()
                     }
                     .buttonStyle(.borderedProminent)
@@ -305,7 +306,7 @@ public struct RemoteDesktopView: View {
                     Button {
                         viewModel.isPromptingPassword = true
                     } label: {
-                        Label("Enter Password", systemImage: "key.fill")
+                        Label(AppLocalization.string("Enter Password"), systemImage: "key.fill")
                     }
                     .buttonStyle(.bordered)
                 }
@@ -314,7 +315,7 @@ public struct RemoteDesktopView: View {
                 Button {
                     showingLogs = true
                 } label: {
-                    Label("View Diagnostic Logs", systemImage: "text.book.closed")
+                    Label(AppLocalization.string("View Diagnostic Logs"), systemImage: "text.book.closed")
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
@@ -333,7 +334,7 @@ public struct RemoteDesktopView: View {
                 .tint(.white)
                 .scaleEffect(1.2)
 
-            Text("Loading remote desktop…")
+            Text(AppLocalization.string("Loading remote desktop…"))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.white)
 
@@ -344,12 +345,12 @@ public struct RemoteDesktopView: View {
                         .tint(.blue)
                         .frame(width: 220)
 
-                    Text(String(format: "Received %.1f MB / %.1f MB (%.0f%%)", progress.current, progress.total, (progress.current / progress.total) * 100))
+                    Text(AppLocalization.format("Received %.1f MB / %.1f MB (%.0f%%)", progress.current, progress.total, (progress.current / progress.total) * 100))
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundColor(.white.opacity(0.75))
                 }
             } else {
-                Text("Connected. Waiting for remote frames…")
+                Text(AppLocalization.string("Connected. Waiting for remote frames…"))
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.65))
                     .multilineTextAlignment(.center)
@@ -390,14 +391,14 @@ public struct RemoteDesktopView: View {
                     .background(Color.black.opacity(0.65))
                     .clipShape(Circle())
             }
-            .accessibilityLabel("Disconnect")
+            .accessibilityLabel(AppLocalization.string("Disconnect"))
 
             // Machine Name & State Dot
             HStack(spacing: 6) {
                 Circle()
                     .fill(viewModel.sessionState == .connected ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
-                Text(viewModel.isObserveOnly ? "Observe · " + viewModel.device.name : viewModel.device.name)
+                Text(viewModel.isObserveOnly ? AppLocalization.format("Observe · %@", viewModel.device.name) : viewModel.device.name)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
@@ -418,30 +419,30 @@ public struct RemoteDesktopView: View {
             Button { showingLogs = true } label: {
                 controlIcon("list.bullet.rectangle")
             }
-            .help("View Diagnostic Logs")
+            .help(AppLocalization.string("View Diagnostic Logs"))
             #endif
 
             // Keep secondary controls inside a menu on narrow screens.
             Menu {
-                Toggle("Observe Only", isOn: $viewModel.isObserveOnly)
+                Toggle(AppLocalization.string("Observe Only"), isOn: $viewModel.isObserveOnly)
                 Divider()
                 #if canImport(UIKit)
                 Button { showingLogs = true } label: {
-                    Label("Diagnostic Logs", systemImage: "list.bullet.rectangle")
+                    Label(AppLocalization.string("Diagnostic Logs"), systemImage: "list.bullet.rectangle")
                 }
                 #endif
-                Button("Fit to Window") {
+                Button(AppLocalization.string("Fit to Window")) {
                     viewModel.zoomScale = 1
                     viewModel.viewOffset = .zero
                     viewModel.isPanningViewport = false
                 }
-                Button("Actual Size") {
+                Button(AppLocalization.string("Actual Size")) {
                     viewModel.zoomScale = viewModel.actualSizeZoomScale
                 }
-                Button("Zoom In") {
+                Button(AppLocalization.string("Zoom In")) {
                     viewModel.zoomScale = min(max(4, viewModel.actualSizeZoomScale), viewModel.zoomScale * 1.25)
                 }
-                Button("Zoom Out") {
+                Button(AppLocalization.string("Zoom Out")) {
                     viewModel.zoomScale = max(1, viewModel.zoomScale / 1.25)
                     if viewModel.zoomScale == 1 {
                         viewModel.viewOffset = .zero
@@ -449,7 +450,7 @@ public struct RemoteDesktopView: View {
                     }
                 }
                 #if os(macOS)
-                Toggle("Pan View", isOn: $viewModel.isPanningViewport)
+                Toggle(AppLocalization.string("Pan View"), isOn: $viewModel.isPanningViewport)
                     .disabled(viewModel.zoomScale <= 1)
                 #endif
                 Divider()
@@ -458,7 +459,7 @@ public struct RemoteDesktopView: View {
                         viewModel.multiDisplayManager.selectDisplay(id: display.id)
                     } label: {
                         HStack {
-                            Text(display.name)
+                            Text(AppLocalization.message(display.name))
                             if viewModel.multiDisplayManager.selectedDisplayId == display.id {
                                 Image(systemName: "checkmark")
                             }
@@ -469,11 +470,11 @@ public struct RemoteDesktopView: View {
                     viewModel.triggerHaptic()
                     viewModel.curtainManager.toggleCurtain()
                 } label: {
-                    Label(viewModel.curtainManager.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac", systemImage: "lock")
+                    Label(AppLocalization.string(viewModel.curtainManager.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac"), systemImage: "lock")
                 }
                 .disabled(viewModel.isObserveOnly && !viewModel.curtainManager.isCurtainActive)
                 Button { viewModel.reconnectSession() } label: {
-                    Label("Reconnect", systemImage: "arrow.clockwise")
+                    Label(AppLocalization.string("Reconnect"), systemImage: "arrow.clockwise")
                 }
             } label: {
                 controlIcon("ellipsis")
@@ -482,14 +483,14 @@ public struct RemoteDesktopView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             #endif
-            .accessibilityLabel("Session Options")
+            .accessibilityLabel(AppLocalization.string("Session Options"))
 
             // Touch vs Trackpad Mode Toggle
             #if canImport(UIKit)
             Menu {
-                Picker("Input Mode", selection: $viewModel.inputMode) {
-                    Label("Trackpad", systemImage: "hand.point.up.left.fill").tag(TrackpadEngine.Mode.trackpad)
-                    Label("Touch", systemImage: "hand.tap.fill").tag(TrackpadEngine.Mode.touch)
+                Picker(AppLocalization.string("Input Mode"), selection: $viewModel.inputMode) {
+                    Label(AppLocalization.string("Trackpad"), systemImage: "hand.point.up.left.fill").tag(TrackpadEngine.Mode.trackpad)
+                    Label(AppLocalization.string("Touch"), systemImage: "hand.tap.fill").tag(TrackpadEngine.Mode.touch)
                 }
             } label: {
                 controlIcon(viewModel.inputMode == .trackpad ? "hand.point.up.left.fill" : "hand.tap.fill")
@@ -504,7 +505,7 @@ public struct RemoteDesktopView: View {
             } label: {
                 controlIcon("keyboard")
             }
-            .accessibilityLabel(viewModel.isKeyboardVisible ? "Hide Keyboard" : "Show Keyboard")
+            .accessibilityLabel(AppLocalization.string(viewModel.isKeyboardVisible ? "Hide Keyboard" : "Show Keyboard"))
             .disabled(viewModel.isObserveOnly)
         }
         .buttonStyle(.plain)

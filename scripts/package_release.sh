@@ -23,11 +23,14 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$RELEASE_BIN" "$APP_DIR/Contents/MacOS/AetherScreens"
 cp assets/branding/AppIcon-v1.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp assets/licenses/BigInt-MIT.txt "$APP_DIR/Contents/Resources/BigInt-MIT.txt"
+ditto "$(dirname "$RELEASE_BIN")/AetherScreens_AetherScreensCore.bundle" "$APP_DIR/Contents/Resources/AetherScreens_AetherScreensCore.bundle"
+cp -R assets/localization/*.lproj "$APP_DIR/Contents/Resources/"
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array>
 <key>CFBundleExecutable</key><string>AetherScreens</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleIdentifier</key><string>com.aethernative.aetherscreens</string>

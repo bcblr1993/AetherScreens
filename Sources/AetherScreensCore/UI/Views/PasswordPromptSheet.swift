@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Elegant authentication modal prompting user for VNC credentials when connecting to a remote Mac.
 public struct PasswordPromptSheet: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     public let deviceName: String
     public let host: String
     public let username: String?
@@ -45,10 +46,10 @@ public struct PasswordPromptSheet: View {
                         .foregroundColor(.accentColor)
                 }
 
-                Text("Authentication Required")
+                Text(AppLocalization.string("Authentication Required"))
                     .font(.system(size: 18, weight: .bold))
 
-                Text(username == nil ? "Enter the VNC password for \(deviceName)" : "Enter the Mac account password for \(username!)")
+                Text(username == nil ? AppLocalization.format("Enter the VNC password for %@", deviceName) : AppLocalization.format("Enter the Mac account password for %@", username!))
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -62,7 +63,7 @@ public struct PasswordPromptSheet: View {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(.red)
-                    Text(err)
+                    Text(AppLocalization.message(err))
                         .font(.system(size: 12))
                         .foregroundColor(.red)
                 }
@@ -74,7 +75,7 @@ public struct PasswordPromptSheet: View {
 
             // Input Fields
             VStack(alignment: .leading, spacing: 12) {
-                SecureField(username == nil ? "VNC Password" : "Mac Account Password", text: $password)
+                SecureField(AppLocalization.string(username == nil ? "VNC Password" : "Mac Account Password"), text: $password)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
                     .focused($isPasswordFocused)
@@ -85,7 +86,7 @@ public struct PasswordPromptSheet: View {
                     }
 
                 if canRememberPassword {
-                    Toggle("Save password in Keychain", isOn: $saveToKeychain)
+                    Toggle(AppLocalization.string("Save password in Keychain"), isOn: $saveToKeychain)
                     .font(.system(size: 13))
                     #if os(macOS)
                     .toggleStyle(.checkbox)
@@ -96,14 +97,14 @@ public struct PasswordPromptSheet: View {
 
             // Action Buttons
             HStack(spacing: 12) {
-                Button("Cancel", role: .cancel) {
+                Button(AppLocalization.string("Cancel"), role: .cancel) {
                     onCancel()
                 }
                 .keyboardShortcut(.cancelAction)
 
                 Spacer()
 
-                Button("Connect") {
+                Button(AppLocalization.string("Connect")) {
                     onSubmit(password, canRememberPassword && saveToKeychain)
                 }
                 .buttonStyle(.borderedProminent)

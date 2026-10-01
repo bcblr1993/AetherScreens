@@ -3,6 +3,7 @@ import SwiftUI
 /// Mac-tailored keyboard accessory toolbar with Screens-style 3-state sticky modifiers,
 /// quick actions, F1-F12 function row, and text transmission.
 public struct MacKeyboardToolbar: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: SessionViewModel
     @State private var showingTextInput: Bool = false
     @State private var showingFunctionKeys: Bool = false
@@ -22,7 +23,7 @@ public struct MacKeyboardToolbar: View {
                     Image(systemName: "keyboard")
                         .foregroundColor(.secondary)
 
-                    TextField("Type or paste text to send to Mac...", text: $textInput)
+                    TextField(AppLocalization.string("Type or paste text to send to Mac..."), text: $textInput)
                         .textFieldStyle(.plain)
                         .onSubmit {
                             sendEnteredText()
@@ -32,7 +33,7 @@ public struct MacKeyboardToolbar: View {
                         Button {
                             sendEnteredText()
                         } label: {
-                            Text("Send")
+                            Text(AppLocalization.string("Send"))
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 10)
@@ -83,13 +84,13 @@ public struct MacKeyboardToolbar: View {
                             Button {
                                 viewModel.executeShortcut(shortcut)
                             } label: {
-                                Label(shortcut.rawValue, systemImage: shortcut.iconName)
+                                Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
                             }
                         }
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "command")
-                            Text("Actions")
+                            Text(AppLocalization.string("Actions"))
                                 .font(.system(size: 13, weight: .medium))
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.system(size: 10))
@@ -190,7 +191,7 @@ public struct MacKeyboardToolbar: View {
                     } label: {
                         HStack(spacing: 3) {
                             Image(systemName: "slider.horizontal.3")
-                            Text("Fn")
+                            Text(AppLocalization.string("Fn"))
                                 .font(.system(size: 12, weight: .semibold))
                         }
                         .padding(.horizontal, 9)
@@ -206,7 +207,7 @@ public struct MacKeyboardToolbar: View {
                     } label: {
                         HStack(spacing: 3) {
                             Image(systemName: "character.cursor.ibeam")
-                            Text("Type")
+                            Text(AppLocalization.string("Type"))
                                 .font(.system(size: 12, weight: .semibold))
                         }
                         .padding(.horizontal, 9)
@@ -222,7 +223,7 @@ public struct MacKeyboardToolbar: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "doc.on.clipboard")
-                            Text("Paste Text")
+                            Text(AppLocalization.string("Paste Text"))
                                 .font(.system(size: 12))
                         }
                         .padding(.horizontal, 8)
@@ -230,7 +231,7 @@ public struct MacKeyboardToolbar: View {
                         .background(Color.secondary.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
-                    .help("Insert local clipboard text into the focused remote field")
+                    .help(AppLocalization.string("Insert local clipboard text into the focused remote field"))
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -267,6 +268,7 @@ public struct MacKeyboardToolbar: View {
 
 /// Screens-style 3-state modifier key button: Inactive, Active Once, Locked 🔒
 private struct ModifierKeyButton: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     let symbol: String
     let label: String
     let state: SessionViewModel.ModifierState
@@ -277,7 +279,7 @@ private struct ModifierKeyButton: View {
             HStack(spacing: 3) {
                 Text(symbol)
                     .font(.system(size: 14, weight: .bold))
-                Text(label)
+                Text(AppLocalization.string(label))
                     .font(.system(size: 11, weight: .semibold))
 
                 if state == .locked {
@@ -322,6 +324,7 @@ private struct ModifierKeyButton: View {
 }
 
 private struct ActionButton: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     var title: String? = nil
     var icon: String? = nil
     let action: () -> Void
@@ -333,7 +336,7 @@ private struct ActionButton: View {
                     Image(systemName: icon)
                         .font(.system(size: 12, weight: .semibold))
                 } else if let title = title {
-                    Text(title)
+                    Text(AppLocalization.string(title))
                         .font(.system(size: 12, weight: .semibold))
                 }
             }

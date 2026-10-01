@@ -13,6 +13,7 @@ A native remote desktop client for Apple silicon Mac, iPhone and iPad, using mac
 - Bonjour discovery, Tailscale device import, saved computers and Keychain passwords.
 - Fit / actual-size zoom, desktop thumbnails and diagnostic logs.
 - Observe Only mode keeps the live view updating while blocking remote input; switching back restores control.
+- English and Simplified Chinese interfaces, with follow-system or manual selection in Settings. Language selection persists across launches.
 - Quick Connect opens a temporary account or VNC session without adding a computer, password or desktop preview to storage. Select Save Computer to keep it in your library.
 
 Bidirectional clipboard synchronization and supplementary-plane emoji input are not supported by the tested Mac server.

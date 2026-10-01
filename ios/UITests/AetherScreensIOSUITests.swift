@@ -1,8 +1,39 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testChineseEnglishSwitchAndPersistence() {
+        let app = makeApp(language: "zh-Hans")
+        app.launch()
+        XCTAssertTrue(app.buttons["快速连接"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["添加电脑"].exists)
+        attachScreenshot(app, name: "Chinese Dashboard")
+        app.buttons["快速连接"].tap()
+        XCTAssertTrue(app.navigationBars["快速连接"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["用户名（Mac 账户，可选）"].exists)
+        XCTAssertTrue(app.secureTextFields["VNC 密码（可选）"].exists)
+        XCTAssertFalse(app.buttons["连接"].isEnabled)
+        attachScreenshot(app, name: "Chinese Quick Connect")
+        app.buttons["取消"].tap()
+        app.buttons["设置"].tap()
+        XCTAssertTrue(app.navigationBars["Tailscale 设置"].waitForExistence(timeout: 5))
+        app.buttons["app-language"].tap()
+        app.buttons["English"].tap()
+        XCTAssertTrue(app.navigationBars["Tailscale Settings"].waitForExistence(timeout: 5), "Switching language must preserve the open settings sheet")
+        attachScreenshot(app, name: "English Settings After Switch")
+        app.buttons["Done"].tap()
+        app.buttons["Quick Connect"].tap()
+        XCTAssertTrue(app.navigationBars["Quick Connect"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["Username (Mac account, optional)"].exists)
+        attachScreenshot(app, name: "English Quick Connect After Switch")
+        app.buttons["Cancel"].tap()
+        app.terminate()
+        app.launchArguments = []
+        app.launch()
+        XCTAssertTrue(app.buttons["Quick Connect"].waitForExistence(timeout: 10), "Manual selection must survive relaunch")
+    }
+
     func testQuickConnectValidationAndTemporarySession() {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launch()
         let quick = app.buttons["Quick Connect"]
         XCTAssertTrue(quick.waitForExistence(timeout: 10))
@@ -51,7 +82,7 @@ final class AetherScreensIOSUITests: XCTestCase {
     }
 
     func testPrimaryScreensOnIPhone() {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launch()
 
         XCTAssertTrue(app.buttons["Add Computer"].waitForExistence(timeout: 10))
@@ -87,7 +118,7 @@ final class AetherScreensIOSUITests: XCTestCase {
     }
 
     func testSyntheticRemoteSession() {
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launch()
         let computer = ensureLoopbackComputer(in: app)
         if !computer.isHittable { app.swipeUp() }
@@ -117,7 +148,7 @@ final class AetherScreensIOSUITests: XCTestCase {
               let password = env["AETHERSCREENS_LIVE_PASSWORD"] else {
             throw XCTSkip("Set live host and password in the test runner environment")
         }
-        let app = XCUIApplication()
+        let app = makeApp()
         app.launch()
         app.buttons["Add Computer"].tap()
         let name = app.textFields["Name (e.g. Studio Mac)"]
@@ -159,6 +190,12 @@ final class AetherScreensIOSUITests: XCTestCase {
         attachScreenshot(app, name: "Live Mac Keyboard")
         app.buttons["Disconnect"].tap()
         XCTAssertTrue(app.buttons["Add Computer"].waitForExistence(timeout: 10))
+    }
+
+    private func makeApp(language: String = "en") -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-com.aethernative.aetherscreens.language", language]
+        return app
     }
 
     private func ensureLoopbackComputer(in app: XCUIApplication) -> XCUIElement {

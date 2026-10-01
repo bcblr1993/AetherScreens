@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Sheet for adding a new remote computer manually.
 public struct AddDeviceSheet: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: DeviceListViewModel
     @Environment(\.dismiss) private var dismiss
 
@@ -36,20 +37,20 @@ public struct AddDeviceSheet: View {
     public var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Device Information")) {
+                Section(header: Text(AppLocalization.string("Device Information"))) {
                     if includesSavedDetails {
-                        TextField("Name (e.g. Studio Mac)", text: $name)
+                        TextField(AppLocalization.string("Name (e.g. Studio Mac)"), text: $name)
                     }
-                    TextField("Tailscale IP / Host (e.g. 100.80.1.25)", text: $host)
+                    TextField(AppLocalization.string("Tailscale IP / Host (e.g. 100.80.1.25)"), text: $host)
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         #endif
-                    LabeledContent("Port") {
-                        TextField("Port", text: $portString)
+                    LabeledContent(AppLocalization.string("Port")) {
+                        TextField(AppLocalization.string("Port"), text: $portString)
                             .labelsHidden()
-                            .accessibilityLabel("Port")
+                            .accessibilityLabel(AppLocalization.string("Port"))
                             .frame(minWidth: 80)
                             .multilineTextAlignment(.trailing)
                             #if canImport(UIKit)
@@ -59,39 +60,39 @@ public struct AddDeviceSheet: View {
                 }
 
                 if includesSavedDetails {
-                    Section(header: Text("Operating System")) {
-                        Picker("Device Type", selection: $deviceType) {
+                    Section(header: Text(AppLocalization.string("Operating System"))) {
+                        Picker(AppLocalization.string("Device Type"), selection: $deviceType) {
                             ForEach(RemoteDevice.DeviceType.allCases, id: \.self) { type in
-                                Label(type.rawValue, systemImage: type.systemIcon).tag(type)
+                                Label(AppLocalization.string(type.rawValue), systemImage: type.systemIcon).tag(type)
                             }
                         }
                     }
                 }
 
                 Section(
-                    header: Text("Authentication"),
-                    footer: Text("Enter your Mac account username and password. Leave Username empty to use a VNC password.")
+                    header: Text(AppLocalization.string("Authentication")),
+                    footer: Text(AppLocalization.string("Enter your Mac account username and password. Leave Username empty to use a VNC password."))
                 ) {
-                    TextField("Username (Mac account, optional)", text: $username)
+                    TextField(AppLocalization.string("Username (Mac account, optional)"), text: $username)
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .textInputAutocapitalization(.never)
                         #endif
-                    SecureField(username.isEmpty ? "VNC Password (Optional)" : "Mac Account Password", text: $password)
+                    SecureField(AppLocalization.string(username.isEmpty ? "VNC Password (Optional)" : "Mac Account Password"), text: $password)
                 }
 
                 if isQuickConnect {
-                    Section(footer: Text("Save this computer and its password for future connections. Leave off for a temporary session.")) {
-                        Toggle("Save Computer", isOn: $saveComputer)
+                    Section(footer: Text(AppLocalization.string("Save this computer and its password for future connections. Leave off for a temporary session."))) {
+                        Toggle(AppLocalization.string("Save Computer"), isOn: $saveComputer)
                     }
                 }
 
                 if includesSavedDetails {
                     Section(
-                        header: Text("Wake-on-LAN (Optional)"),
-                        footer: Text("Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping.")
+                        header: Text(AppLocalization.string("Wake-on-LAN (Optional)")),
+                        footer: Text(AppLocalization.string("Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping."))
                     ) {
-                        TextField("MAC Address (Optional)", text: $macAddress)
+                        TextField(AppLocalization.string("MAC Address (Optional)"), text: $macAddress)
                             .autocorrectionDisabled()
                     }
                 }
@@ -100,19 +101,19 @@ public struct AddDeviceSheet: View {
             #if canImport(UIKit)
             .scrollDismissesKeyboard(.interactively)
             #endif
-            .navigationTitle(isQuickConnect ? "Quick Connect" : "Add Computer")
+            .navigationTitle(AppLocalization.string(isQuickConnect ? "Quick Connect" : "Add Computer"))
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(AppLocalization.string("Cancel")) {
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isQuickConnect ? "Connect" : "Save") {
+                    Button(AppLocalization.string(isQuickConnect ? "Connect" : "Save")) {
                         guard let request else { return }
                         if let onQuickConnect {
                             onQuickConnect(request, saveComputer)

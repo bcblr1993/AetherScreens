@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "AetherScreens",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
@@ -24,7 +25,8 @@ let package = Package(
         .target(
             name: "AetherScreensCore",
             dependencies: [.product(name: "BigInt", package: "BigInt")],
-            path: "Sources/AetherScreensCore"
+            path: "Sources/AetherScreensCore",
+            resources: [.process("Resources")]
         ),
         .executableTarget(
             name: "AetherScreensApp",

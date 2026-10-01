@@ -2,6 +2,7 @@ import SwiftUI
 
 /// A compact desktop preview with a clear connection state and one primary action.
 public struct DeviceCardView: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     public let device: RemoteDevice
     public let onConnect: () -> Void
     public var onWake: (() -> Void)? = nil
@@ -31,7 +32,7 @@ public struct DeviceCardView: View {
                             Image(systemName: device.deviceType.systemIcon)
                                 .font(.system(size: 38, weight: .ultraLight))
                                 .foregroundStyle(.white.opacity(0.84))
-                            Text(device.deviceType.rawValue.uppercased())
+                            Text(AppLocalization.string(device.deviceType.rawValue).uppercased())
                                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                                 .tracking(2)
                                 .foregroundStyle(.white.opacity(0.45))
@@ -46,7 +47,7 @@ public struct DeviceCardView: View {
                                 Circle()
                                     .fill(device.isTailscaleNode && device.isOnline ? Color(red: 0.30, green: 0.77, blue: 0.53) : .gray)
                                     .frame(width: 6, height: 6)
-                                Text(device.isTailscaleNode ? (device.isOnline ? "Tailnet Online" : "Tailnet Offline") : "Saved")
+                                Text(AppLocalization.string(device.isTailscaleNode ? (device.isOnline ? "Tailnet Online" : "Tailnet Offline") : "Saved"))
                                     .font(.system(size: 11, weight: .semibold))
                             }
                             .foregroundStyle(.white)
@@ -94,6 +95,6 @@ public struct DeviceCardView: View {
             .shadow(color: .black.opacity(0.055), radius: 14, y: 5)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Connect to \(device.name)")
+        .accessibilityLabel(AppLocalization.format("Connect to %@", device.name))
     }
 }
