@@ -30,6 +30,7 @@ public final class RFBClient: @unchecked Sendable {
     // Callbacks
     public var onStateChanged: (@Sendable (State) -> Void)?
     public var onFrameUpdated: (@Sendable () -> Void)?
+    public var onDisplayLayoutReceived: (@Sendable (RFBDisplayLayout?) -> Void)?
     public var onClipboardReceived: (@Sendable (String) -> Void)?
     public var onRequestPassword: (@Sendable (@escaping @Sendable (String?) -> Void) -> Void)?
     public var onRequestMacAccount: (@Sendable (@escaping @Sendable (String?, String?) -> Void) -> Void)?
@@ -40,6 +41,8 @@ public final class RFBClient: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.aethernative.aetherscreens.rfbclient", qos: .userInteractive)
     private var readBuffer = Data()
     private var hasCompletedFramebufferUpdate = false
+    private var updateHasDisplayLayout = false
+    private var updateHasPixels = false
     private let zlibDecompressor = ZlibDecompressor()
     private let inputLock = NSRecursiveLock()
     private var inputEnabled = true
@@ -410,7 +413,7 @@ public final class RFBClient: @unchecked Sendable {
             .zlib,
             .copyRect,
             .desktopSize,
-            RFBConstants.EncodingType(rawValue: -308),
+            .extendedDesktopSize,
             .raw
         ])
         sendData(encodingsData)
@@ -451,6 +454,8 @@ public final class RFBClient: @unchecked Sendable {
         // Header: [pad: 1 byte] [numRects: 2 bytes] = 3 bytes
         readExact(3) { [weak self] headerData in
             guard let self = self, let headerData = headerData else { return }
+            self.updateHasDisplayLayout = false
+            self.updateHasPixels = false
             let numRects = headerData.subdata(in: 1..<3).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
             self.readRectangles(count: Int(numRects))
         }
@@ -459,9 +464,11 @@ public final class RFBClient: @unchecked Sendable {
     private func readRectangles(count: Int) {
         guard count > 0 else {
             // Loading progress is only useful until the first desktop is visible.
-            hasCompletedFramebufferUpdate = true
-            // All rectangles processed, notify UI and request next update
-            onFrameUpdated?()
+            // A display-layout acknowledgement alone is not the first visible desktop.
+            if !updateHasDisplayLayout || updateHasPixels {
+                hasCompletedFramebufferUpdate = true
+                onFrameUpdated?()
+            }
             requestUpdate(incremental: true)
             startMessageLoop()
             return
@@ -487,6 +494,7 @@ public final class RFBClient: @unchecked Sendable {
                     self.readExact(compressedLength) { [weak self] compressedData in
                         guard let self = self, let compressedData = compressedData else { return }
                         if let decompressed = self.zlibDecompressor.decompress(data: compressedData, expectedBytes: expectedBytes) {
+                            self.updateHasPixels = expectedBytes > 0 || self.updateHasPixels
                             self.framebuffer.updateRect(
                                 x: Int(header.x),
                                 y: Int(header.y),
@@ -505,6 +513,7 @@ public final class RFBClient: @unchecked Sendable {
                 let pixelBytes = Int(header.width) * Int(header.height) * 4
                 self.readExact(pixelBytes) { pixelData in
                     guard let pixelData = pixelData else { return }
+                    self.updateHasPixels = pixelBytes > 0 || self.updateHasPixels
                     self.framebuffer.updateRect(
                         x: Int(header.x),
                         y: Int(header.y),
@@ -521,6 +530,7 @@ public final class RFBClient: @unchecked Sendable {
                     guard let srcData = srcData else { return }
                     let srcX = srcData.subdata(in: 0..<2).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
                     let srcY = srcData.subdata(in: 2..<4).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+                    self.updateHasPixels = (header.width > 0 && header.height > 0) || self.updateHasPixels
                     self.framebuffer.copyRect(
                         srcX: Int(srcX),
                         srcY: Int(srcY),
@@ -536,7 +546,35 @@ public final class RFBClient: @unchecked Sendable {
                 // Screen resolution changed on remote Mac!
                 AppLogger.shared.info("Remote desktop resized to \(header.width)x\(header.height)", category: "RFB")
                 self.framebuffer.resize(newWidth: Int(header.width), newHeight: Int(header.height))
+                self.onDisplayLayoutReceived?(nil)
                 self.readRectangles(count: count - 1)
+
+            case .extendedDesktopSize:
+                self.updateHasDisplayLayout = true
+                self.readExact(4) { [weak self] prefix in
+                    guard let self, let prefix else { return }
+                    let screenBytes = Int(prefix[prefix.startIndex]) * 16
+                    let consume: @Sendable (Data) -> Void = { [weak self] screens in
+                        guard let self else { return }
+                        // A rejected/forwarded client resize has undefined geometry, but its payload must be consumed.
+                        if header.x == 1 && header.y != 0 {
+                            self.readRectangles(count: count - 1)
+                            return
+                        }
+                        guard let layout = RFBDecoder.parseDisplayLayout(prefix + screens, width: header.width, height: header.height) else {
+                            self.handleFailure("Invalid remote display layout")
+                            return
+                        }
+                        // A layout-only update must retain existing pixel contents.
+                        if self.framebuffer.width != Int(layout.width) || self.framebuffer.height != Int(layout.height) {
+                            self.framebuffer.resize(newWidth: Int(layout.width), newHeight: Int(layout.height))
+                        }
+                        self.onDisplayLayoutReceived?(layout)
+                        self.readRectangles(count: count - 1)
+                    }
+                    if screenBytes == 0 { consume(Data()) }
+                    else { self.readExact(screenBytes) { if let data = $0 { consume(data) } } }
+                }
 
             case .cursor:
                 // Cursor pseudo-encoding has: width * height * 4 pixel bytes + ((width + 7) / 8) * height mask bytes
@@ -552,9 +590,7 @@ public final class RFBClient: @unchecked Sendable {
                 }
 
             case .lastRect:
-                self.onFrameUpdated?()
-                self.requestUpdate(incremental: true)
-                self.startMessageLoop()
+                self.readRectangles(count: 0)
                 return
 
             default:

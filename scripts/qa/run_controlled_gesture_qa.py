@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the six controlled iOS gesture/recovery scenarios and reject omissions.
+"""Run the eight controlled iOS display/gesture/recovery scenarios and reject omissions.
 
 Start gesture_rfb_fixture.py separately. This is a simulator sub-gate, not
 physical-device or complete-release acceptance. No credentials are used.
@@ -16,6 +16,8 @@ from uuid import uuid4
 
 REPO = Path(__file__).resolve().parents[2]
 CASES = (
+    'testControlledDisplaySelection',
+    'testChineseControlledDisplaySelection',
     'testControlledViewportNavigation',
     'testChineseControlledViewportNavigation',
     'testControlledConnectionRecovery',

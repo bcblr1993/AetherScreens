@@ -88,6 +88,42 @@ final class DeviceStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testServerDisplayLayoutUpdatesCropAndRejectsEndedSessionCallbacks() {
+        let session = SessionViewModel(device: RemoteDevice(name: "Display layout QA", host: "qa.invalid"), password: nil, isTemporary: true, deviceStore: makeStore())
+        session.client.framebuffer.resize(newWidth: 4, newHeight: 2)
+        let layout = RFBDisplayLayout(width: 4, height: 2, screens: [
+            .init(id: 0, x: 2, y: 0, width: 2, height: 2, flags: 0)
+        ])
+        func drain() {
+            let settled = expectation(description: "Display UI callbacks drained")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { settled.fulfill() }
+            wait(for: [settled], timeout: 1)
+        }
+        session.client.onDisplayLayoutReceived?(layout)
+        session.client.onFrameUpdated?()
+        drain()
+        XCTAssertEqual(session.multiDisplayManager.availableDisplays.count, 2)
+        session.multiDisplayManager.selectDisplay(id: 1)
+        drain()
+        XCTAssertEqual(session.activeCropRect, CGRect(x: 2, y: 0, width: 2, height: 2))
+        XCTAssertEqual(session.trackpadEngine.remoteWidth, 2)
+        session.zoomScale = 2
+        session.isPanningViewport = true
+        session.viewOffset = CGSize(width: 10, height: 10)
+        session.client.onDisplayLayoutReceived?(.init(width: 4, height: 2, screens: []))
+        drain()
+        XCTAssertNil(session.activeCropRect)
+        XCTAssertEqual(session.trackpadEngine.remoteWidth, 4)
+        XCTAssertEqual(session.zoomScale, 1)
+        XCTAssertEqual(session.viewOffset, .zero)
+        XCTAssertFalse(session.isPanningViewport, "Returning to an unzoomed desktop must restore pointer control")
+        session.client.onDisplayLayoutReceived?(layout)
+        session.endSession()
+        drain()
+        XCTAssertEqual(session.multiDisplayManager.availableDisplays.count, 1, "An ended session must not restore stale server monitor choices")
+    }
+
+    @MainActor
     func testRepeatedFramesDoNotRepublishUnchangedCanvasAndDisplayState() throws {
         let session = SessionViewModel(device: RemoteDevice(name: "Frame state QA", host: "qa.invalid"), password: nil, isTemporary: true, deviceStore: makeStore())
         guard session.metalRenderer != nil else { throw XCTSkip("Requires a Metal device") }

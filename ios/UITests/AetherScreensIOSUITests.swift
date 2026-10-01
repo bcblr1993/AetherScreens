@@ -9,6 +9,54 @@ final class AetherScreensIOSUITests: XCTestCase {
     func testControlledViewportNavigation() throws { try verifyControlledViewportNavigation(language: "en") }
     func testChineseControlledViewportNavigation() throws { try verifyControlledViewportNavigation(language: "zh-Hans") }
 
+    func testControlledDisplaySelection() throws { try verifyControlledDisplaySelection(language: "en") }
+    func testChineseControlledDisplaySelection() throws { try verifyControlledDisplaySelection(language: "zh-Hans") }
+
+    private func verifyControlledDisplaySelection(language: String) throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
+        func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        app.buttons[label("Quick Connect", "快速连接")].tap()
+        let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+        host.tap(); host.typeText("127.0.0.1")
+        let port = app.textFields[label("Port", "端口")]
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("6000")
+        app.buttons[label("Connect", "连接")].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
+        app.buttons[label("Input Mode", "输入模式")].tap()
+        app.buttons[label("Touch", "触控")].tap()
+        let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
+        app.buttons[label("Session Options", "会话选项")].tap()
+        XCTAssertTrue(app.buttons[label("Display 1", "显示器 1")].waitForExistence(timeout: 3))
+        app.buttons[label("Display 2", "显示器 2")].tap()
+        try resetGestureFixture()
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.5)).tap()
+        let selected = try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 })
+        XCTAssertEqual(Double(try XCTUnwrap(selected["x"])), 528, accuracy: 5, "Visible crop and input must use the selected monitor's width and origin")
+        XCTAssertEqual(Double(try XCTUnwrap(selected["y"])), 180, accuracy: 5)
+        attachScreenshot(app, name: "Controlled Selected Right Display " + language)
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("All Displays", "全部显示器")].tap()
+        try resetGestureFixture()
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.5)).tap()
+        let full = try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 })
+        XCTAssertEqual(Double(try XCTUnwrap(full["x"])), 416, accuracy: 5)
+        attachScreenshot(app, name: "Controlled Full Desktop " + language)
+        // The framebuffer and its pixels stay unchanged: the monitor menu must
+        // refresh from the layout publication itself, rather than another frame.
+        _ = try gestureFixtureData(path: "three-displays")
+        app.buttons[label("Session Options", "会话选项")].tap()
+        XCTAssertTrue(app.buttons[label("Display 3", "显示器 3")].waitForExistence(timeout: 3))
+        app.buttons[label("Display 3", "显示器 3")].tap()
+        try resetGestureFixture()
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.5)).tap()
+        let changed = try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 })
+        XCTAssertEqual(Double(try XCTUnwrap(changed["x"])), 565, accuracy: 5)
+        attachScreenshot(app, name: "Controlled Live Layout Change " + language)
+        app.buttons[label("Disconnect", "断开连接")].tap()
+    }
+
     private func verifyControlledViewportNavigation(language: String) throws {
         guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
         func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }

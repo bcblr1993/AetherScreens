@@ -150,24 +150,23 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             }
         }
 
-        // Handle Multi-Display Selection
-        multiDisplayManager.onDisplaySelected = { [weak self] display in
-            Task { @MainActor in
-                guard let self = self else { return }
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    if let d = display, d.id > 0 {
-                        self.activeCropRect = d.bounds
-                        self.trackpadEngine.remoteWidth = d.bounds.width
-                        self.trackpadEngine.remoteHeight = d.bounds.height
-                    } else {
-                        self.activeCropRect = nil
-                        self.trackpadEngine.remoteWidth = CGFloat(self.client.framebuffer.width)
-                        self.trackpadEngine.remoteHeight = CGFloat(self.client.framebuffer.height)
-                        self.zoomScale = 1.0
-                        self.viewOffset = .zero
-                    }
-                    self.trackpadEngine.resetCursor()
-                }
+        // Selection and server layout callbacks share the session generation guard.
+        multiDisplayManager.onDisplaySelected = { [weak self] _ in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else { return }
+                self.applyDisplaySelection()
+            }
+        }
+        client.onDisplayLayoutReceived = { [weak self] layout in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else { return }
+                if let layout { self.multiDisplayManager.updateFromLayout(layout) }
+                else { self.multiDisplayManager.reset(width: self.client.framebuffer.width, height: self.client.framebuffer.height) }
+                self.applyDisplaySelection()
             }
         }
 
@@ -286,6 +285,23 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
     }
 
+    private func applyDisplaySelection() {
+        let display = multiDisplayManager.currentDisplay
+        let crop = display.flatMap { $0.id > 0 ? $0.bounds : nil }
+        let width = crop?.width ?? CGFloat(client.framebuffer.width)
+        let height = crop?.height ?? CGFloat(client.framebuffer.height)
+        guard crop != activeCropRect || width != trackpadEngine.remoteWidth || height != trackpadEngine.remoteHeight else { return }
+        trackpadEngine.releaseAllButtons()
+        inputGeneration = UUID()
+        activeCropRect = crop
+        trackpadEngine.remoteWidth = width
+        trackpadEngine.remoteHeight = height
+        zoomScale = 1
+        viewOffset = .zero
+        isPanningViewport = false
+        if client.state == .connected { trackpadEngine.resetCursor() }
+    }
+
     /// Submit entered password to active RFB handshake
     public func submitPassword(_ pwd: String, rememberInKeychain: Bool, accountUsername: String? = nil) {
         if let accountContinuation = macAccountContinuation {
@@ -340,6 +356,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         callbackGeneration.advance()
         hasReceivedFirstFrame = false
         downloadProgress = nil
+        lastFramebufferSize = .zero
+        multiDisplayManager.reset(width: client.framebuffer.width, height: client.framebuffer.height)
         client.connect()
     }
 

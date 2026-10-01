@@ -14,7 +14,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | International keyboards / dictation | UTF-8 text drawer and Chinese keysyms passed; NSTextInputClient composition tests | Real IME; supplementary-plane characters; dictation workflow |
 | Clipboard transfers | Local clipboard insertion passed; extended protocol parser tests | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
 | Curtain privacy mode | System lock shortcut and password restoration passed | Actual remote display blackout while remaining unlocked; lock is not parity |
-| Display selection | Framebuffer-derived regions and crop selection | Actual server monitor enumeration and per-display acceptance |
+| Display selection | ExtendedDesktopSize server layout decoding, stable screen IDs, selected-monitor crop and bounded input coordinates; no monitor-count inference from framebuffer aspect ratio. Actual TCP tests cover layout-only updates, rejected resize payloads and subsequent raw frames, plus framebuffer resizing. | Apple server layout negotiation and physical per-display acceptance; target Mac currently has one online LG HDR 4K display |
 | Adaptive image quality | Raw, Zlib and CopyRect decoding; Metal rendering | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
 | Observe / control modes | Explicit Observe Only mode; real Mac frames continue while text, clicks, wheel and clipboard writes are blocked; held modifiers released and control restored. iOS retains local zoom/pan while Observe suppresses received pointer input; English/Chinese controlled viewport flows pass. Pan separately blocks pointer input, cancels queued wheels and preserves keys; actual TCP tests cover nested Observe transitions and responsive scrolling afterward | Physical iPhone toggle and input suppression acceptance |
 | Reconnect / session recovery | In-session reconnect clears input and restores remote typing. English/Chinese simulator socket-interruption tests pass with a new TCP connection, fresh frame, retained zoom/touch mode and received fresh modifier/key events. Core tests reject ended-session callbacks and old VNC/ARD password replies | Physical iPhone and Apple server recovery; real phone network interruption |
@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 121 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Current Pan pointer-gate integration CI and physical acceptance; complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 125 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Current server-display-layout integration CI and physical acceptance; complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -105,3 +105,55 @@ Mission Control/App Expose/Space shortcuts, two-finger fullscreen toggling, edge
 cursor positioning and hot-corner gestures. The existing click/drag/pinch tests
 do not prove all those workflows. They remain in the full gesture acceptance
 scope; local viewport navigation does not substitute for them.
+
+## Server-reported display layouts
+
+The client previously advertised encoding -308 without consuming its payload and
+inferred two displays from wide framebuffer dimensions. It now decodes
+[ExtendedDesktopSize](https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst),
+validates unique IDs and framebuffer bounds, preserves unknown flags, and consumes
+failed resize responses without applying their undefined geometry. Layout-only
+updates retain existing pixels; changed framebuffer dimensions invalidate them.
+Server ID zero remains distinct from the full-desktop UI choice. Monitor removal
+falls back to the full desktop, and selected-monitor coordinates clamp to its
+actual last pixel. Session-generation guards reject stale layout/selection work.
+Unchanged geometry does not republish canvas state or reset local zoom. Metal
+samples only the selected monitor's normalized texture region; the CPU fallback
+crops the same bounds, and canvas sizing/input share that region. The desktop view
+observes monitor-list publications directly so same-size, layout-only changes
+refresh its menu even when no new pixel frame arrives. Changing region
+resets local navigation and cancels active input recognizers. Layout-only replies
+do not mark the initial desktop as visible or suppress its download progress.
+
+`swift test` passed 125 tests with 5 external-environment skips and no failures
+(`/tmp/aetherscreens-monitor-accepted-core.log`). Mac Release and signed iOS
+Release builds pass. The earlier unsigned invocation failed because no development
+team was specified. An incremental signed build later failed strict resource
+verification after the localization files changed, so it was rejected. A fresh
+build in `/tmp/aetherscreens-display-accepted-signed-derived` uses the existing
+development team and passes deep, strict signature verification
+(`/tmp/aetherscreens-monitor-final-signature.log`). The signed candidate has not been installed
+on either phone during the hand-feel trial. A read-only SSH inventory of the
+requested target reports one online LG HDR 4K display, logical 1920x1080 at 60Hz
+and 4K physical pixels. This does not verify Apple RFB layout negotiation or
+physical multi-display selection, and these remain open acceptance gates.
+
+A concurrent verification run recorded one CopyRect timing-budget failure
+(15.784 ms/frame against the unchanged 15 ms threshold; the preceding run was
+1.603 ms/frame). The host's subsequently observed load average was over 300 while
+other projects were compiling. This is an environment-load hypothesis, not proof
+of the earlier failure's cause or physical-phone latency. The failed log
+`/tmp/aetherscreens-monitor-final-core.log` is retained; the final acceptance
+rerun follows completion of this task's Release builds. No threshold was relaxed.
+
+The final controlled simulator run passed all eight requested cases with zero
+skips, failures or runtime warnings (`build/ios-monitor-final-controlled-qa/`).
+Both English and Chinese display-selection flows verify a right-monitor crop,
+full-desktop restoration, then a live two-to-three-monitor layout change without
+changing the framebuffer size or sending pixel data. The new third monitor
+becomes selectable and receives the expected translated touch coordinate.
+Selected-monitor/full-desktop screenshots were exported and inspected. The
+existing native-input, viewport and reconnect flows also passed. These synthetic
+loopback desktops do not replace Apple-server or physical multi-monitor proof.
+The final complete core rerun passed 125 tests, with five environment skips and
+no failures; CopyRect measured 2.172 ms/frame without changing its threshold.

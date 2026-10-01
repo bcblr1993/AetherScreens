@@ -14,6 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 EVENTS = []
 LOCK = threading.Lock()
 CONNECTIONS = {}
+SEND_LOCKS = {}
+DISPLAY_CONNECTIONS = set()
 NEXT_CONNECTION_ID = 0
 WIDTH, HEIGHT = 640, 360
 
@@ -24,6 +26,11 @@ def record(event):
 
 
 class Desktop(socketserver.BaseRequestHandler):
+    reports_layout = False
+    def send(self, data):
+        with self.send_lock:
+            self.request.sendall(data)
+
     def record(self, event):
         record(dict(event, connection=self.connection_id))
 
@@ -44,7 +51,13 @@ class Desktop(socketserver.BaseRequestHandler):
                               for y in range(height) for x in range(width))
         else:
             pixels = bytes((120, 100, 45, 255))
-        self.request.sendall(header + pixels)
+        if full and self.reports_layout:
+            layout_header = struct.pack('>BBHHHHHi', 0, 0, 1, 0, 0, WIDTH, HEIGHT, -308)
+            screens = struct.pack('>IHHHHI', 10, 0, 0, WIDTH // 2, HEIGHT, 0)
+            screens += struct.pack('>IHHHHI', 20, WIDTH // 2, 0, WIDTH // 2, HEIGHT, 0)
+            self.send(layout_header + bytes((2, 0, 0, 0)) + screens)
+            self.record({'type': 'layout', 'screens': 2})
+        self.send(header + pixels)
         self.record({'type': 'frame', 'full': full})
 
     def handle(self):
@@ -53,18 +66,22 @@ class Desktop(socketserver.BaseRequestHandler):
             NEXT_CONNECTION_ID += 1
             self.connection_id = NEXT_CONNECTION_ID
             CONNECTIONS[self.connection_id] = self.request
+            self.send_lock = threading.Lock()
+            SEND_LOCKS[self.connection_id] = self.send_lock
+            if self.reports_layout:
+                DISPLAY_CONNECTIONS.add(self.connection_id)
         try:
-            self.request.sendall(b'RFB 003.008\n')
+            self.send(b'RFB 003.008\n')
             if self.read(12) != b'RFB 003.008\n':
                 return
-            self.request.sendall(bytes((1, 1)))
+            self.send(bytes((1, 1)))
             if self.read(1) != bytes((1,)):
                 return
-            self.request.sendall(bytes(4))
+            self.send(bytes(4))
             self.read(1)
             pixel_format = struct.pack('>BBBBHHHBBBxxx', 32, 24, 0, 1, 255, 255, 255, 16, 8, 0)
             name = b'Gesture QA'
-            self.request.sendall(struct.pack('>HH', WIDTH, HEIGHT) + pixel_format + struct.pack('>I', len(name)) + name)
+            self.send(struct.pack('>HH', WIDTH, HEIGHT) + pixel_format + struct.pack('>I', len(name)) + name)
             self.record({'type': 'ready'})
             pending_update = False
             while True:
@@ -102,7 +119,13 @@ class Desktop(socketserver.BaseRequestHandler):
         finally:
             with LOCK:
                 CONNECTIONS.pop(self.connection_id, None)
+                SEND_LOCKS.pop(self.connection_id, None)
+                DISPLAY_CONNECTIONS.discard(self.connection_id)
             self.record({'type': 'disconnected'})
+
+
+class DualDisplayDesktop(Desktop):
+    reports_layout = True
 
 
 class Inspection(BaseHTTPRequestHandler):
@@ -110,9 +133,23 @@ class Inspection(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path not in ('/events', '/reset', '/drop'):
+        if self.path not in ('/events', '/reset', '/drop', '/three-displays'):
             self.send_error(404)
             return
+        if self.path == '/three-displays':
+            header = struct.pack('>BBHHHHHi', 0, 0, 1, 0, 0, WIDTH, HEIGHT, -308)
+            screens = b''.join(struct.pack('>IHHHHI', *screen, 0) for screen in
+                               [(10, 0, 0, 213, HEIGHT), (20, 213, 0, 214, HEIGHT), (30, 427, 0, 213, HEIGHT)])
+            with LOCK:
+                targets = [(connection_id, CONNECTIONS[connection_id], SEND_LOCKS[connection_id])
+                           for connection_id in DISPLAY_CONNECTIONS]
+            for connection_id, target, send_lock in targets:
+                try:
+                    with send_lock:
+                        target.sendall(header + bytes((3, 0, 0, 0)) + screens)
+                    record({'type': 'layout', 'connection': connection_id, 'screens': 3})
+                except OSError:
+                    pass
         if self.path == '/drop':
             with LOCK:
                 targets = list(CONNECTIONS.values())
@@ -141,9 +178,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--rfb-port', type=int, default=5999)
     parser.add_argument('--http-port', type=int, default=8768)
+    parser.add_argument('--display-rfb-port', type=int, default=6000)
     args = parser.parse_args()
-    with RFBServer(('127.0.0.1', args.rfb_port), Desktop) as desktop:
+    with RFBServer(('127.0.0.1', args.rfb_port), Desktop) as desktop, RFBServer(('127.0.0.1', args.display_rfb_port), DualDisplayDesktop) as displays:
         threading.Thread(target=desktop.serve_forever, daemon=True).start()
+        threading.Thread(target=displays.serve_forever, daemon=True).start()
         with ThreadingHTTPServer(('127.0.0.1', args.http_port), Inspection) as inspection:
             print('Loopback gesture fixture ready', flush=True)
             inspection.serve_forever()

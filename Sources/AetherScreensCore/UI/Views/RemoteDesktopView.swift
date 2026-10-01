@@ -5,6 +5,7 @@ import CoreGraphics
 public struct RemoteDesktopView: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: SessionViewModel
+    @ObservedObject private var displayManager: MultiDisplayManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
 
@@ -15,6 +16,7 @@ public struct RemoteDesktopView: View {
 
     public init(viewModel: SessionViewModel, managesSessionLifecycle: Bool = true, onDisconnect: (() -> Void)? = nil) {
         self.viewModel = viewModel
+        self.displayManager = viewModel.multiDisplayManager
         self.managesSessionLifecycle = managesSessionLifecycle
         self.onDisconnect = onDisconnect
     }
@@ -94,8 +96,8 @@ public struct RemoteDesktopView: View {
 
     @ViewBuilder
     private func remoteCanvas(geometry: GeometryProxy) -> some View {
-        let imageWidth = CGFloat(viewModel.client.framebuffer.width)
-        let imageHeight = CGFloat(viewModel.client.framebuffer.height)
+        let imageWidth = viewModel.activeCropRect?.width ?? CGFloat(viewModel.client.framebuffer.width)
+        let imageHeight = viewModel.activeCropRect?.height ?? CGFloat(viewModel.client.framebuffer.height)
         let safeWidth = max(imageWidth, 1)
         let safeHeight = max(imageHeight, 1)
         let fitScale = min(geometry.size.width / safeWidth, geometry.size.height / safeHeight)
@@ -111,11 +113,11 @@ public struct RemoteDesktopView: View {
         ZStack(alignment: .topLeading) {
             // High Performance Metal View
             if let renderer = viewModel.metalRenderer {
-                MetalScreenView(renderer: renderer)
+                MetalScreenView(renderer: renderer, sourceRect: viewModel.activeCropRect)
                     .frame(width: canvasWidth, height: canvasHeight)
                     .position(x: originX + canvasWidth / 2, y: originY + canvasHeight / 2)
             } else if let cgImage = viewModel.currentImage {
-                Image(decorative: cgImage, scale: 1.0)
+                Image(decorative: viewModel.activeCropRect.flatMap { cgImage.cropping(to: $0) } ?? cgImage, scale: 1.0)
                     .resizable()
                     .frame(width: canvasWidth, height: canvasHeight)
                     .position(x: originX + canvasWidth / 2, y: originY + canvasHeight / 2)
@@ -410,13 +412,13 @@ public struct RemoteDesktopView: View {
                     .disabled(viewModel.zoomScale <= 1)
                     #endif
                 Divider()
-                ForEach(viewModel.multiDisplayManager.availableDisplays) { display in
+                ForEach(displayManager.availableDisplays) { display in
                     Button {
-                        viewModel.multiDisplayManager.selectDisplay(id: display.id)
+                        displayManager.selectDisplay(id: display.id)
                     } label: {
                         HStack {
                             Text(AppLocalization.message(display.name))
-                            if viewModel.multiDisplayManager.selectedDisplayId == display.id {
+                            if displayManager.selectedDisplayId == display.id {
                                 Image(systemName: "checkmark")
                             }
                         }

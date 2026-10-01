@@ -249,3 +249,5 @@
 "Several computers match this link. Use a link copied from the computer's menu." = "多台电脑与此链接匹配，请使用电脑菜单中复制的链接。";
 
 "Pan · %@" = "移动视图 · %@";
+
+"Invalid remote display layout" = "远端显示器布局无效";

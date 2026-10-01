@@ -60,7 +60,9 @@ private final class LargeFrameServer: @unchecked Sendable {
                                     initial.append(RFBPixelFormat.standardBGRA32.serializedData)
                                     initial.append(contentsOf: [0, 0, 0, 2, 81, 65])
                                     connection.send(content: initial, completion: .contentProcessed { _ in
-                                        var frames = Data()
+                                        // Announce the initial display layout before any visible pixels.
+                                        var frames = Data([0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 4, 0, 255, 255, 254, 204,
+                                                           1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 0])
                                         for _ in 0..<2 {
                                             frames.append(contentsOf: [0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 4, 0, 0, 0, 0, 0])
                                             frames.append(Data(repeating: 42, count: 1024 * 1024 * 4))

@@ -95,6 +95,29 @@ public enum RFBDecoder {
         return (x, y, width, height, RFBConstants.EncodingType(rawValue: encRaw))
     }
 
+    /// Decode a validated ExtendedDesktopSize payload (count, padding, then 16-byte screens).
+    public static func parseDisplayLayout(_ data: Data, width: UInt16, height: UInt16) -> RFBDisplayLayout? {
+        let bytes = Array(data)
+        guard bytes.count >= 4, width > 0, height > 0,
+              bytes.count == 4 + Int(bytes[0]) * 16 else { return nil }
+        func u16(_ offset: Int) -> UInt16 { UInt16(bytes[offset]) << 8 | UInt16(bytes[offset + 1]) }
+        func u32(_ offset: Int) -> UInt32 {
+            bytes[offset..<(offset + 4)].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        }
+        var ids = Set<UInt32>()
+        var screens: [RFBDisplayLayout.Screen] = []
+        for index in 0..<Int(bytes[0]) {
+            let offset = 4 + index * 16
+            let id = u32(offset)
+            let x = u16(offset + 4), y = u16(offset + 6)
+            let w = u16(offset + 8), h = u16(offset + 10)
+            guard ids.insert(id).inserted, w > 0, h > 0,
+                  Int(x) + Int(w) <= Int(width), Int(y) + Int(h) <= Int(height) else { return nil }
+            screens.append(.init(id: id, x: x, y: y, width: w, height: h, flags: u32(offset + 12)))
+        }
+        return RFBDisplayLayout(width: width, height: height, screens: screens)
+    }
+
     /// Parses ServerCutText (clipboard text from remote Mac).
     public static func parseServerCutText(_ data: Data) -> String? {
         // [type: 1] [pad: 3] [length: 4] [text: length]

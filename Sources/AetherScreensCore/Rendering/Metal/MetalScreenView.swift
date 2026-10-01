@@ -7,9 +7,11 @@ import UIKit
 /// SwiftUI wrapper for MTKView on iOS / iPadOS
 public struct MetalScreenView: UIViewRepresentable {
     public let renderer: MetalScreenRenderer
+    public let sourceRect: CGRect?
 
-    public init(renderer: MetalScreenRenderer) {
+    public init(renderer: MetalScreenRenderer, sourceRect: CGRect? = nil) {
         self.renderer = renderer
+        self.sourceRect = sourceRect
     }
 
     public func makeUIView(context: Context) -> MTKView {
@@ -22,12 +24,13 @@ public struct MetalScreenView: UIViewRepresentable {
         // The display can accept 120 Hz updates, but remains idle between remote frames.
         mtkView.preferredFramesPerSecond = 120
         mtkView.contentMode = .scaleAspectFit
+        renderer.setSourceRect(sourceRect)
         renderer.attach(to: mtkView)
         return mtkView
     }
 
     public func updateUIView(_ uiView: MTKView, context: Context) {
-        // Redraw triggered automatically via delegate draw(in:)
+        renderer.setSourceRect(sourceRect)
     }
 }
 
@@ -37,9 +40,11 @@ import AppKit
 /// SwiftUI wrapper for MTKView on macOS (Apple Silicon Mac)
 public struct MetalScreenView: NSViewRepresentable {
     public let renderer: MetalScreenRenderer
+    public let sourceRect: CGRect?
 
-    public init(renderer: MetalScreenRenderer) {
+    public init(renderer: MetalScreenRenderer, sourceRect: CGRect? = nil) {
         self.renderer = renderer
+        self.sourceRect = sourceRect
     }
 
     public func makeNSView(context: Context) -> MTKView {
@@ -51,12 +56,13 @@ public struct MetalScreenView: NSViewRepresentable {
         mtkView.enableSetNeedsDisplay = true
         // Support ProMotion (120Hz) on MacBook Pro Liquid Retina XDR
         mtkView.preferredFramesPerSecond = 120
+        renderer.setSourceRect(sourceRect)
         renderer.attach(to: mtkView)
         return mtkView
     }
 
     public func updateNSView(_ nsView: MTKView, context: Context) {
-        // Redraw triggered automatically via delegate draw(in:)
+        renderer.setSourceRect(sourceRect)
     }
 }
 #endif

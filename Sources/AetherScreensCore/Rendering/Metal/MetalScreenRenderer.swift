@@ -19,6 +19,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     private var needsTextureRecreation: Bool = true
     private var isDirty: Bool = true
     private var displayScheduled = false
+    private var sourceRect: CGRect?
 
     private static let shaderSource = """
     #include <metal_stdlib>
@@ -29,7 +30,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         float2 texCoord;
     };
 
-    vertex VertexOut screenVertex(uint vid [[vertex_id]]) {
+    vertex VertexOut screenVertex(uint vid [[vertex_id]], constant float4 &crop [[buffer(0)]]) {
         // Fullscreen quad: 4 vertices (triangle strip)
         float2 positions[4] = {
             float2(-1.0, -1.0),
@@ -46,7 +47,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         };
         VertexOut out;
         out.position = float4(positions[vid], 0.0, 1.0);
-        out.texCoord = texCoords[vid];
+        out.texCoord = crop.xy + texCoords[vid] * crop.zw;
         return out;
     }
 
@@ -110,6 +111,23 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         }
     }
 
+    /// Change the visible texture region without reallocating the full framebuffer or uploading pixels.
+    public func setSourceRect(_ rect: CGRect?) {
+        lock.lock()
+        let changed = sourceRect != rect
+        sourceRect = rect
+        lock.unlock()
+        if changed, let view = attachedView { requestDisplay(view) }
+    }
+
+    static func textureRegion(rect: CGRect?, width: Int, height: Int) -> SIMD4<Float> {
+        let full = CGRect(x: 0, y: 0, width: width, height: height)
+        let region = rect.map { $0.intersection(full) } ?? full
+        guard width > 0, height > 0, !region.isEmpty, !region.isNull else { return SIMD4(0, 0, 1, 1) }
+        return SIMD4(Float(region.minX / full.width), Float(region.minY / full.height),
+                     Float(region.width / full.width), Float(region.height / full.height))
+    }
+
     public func attach(to view: MTKView) {
         attachedView = view
         requestDisplay(view)
@@ -143,6 +161,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
 
         lock.lock()
         let dirty = isDirty
+        let crop = sourceRect
         isDirty = false
         lock.unlock()
 
@@ -158,6 +177,8 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
 
         renderEncoder.setRenderPipelineState(pState)
         renderEncoder.setFragmentTexture(tex, index: 0)
+        var region = Self.textureRegion(rect: crop, width: tex.width, height: tex.height)
+        renderEncoder.setVertexBytes(&region, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         renderEncoder.endEncoding()
 
