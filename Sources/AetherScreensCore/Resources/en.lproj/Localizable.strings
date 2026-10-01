@@ -257,3 +257,6 @@
 "App Windows (⌃↓)" = "App Windows (⌃↓)";
 "Previous Space (⌃←)" = "Previous Space (⌃←)";
 "Next Space (⌃→)" = "Next Space (⌃→)";
+
+"TCP RTT" = "TCP RTT";
+"Network round-trip time; excludes remote processing and display delay." = "Network round-trip time; excludes remote processing and display delay.";

@@ -213,9 +213,16 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         encoder.setVertexBytes(&region, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
+        // Simulator Metal omits presentation callbacks; leave FPS unavailable there.
+        #if !targetEnvironment(simulator)
+        let presentationGeneration = metrics.measurementGeneration
+        let sessionMetrics = metrics
+        drawable.addPresentedHandler { displayed in
+            sessionMetrics.recordPresentedFrame(at: displayed.presentedTime, generation: presentationGeneration)
+        }
+        #endif
         commandBuffer.present(drawable)
         commandBuffer.commit()
-        metrics.recordFrame()
     }
 
     /// Staging buffers live until command completion; the private texture is written only by ordered GPU commands.

@@ -191,7 +191,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             Task { @MainActor [weak self] in
                 guard let self, self.callbackGeneration.matches(generation) else { return }
                 self.sessionState = state
+                if state == .disconnected { self.metrics.reset() }
                 if case .failed = state {
+                    self.metrics.reset()
                     self.releaseAllModifiers()
                     self.trackpadEngine.releaseAllButtons()
                 }
@@ -231,6 +233,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
         let sessionMetrics = metrics
         client.onBytesReceived = { count in sessionMetrics.recordBytesReceived(count) }
+        client.onTransportRTT = { [weak self] milliseconds in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation),
+                      self.client.state == .connected else { return }
+                self.metrics.recordLatency(ms: milliseconds)
+            }
+        }
 
         // Handle incoming frame download progress
         client.onDownloadProgress = { [weak self] current, total in
@@ -370,6 +381,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Connect to remote Mac
     public func startSession() {
         callbackGeneration.advance()
+        metrics.reset()
         hasReceivedFirstFrame = false
         downloadProgress = nil
         lastFramebufferSize = .zero
@@ -390,6 +402,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Disconnect from remote Mac
     public func endSession() {
         callbackGeneration.advance()
+        metrics.reset()
         releaseAllModifiers()
         trackpadEngine.releaseAllButtons()
         let framebuffer = client.framebuffer

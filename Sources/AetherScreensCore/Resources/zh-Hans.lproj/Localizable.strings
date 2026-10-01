@@ -257,3 +257,6 @@
 "App Windows (⌃↓)" = "应用窗口（⌃↓）";
 "Previous Space (⌃←)" = "上一个空间（⌃←）";
 "Next Space (⌃→)" = "下一个空间（⌃→）";
+
+"TCP RTT" = "TCP 往返";
+"Network round-trip time; excludes remote processing and display delay." = "网络往返时间，不包含远端处理和显示延迟。";

@@ -35,9 +35,15 @@ public final class RFBClient: @unchecked Sendable {
     public var onRequestPassword: (@Sendable (@escaping @Sendable (String?) -> Void) -> Void)?
     public var onRequestMacAccount: (@Sendable (@escaping @Sendable (String?, String?) -> Void) -> Void)?
     public var onBytesReceived: (@Sendable (Int) -> Void)?
+    /// TCP transport round-trip estimate; excludes server processing and display.
+    public var onTransportRTT: (@Sendable (Double) -> Void)?
     public var onDownloadProgress: (@Sendable (Double, Double) -> Void)?
 
     private var connection: NWConnection?
+    // Accessed only on the connection queue, including teardown.
+    private weak var reportConnection: NWConnection?
+    private var pendingTransferReport: NWConnection.PendingDataTransferReport?
+    private var lastTransferReportTime: TimeInterval = 0
     private let queue = DispatchQueue(label: "com.aethernative.aetherscreens.rfbclient", qos: .userInteractive)
     private var readBuffer = Data()
     private var hasCompletedFramebufferUpdate = false
@@ -102,6 +108,9 @@ public final class RFBClient: @unchecked Sendable {
             switch connState {
             case .ready:
                 AppLogger.shared.info("TCP socket established with \(self.host):\(self.port)", category: "Network")
+                self.reportConnection = conn
+                self.pendingTransferReport = conn.startDataTransferReport()
+                self.lastTransferReportTime = ProcessInfo.processInfo.systemUptime
                 self.startHandshake()
             case .waiting(let error):
                 AppLogger.shared.info("Waiting for network: \(error.localizedDescription)", category: "Network")
@@ -140,6 +149,7 @@ public final class RFBClient: @unchecked Sendable {
         inputGeneration = UUID()
         inputLock.unlock()
         AppLogger.shared.info("Disconnecting session with \(host)", category: "Network")
+        stopTransportReports()
         connection?.cancel()
         connection = nil
         readBuffer.removeAll()
@@ -848,6 +858,7 @@ public final class RFBClient: @unchecked Sendable {
                 self.handleFailure("Connection failed: \(error.localizedDescription)")
                 return
             }
+            self.collectTransportReportIfDue(connection: connection)
             completion?()
         }))
     }
@@ -906,9 +917,35 @@ public final class RFBClient: @unchecked Sendable {
         }
     }
 
+    private func collectTransportReportIfDue(connection: NWConnection) {
+        guard state == .connected, self.connection === connection,
+              reportConnection === connection, let report = pendingTransferReport else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastTransferReportTime >= 1 else { return }
+        lastTransferReportTime = now
+        pendingTransferReport = connection.startDataTransferReport()
+        report.collect(queue: queue) { [weak self, weak connection] sample in
+            guard let self, let connection, self.connection === connection,
+                  self.state == .connected else { return }
+            let seconds = sample.aggregatePathReport.transportSmoothedRTT
+            guard seconds.isFinite, seconds > 0 else { return }
+            self.onTransportRTT?(seconds * 1000)
+        }
+    }
+
+    private func stopTransportReports() {
+        let previous = connection
+        queue.async { [weak self] in
+            guard let self, self.reportConnection === previous else { return }
+            self.pendingTransferReport = nil
+            self.reportConnection = nil
+        }
+    }
+
     private func handleFailure(_ message: String) {
         AppLogger.shared.error("Session failed: \(message)", category: "RFB")
         state = .failed(message)
+        stopTransportReports()
         connection?.cancel()
         connection = nil
     }

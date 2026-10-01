@@ -4,6 +4,25 @@ import zlib
 @testable import AetherScreensCore
 
 final class PointerTransportTests: XCTestCase {
+    func testActualTCPTransportReportSuppliesPositiveRTT() throws {
+        let (server, client) = try connectedPair()
+        defer { client.disconnect(); server.stop() }
+        let measured = expectation(description: "Kernel TCP transport RTT")
+        client.onTransportRTT = { milliseconds in
+            XCTAssertTrue(milliseconds.isFinite)
+            XCTAssertGreaterThan(milliseconds, 0)
+            measured.fulfill()
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 1.1) {
+            client.sendPointerEvent(buttonMask: [], x: 10, y: 20)
+        }
+        wait(for: [measured], timeout: 4)
+        client.onTransportRTT = nil
+        // A local transport report can finish before the peer consumes the packet.
+        waitUntil { server.pointers.contains { $0.x == 10 && $0.y == 20 } }
+        XCTAssertTrue(server.pointers.contains { $0.x == 10 && $0.y == 20 })
+    }
+
     func testWheelDoesNotReleaseHeldMouseButton() throws {
         let (server, client) = try connectedPair()
         defer { client.disconnect(); server.stop() }

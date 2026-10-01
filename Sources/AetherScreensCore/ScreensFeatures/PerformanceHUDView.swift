@@ -36,8 +36,13 @@ public struct PerformanceHUDView: View {
                 Divider()
                     .frame(height: 12)
 
-                // Latency Counter
+                // TCP RTT excludes remote processing and display latency.
                 HStack(spacing: 2) {
+                    if isExpanded {
+                        Text(AppLocalization.string("TCP RTT"))
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.secondary)
+                    }
                     Text(metrics.latencyMs > 0 ? "\(Int(metrics.latencyMs))" : "—")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                     Text("ms")
@@ -78,6 +83,7 @@ public struct PerformanceHUDView: View {
             .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
         }
         .buttonStyle(.plain)
+        .help(AppLocalization.string("Network round-trip time; excludes remote processing and display delay."))
     }
 
     private var bandwidthText: String {

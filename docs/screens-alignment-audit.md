@@ -15,7 +15,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Clipboard transfers | Local clipboard insertion passed; traditional Latin-1 and negotiated compressed UTF-8 double-direction loopback TCP text, malformed message rejection and ended/reconnected session guards tested | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
 | Curtain privacy mode | System lock shortcut and password restoration passed | Actual remote display blackout while remaining unlocked; lock is not parity |
 | Display selection | ExtendedDesktopSize server layout decoding, stable screen IDs, selected-monitor crop and bounded input coordinates; no monitor-count inference from framebuffer aspect ratio. Actual TCP tests cover layout-only updates, rejected resize payloads and subsequent raw frames, plus framebuffer resizing. | Apple server layout negotiation and physical per-display acceptance; target Mac currently has one online LG HDR 4K display |
-| Adaptive image quality | Raw, Zlib and CopyRect decoding; Metal rendering | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
+| Adaptive image quality | Raw, Zlib and CopyRect decoding; Metal rendering; native presented-frame FPS and measured TCP RTT diagnostics | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
 | Observe / control modes | Explicit Observe Only mode; real Mac frames continue while text, clicks, wheel and clipboard writes are blocked; held modifiers released and control restored. iOS retains local zoom/pan while Observe suppresses received pointer input; English/Chinese controlled viewport flows pass. Pan separately blocks pointer input, cancels queued wheels and preserves keys; actual TCP tests cover nested Observe transitions and responsive scrolling afterward | Physical iPhone toggle and input suppression acceptance |
 | Reconnect / session recovery | In-session reconnect clears input and restores remote typing. English/Chinese simulator socket-interruption tests pass with a new TCP connection, fresh frame, retained zoom/touch mode and received fresh modifier/key events. Core tests reject ended-session callbacks and old VNC/ARD password replies | Physical iPhone and Apple server recovery; real phone network interruption |
 | Quick connect / session selection | Temporary account/VNC requests and optional saving; installed Mac account connection and received typing passed; iPhone simulator validation, save toggle and error/disconnect flow passed | Physical iPhone quick connection; explicit active/background session choice |
@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 141 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 144 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -442,3 +442,54 @@ through `--listen-host` on each fixture and `--fixture-host` on each runner.
 Use `--device-id`, `--development-team`, `--rfb-port`, `--display-rfb-port` and
 `--http-port` explicitly. These are test fixtures containing no real desktop
 content or credentials; stop each owned process when its run ends.
+
+
+## Performance measurement correction (2026-10-01)
+
+The renderer now counts successful drawable presentation callbacks, rather than
+command-buffer submissions. Zero/invalid presentation times and callbacks from
+an ended session are rejected. Metal's simulator SDK does not expose these
+callbacks, so the simulator does not manufacture a presentation FPS value.
+See [Apple drawable presentation time](https://developer.apple.com/documentation/metal/mtldrawable/presentedtime).
+FPS describes presented updates during a sample interval; a static desktop or
+this event-driven fixture is not a throughput benchmark.
+
+The existing connection's transfer reports supply TCP RTT, collected at most
+once per second while sending existing traffic. No probe traffic or idle timer
+is added. The expanded EN/ZH badge names this value TCP RTT / TCP 往返 and its
+help text excludes remote processing/display latency. It cannot measure
+finger-to-screen latency or establish Screens-equivalent fluidity.
+See [Apple transport RTT](https://developer.apple.com/documentation/network/nwconnection/datatransferreport/pathreport/transportsmoothedrtt).
+Session start/end/failure clears metrics and rejects queued old-session
+publications. The core suite passed 144 tests with five environment skips and
+no failures (`/tmp/aetherscreens-presentation-rtt-core-final.log`). An actual
+loopback TCP test obtained a positive kernel RTT and separately awaited the
+peer's pointer receipt. An initial test incorrectly assumed the report callback
+implied peer receipt; its failure log is retained and the wait was corrected.
+Mac Release and signed iOS device Release builds passed, including strict
+signature verification. The initial simulator build exposed the unavailable
+Metal API and was corrected with an explicit simulator conditional.
+
+An isolated native Mac QA bundle connected to a separate NoAuth loopback
+fixture on 7999/8000/8968. Its visible Chinese badge reported positive
+presentation FPS and TCP RTT, and the English badge reported TCP RTT and
+throughput. Screenshots and accessibility evidence are saved as
+`/tmp/aetherscreens-presentation-rtt-native-{zh,en}.png` and
+`/tmp/aetherscreens-presentation-rtt-native-{zh,en}-ax.txt`.
+No user account credentials, installed product, or saved computer library were
+changed. This is native presentation/label evidence, not iPhone acceptance or
+an Apple Screen Sharing speed comparison. Physical fluidity and the original
+full functional acceptance remain open; no public release is authorized by
+these measurement checks alone.
+
+The corrected fresh simulator build then executed all ten requested English/
+Chinese controlled cases successfully, with zero skips, failures and runtime
+warnings (`build/ios-presentation-rtt-fixed-controlled-qa`). Both fullscreen,
+display-selection, viewport-navigation, recovery and received-native-gesture
+lanes passed. The failed initial build is retained separately at
+`build/ios-presentation-rtt-controlled-qa`.
+A current read-only check reached the target Mac over SSH, but CoreDevice did
+not offer an available connected physical-iPhone testing tunnel. The user's
+manual iPhone 12 Pro connection/basic-operation result stands; its reported
+lack of Screens-level smoothness remains unresolved. Do not infer two-phone
+acceptance from the successful simulator lanes.
