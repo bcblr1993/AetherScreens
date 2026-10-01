@@ -678,6 +678,7 @@ initial VM coverage, not full Screens parity or release approval.
 
 The initial VM `build-for-testing` completed successfully. Actual
 `test-without-building` launched the runner, then showed the system
-“XCTest / Enable UI Automation” authentication dialog. Human authentication is
-pending; no Mac VM functional case is counted as passed yet. The existing VM
+“XCTest / Enable UI Automation” authentication dialog. The runner subsequently exited 65 after
+`Timed out while enabling automation mode`; no functional test ran. Human
+authentication is pending; no Mac VM functional case is counted as passed yet. The existing VM
 and other projects were not reset. Passwords are neither scripted nor recorded.
