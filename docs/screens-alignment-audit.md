@@ -157,3 +157,50 @@ existing native-input, viewport and reconnect flows also passed. These synthetic
 loopback desktops do not replace Apple-server or physical multi-monitor proof.
 The final complete core rerun passed 125 tests, with five environment skips and
 no failures; CopyRect measured 2.172 ms/frame without changing its threshold.
+
+## Incremental GPU uploads and queued-frame correctness
+
+The renderer previously uploaded the complete framebuffer on every dirty draw.
+A GPU readback regression reproduced five expected failures before the fix
+(`/tmp/aetherscreens-incremental-upload-before.log`): unnecessary full uploads
+for a one-pixel update and unchanged redraws, and missing initialization after
+a resize when pixel uploading was disabled.
+
+Framebuffer changes now use a bounded revision history shared by independent
+readers. Overlapping regions merge; excessive damage or an expired history
+falls back to a complete upload. CopyRect uses overlap-safe row ordering and
+memmove instead of allocating a temporary array for every row. Invalid raw
+updates leave pixels and revisions unchanged, and clipping retains the original
+source row stride.
+
+Pixels are copied into retained shared staging buffers, then blitted to a private
+texture before rendering in the same ordered command buffer. This follows
+Apple's [CPU texture-write synchronization requirement](https://developer.apple.com/documentation/metal/mtltexture/replace%28region%3Amipmaplevel%3Aslice%3Awithbytes%3Abytesperrow%3Abytesperimage%3A%29)
+and [buffer-to-texture blit API](https://developer.apple.com/documentation/metal/mtlblitcommandencoder/copy%28from%3Asourceoffset%3Asourcebytesperrow%3Asourcebytesperimage%3Asourcesize%3Ato%3Adestinationslice%3Adestinationlevel%3Adestinationorigin%3A%29).
+At most three presentation commands are in flight; overload defers a redraw
+until a completion without blocking input on GPU work.
+
+Actual GPU readback tests verify a 3840x2160 initial upload of 33,177,600 pixel
+bytes, a one-pixel update of four pixel bytes, unchanged redraws of zero bytes,
+CopyRect correctness, initialized resized textures, independent readers, and
+same-size framebuffer replacement. Byte counts describe encoded pixel payload,
+not measured bus traffic: staging rows are aligned to 256 bytes. A shared-event
+test delays GPU execution while 24 frames are queued and verifies each frame's
+individual pixels, covering staging lifetime and command ordering.
+
+The final complete core suite passed 132 tests with five external-environment
+skips and zero failures (`/tmp/aetherscreens-incremental-core-final.log`);
+1080p CopyRect measured 0.760 ms/frame against the unchanged threshold. Mac and
+iOS Release builds passed (`/tmp/aetherscreens-incremental-mac-release.log`,
+`/tmp/aetherscreens-incremental-ios-release.log`). The fresh signed iOS candidate
+in `/tmp/aetherscreens-incremental-signed-derived` passes deep, strict signature
+verification. It has not yet been installed for physical-device acceptance.
+These rendering checks do not measure phone input-to-display latency or establish
+Screens-equivalent hand feel. Those physical gates remain open.
+
+The final controlled simulator rerun passed all eight requested English/Chinese
+display, viewport, native-input and reconnect cases, with zero skips, failures
+or runtime warnings (`build/ios-incremental-render-controlled-qa/`). Exported
+selected-monitor and live-layout screenshots were inspected to confirm the new
+private-texture rendering path actually presents the expected crop and pixels.
+This is synthetic simulator coverage, not a two-phone acceptance result.

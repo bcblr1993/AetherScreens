@@ -9,14 +9,17 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     public let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     private var pipelineState: MTLRenderPipelineState?
-    private var texture: MTLTexture?
+    private(set) var texture: MTLTexture?
     private weak var attachedView: MTKView?
 
     public weak var framebuffer: Framebuffer?
     public let metrics: PerformanceMetrics
 
     private let lock = NSLock()
-    private var needsTextureRecreation: Bool = true
+    private var uploadedRevision: UInt64?
+    private weak var textureFramebuffer: Framebuffer?
+    private var inFlightFrames = 0
+    private var redrawWhenAvailable = false
     private var isDirty: Bool = true
     private var displayScheduled = false
     private var sourceRect: CGRect?
@@ -151,73 +154,121 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         else { DispatchQueue.main.async(execute: invalidate) }
     }
 
+    private func beginFrame() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard inFlightFrames < 3 else { redrawWhenAvailable = true; return false }
+        inFlightFrames += 1
+        return true
+    }
+
+    private func completeFrame() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        inFlightFrames -= 1
+        let retry = redrawWhenAvailable
+        redrawWhenAvailable = false
+        return retry
+    }
+
     public func draw(in view: MTKView) {
-        guard let pState = pipelineState,
-              let fb = framebuffer,
-              let currentDrawable = view.currentDrawable,
-              let renderPassDesc = view.currentRenderPassDescriptor else {
+        guard let pState = pipelineState, let fb = framebuffer else { return }
+        // Keep input/UI responsive if the GPU is behind; the next completion redraws the newest state.
+        guard beginFrame() else { return }
+        guard let drawable = view.currentDrawable, let pass = view.currentRenderPassDescriptor,
+              let commandBuffer = commandQueue.makeCommandBuffer() else {
+            if completeFrame() { notifyFrameUpdated() }
             return
         }
-
         lock.lock()
         let dirty = isDirty
         let crop = sourceRect
         isDirty = false
         lock.unlock()
-
-        // Synchronize and update texture if framebuffer size changed or dirty
-        updateTextureIfNeeded(framebuffer: fb, shouldUpload: dirty)
-
-        guard let tex = self.texture else { return }
-
-        guard let commandBuffer = commandQueue.makeCommandBuffer(),
-              let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDesc) else {
+        guard encodeFramebufferUpload(framebuffer: fb, commandBuffer: commandBuffer, shouldUpload: dirty) != nil,
+              let tex = texture else {
+            lock.lock(); isDirty = true; lock.unlock()
+            if completeFrame() { notifyFrameUpdated() }
             return
         }
-
-        renderEncoder.setRenderPipelineState(pState)
-        renderEncoder.setFragmentTexture(tex, index: 0)
+        commandBuffer.addCompletedHandler { [weak self] completed in
+            guard let self else { return }
+            let retry = self.completeFrame()
+            if completed.status == .error {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    self.uploadedRevision = nil
+                    self.notifyFrameUpdated()
+                }
+            } else if retry { self.notifyFrameUpdated() }
+        }
+        guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else {
+            // Finish any already-encoded upload, preserving texture/revision consistency.
+            commandBuffer.commit()
+            return
+        }
+        encoder.setRenderPipelineState(pState)
+        encoder.setFragmentTexture(tex, index: 0)
         var region = Self.textureRegion(rect: crop, width: tex.width, height: tex.height)
-        renderEncoder.setVertexBytes(&region, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
-        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-        renderEncoder.endEncoding()
-
-        commandBuffer.present(currentDrawable)
+        encoder.setVertexBytes(&region, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.endEncoding()
+        commandBuffer.present(drawable)
         commandBuffer.commit()
-
         metrics.recordFrame()
     }
 
-    private func updateTextureIfNeeded(framebuffer: Framebuffer, shouldUpload: Bool) {
-        framebuffer.withPixelBytes { pixels, width, height in
-            guard width > 0, height > 0 else { return }
-
-            if texture == nil || texture?.width != width || texture?.height != height {
-                let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                    pixelFormat: .bgra8Unorm,
-                    width: width,
-                    height: height,
-                    mipmapped: false
-                )
+    /// Staging buffers live until command completion; the private texture is written only by ordered GPU commands.
+    @discardableResult
+    func encodeFramebufferUpload(framebuffer: Framebuffer, commandBuffer: MTLCommandBuffer, shouldUpload: Bool = true) -> Int? {
+        var target = texture
+        var pending: [(buffer: MTLBuffer, region: CGRect, stride: Int)] = []
+        var nextRevision: UInt64?
+        var failed = false
+        framebuffer.withPixelChanges(since: uploadedRevision) { pixels, width, height, changes, revision in
+            guard width > 0, height > 0, let base = pixels.baseAddress,
+                  pixels.count >= width * height * 4 else { failed = true; return }
+            let recreate = target == nil || target?.width != width || target?.height != height || textureFramebuffer !== framebuffer
+            if recreate {
+                let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
                 descriptor.usage = [.shaderRead]
-                #if os(macOS)
-                descriptor.storageMode = .managed
-                #else
-                descriptor.storageMode = .shared
-                #endif
-                texture = device.makeTexture(descriptor: descriptor)
+                descriptor.storageMode = .private
+                target = device.makeTexture(descriptor: descriptor)
             }
-
-            guard shouldUpload,
-                  let tex = texture,
-                  let base = pixels.baseAddress,
-                  pixels.count >= width * height * 4 else { return }
-            tex.replace(
-                region: MTLRegionMake2D(0, 0, width, height),
-                mipmapLevel: 0,
-                withBytes: base,
-                bytesPerRow: width * 4
-            )
+            guard target != nil else { failed = true; return }
+            guard recreate || shouldUpload else { return }
+            let regions = recreate ? [CGRect(x: 0, y: 0, width: width, height: height)] : changes
+            for region in regions {
+                let rowBytes = Int(region.width) * 4
+                // Conservative alignment supports both Apple and discrete Mac GPUs.
+                let stride = (rowBytes + 255) & ~255
+                guard let buffer = device.makeBuffer(length: stride * Int(region.height), options: .storageModeShared) else {
+                    failed = true; return
+                }
+                for row in 0..<Int(region.height) {
+                    memcpy(buffer.contents().advanced(by: row * stride),
+                           base.advanced(by: ((Int(region.minY) + row) * width + Int(region.minX)) * 4), rowBytes)
+                }
+                pending.append((buffer, region, stride))
+            }
+            nextRevision = revision
         }
+        guard !failed, let target else { return nil }
+        guard !pending.isEmpty else { return 0 }
+        guard let encoder = commandBuffer.makeBlitCommandEncoder() else { return nil }
+        var pixelBytes = 0
+        for upload in pending {
+            let region = upload.region
+            encoder.copy(from: upload.buffer, sourceOffset: 0, sourceBytesPerRow: upload.stride, sourceBytesPerImage: 0,
+                         sourceSize: MTLSize(width: Int(region.width), height: Int(region.height), depth: 1),
+                         to: target, destinationSlice: 0, destinationLevel: 0,
+                         destinationOrigin: MTLOrigin(x: Int(region.minX), y: Int(region.minY), z: 0))
+            pixelBytes += Int(region.width * region.height) * 4
+        }
+        encoder.endEncoding()
+        texture = target
+        textureFramebuffer = framebuffer
+        uploadedRevision = nextRevision
+        return pixelBytes
     }
 }
