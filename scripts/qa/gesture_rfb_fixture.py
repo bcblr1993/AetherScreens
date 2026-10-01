@@ -11,6 +11,7 @@ import socketserver
 import struct
 import threading
 import time
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 EVENTS = []
@@ -29,6 +30,7 @@ def record(event):
 
 class Desktop(socketserver.BaseRequestHandler):
     reports_layout = False
+    encoding = 'raw'
     def send(self, data):
         with self.send_lock:
             self.request.sendall(data)
@@ -47,23 +49,46 @@ class Desktop(socketserver.BaseRequestHandler):
 
     def frame(self, full=False):
         width, height = (WIDTH, HEIGHT) if full else (1, 1)
-        header = struct.pack('>BBHHHHHi', 0, 0, 1, 0, 0, width, height, 0)
+        encoding = 16 if self.encoding == 'zrle' else 0
+        if encoding == 16 and encoding not in self.offered_encodings:
+            self.record({'type': 'protocol-error', 'reason': 'ZRLE not advertised'})
+            raise EOFError
+        header = struct.pack('>BBHHHHHi', 0, 0, 1, 0, 0, width, height, encoding)
         if full:
             pixels = b''.join(bytes((90 + (x // 80) * 10, 80 + (y // 60) * 20, 45, 255))
                               for y in range(height) for x in range(width))
         else:
             pixels = bytes((120, 100, 45, 255))
+        if encoding == 16:
+            tiles = bytearray()
+            if full:
+                for top in range(0, height, 64):
+                    for left in range(0, width, 64):
+                        tiles.append(0)
+                        for y in range(top, min(top + 64, height)):
+                            start = (y * width + left) * 4
+                            for x in range(min(64, width - left)):
+                                tiles.extend(pixels[start + x * 4:start + x * 4 + 3])
+            else:
+                tiles.extend(bytes((1, 120, 100, 45)))
+            compressed = self.compressor.compress(tiles) + self.compressor.flush(zlib.Z_SYNC_FLUSH)
+            payload = struct.pack('>I', len(compressed)) + compressed
+        else:
+            payload = pixels
         if full and self.reports_layout:
             layout_header = struct.pack('>BBHHHHHi', 0, 0, 1, 0, 0, WIDTH, HEIGHT, -308)
             screens = struct.pack('>IHHHHI', 10, 0, 0, WIDTH // 2, HEIGHT, 0)
             screens += struct.pack('>IHHHHI', 20, WIDTH // 2, 0, WIDTH // 2, HEIGHT, 0)
             self.send(layout_header + bytes((2, 0, 0, 0)) + screens)
             self.record({'type': 'layout', 'screens': 2})
-        self.send(header + pixels)
-        self.record({'type': 'frame', 'full': full})
+        self.send(header + payload)
+        self.record({'type': 'frame', 'full': full, 'encoding': self.encoding,
+                     'payloadBytes': len(payload), 'rawPixelBytes': len(pixels)})
 
     def handle(self):
         global NEXT_CONNECTION_ID
+        self.compressor = zlib.compressobj() if self.encoding == 'zrle' else None
+        self.offered_encodings = []
         with LOCK:
             NEXT_CONNECTION_ID += 1
             self.connection_id = NEXT_CONNECTION_ID
@@ -92,7 +117,10 @@ class Desktop(socketserver.BaseRequestHandler):
                     self.read(19)
                 elif message == 2:
                     header = self.read(3)
-                    self.read(struct.unpack('>H', header[1:])[0] * 4)
+                    count = struct.unpack('>H', header[1:])[0]
+                    encoded = self.read(count * 4)
+                    self.offered_encodings = list(struct.unpack('>' + 'i' * count, encoded))
+                    self.record({'type': 'encodings', 'values': self.offered_encodings})
                 elif message == 3:
                     header = self.read(9)
                     if header[0] == 0:
@@ -182,7 +210,9 @@ def main():
     parser.add_argument('--rfb-port', type=int, default=5999)
     parser.add_argument('--http-port', type=int, default=8768)
     parser.add_argument('--display-rfb-port', type=int, default=6000)
+    parser.add_argument('--encoding', choices=('raw', 'zrle'), default='raw', help='ZRLE validates negotiated, continuous compressed rendering')
     args = parser.parse_args()
+    Desktop.encoding = args.encoding
     with RFBServer((args.listen_host, args.rfb_port), Desktop) as desktop, RFBServer((args.listen_host, args.display_rfb_port), DualDisplayDesktop) as displays:
         threading.Thread(target=desktop.serve_forever, daemon=True).start()
         threading.Thread(target=displays.serve_forever, daemon=True).start()

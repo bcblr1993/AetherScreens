@@ -259,4 +259,7 @@
 "Next Space (⌃→)" = "下一个空间（⌃→）";
 
 "TCP RTT" = "TCP 往返";
+"Invalid ZRLE rectangle size" = "远端压缩画面尺寸无效";
+"Invalid ZRLE compressed length" = "远端压缩画面数据长度无效";
+"Invalid ZRLE pixel data" = "远端压缩画面数据无效";
 "Network round-trip time; excludes remote processing and display delay." = "网络往返时间，不包含远端处理和显示延迟。";

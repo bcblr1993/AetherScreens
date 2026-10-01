@@ -50,6 +50,7 @@ public final class RFBClient: @unchecked Sendable {
     private var updateHasDisplayLayout = false
     private var updateHasPixels = false
     private let zlibDecompressor = ZlibDecompressor()
+    private let zrleDecoder = ZRLEDecoder()
     private let inputLock = NSRecursiveLock()
     private var inputEnabled = true
     private var pointerInputEnabled = true
@@ -87,7 +88,6 @@ public final class RFBClient: @unchecked Sendable {
 
         readBuffer.removeAll()
         hasCompletedFramebufferUpdate = false
-        zlibDecompressor.reset()
         extendedClipboard = false
         pendingClipboard = nil
         state = .connecting
@@ -108,6 +108,10 @@ public final class RFBClient: @unchecked Sendable {
             switch connState {
             case .ready:
                 AppLogger.shared.info("TCP socket established with \(self.host):\(self.port)", category: "Network")
+                // Reset on the serial connection queue, alongside decoding. Reconnect
+                // can be requested by the UI while an old rectangle is still decoding.
+                self.zlibDecompressor.reset()
+                self.zrleDecoder.reset()
                 self.reportConnection = conn
                 self.pendingTransferReport = conn.startDataTransferReport()
                 self.lastTransferReportTime = ProcessInfo.processInfo.systemUptime
@@ -417,9 +421,10 @@ public final class RFBClient: @unchecked Sendable {
         let pixelFormatData = RFBEncoder.encodeSetPixelFormat(.standardBGRA32)
         sendData(pixelFormatData)
 
-        // Set encodings: Zlib, CopyRect, DesktopSize, Raw (do NOT request cursor to avoid cursor desync)
-        AppLogger.shared.info("Setting encodings: Zlib, CopyRect, DesktopSize, Raw...", category: "RFB")
+        // Advertise only implemented formats, retaining Zlib/Raw fallbacks.
+        AppLogger.shared.info("Setting encodings: ZRLE, Zlib, CopyRect, DesktopSize, Raw...", category: "RFB")
         let encodingsData = RFBEncoder.encodeSetEncodings([
+            .zrle,
             .zlib,
             .copyRect,
             .desktopSize,
@@ -495,6 +500,37 @@ public final class RFBClient: @unchecked Sendable {
 
 
             switch header.encoding {
+            case .zrle:
+                guard let sourceConnection = self.connection else { return }
+                let width = Int(header.width), height = Int(header.height)
+                guard Int(header.x) + width <= self.framebuffer.width,
+                      Int(header.y) + height <= self.framebuffer.height,
+                      let maximum = ZRLEDecoder.maximumTileBytes(width: width, height: height) else {
+                    self.handleFailure("Invalid ZRLE rectangle size")
+                    return
+                }
+                self.readExact(4) { [weak self] lengthData in
+                    guard let self, let lengthData, self.connection === sourceConnection else { return }
+                    let length = Int(lengthData.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
+                    guard length > 0, length <= maximum * 2 + 1024 else {
+                        self.handleFailure("Invalid ZRLE compressed length")
+                        return
+                    }
+                    self.readExact(length) { [weak self] compressed in
+                        guard let self, let compressed, self.connection === sourceConnection else { return }
+                        let decoded = self.zrleDecoder.decode(data: compressed, width: width, height: height)
+                        guard self.connection === sourceConnection else { return }
+                        guard let pixels = decoded else {
+                            self.handleFailure("Invalid ZRLE pixel data")
+                            return
+                        }
+                        self.framebuffer.updateRect(x: Int(header.x), y: Int(header.y), width: width,
+                                                    height: height, rawData: pixels)
+                        self.updateHasPixels = true
+                        self.readRectangles(count: count - 1)
+                    }
+                }
+
             case .zlib:
                 // 4 bytes: length (UInt32 big endian)
                 self.readExact(4) { [weak self] lenData in
@@ -895,6 +931,10 @@ public final class RFBClient: @unchecked Sendable {
                 let totalMb = Double(count) / (1024.0 * 1024.0)
                 self.onDownloadProgress?(mb, totalMb)
             }
+
+            // Notifications can disconnect/reconnect synchronously. Never let an
+            // old receive consume the new connection's handshake or report its failure.
+            guard self.connection === conn else { completion(nil); return }
 
             if let error = error {
                 self.handleFailure("Socket read error: \(error.localizedDescription)")

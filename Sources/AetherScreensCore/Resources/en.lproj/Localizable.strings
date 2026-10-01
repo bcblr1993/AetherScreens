@@ -259,4 +259,7 @@
 "Next Space (⌃→)" = "Next Space (⌃→)";
 
 "TCP RTT" = "TCP RTT";
+"Invalid ZRLE rectangle size" = "Invalid ZRLE rectangle size";
+"Invalid ZRLE compressed length" = "Invalid ZRLE compressed length";
+"Invalid ZRLE pixel data" = "Invalid ZRLE pixel data";
 "Network round-trip time; excludes remote processing and display delay." = "Network round-trip time; excludes remote processing and display delay.";

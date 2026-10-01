@@ -15,7 +15,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Clipboard transfers | Local clipboard insertion passed; traditional Latin-1 and negotiated compressed UTF-8 double-direction loopback TCP text, malformed message rejection and ended/reconnected session guards tested | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
 | Curtain privacy mode | System lock shortcut and password restoration passed | Actual remote display blackout while remaining unlocked; lock is not parity |
 | Display selection | ExtendedDesktopSize server layout decoding, stable screen IDs, selected-monitor crop and bounded input coordinates; no monitor-count inference from framebuffer aspect ratio. Actual TCP tests cover layout-only updates, rejected resize payloads and subsequent raw frames, plus framebuffer resizing. | Apple server layout negotiation and physical per-display acceptance; target Mac currently has one online LG HDR 4K display |
-| Adaptive image quality | Raw, Zlib and CopyRect decoding; Metal rendering; native presented-frame FPS and measured TCP RTT diagnostics | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
+| Adaptive image quality | Raw, Zlib, ZRLE and CopyRect decoding; Metal rendering; native presented-frame FPS and measured TCP RTT diagnostics | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
 | Observe / control modes | Explicit Observe Only mode; real Mac frames continue while text, clicks, wheel and clipboard writes are blocked; held modifiers released and control restored. iOS retains local zoom/pan while Observe suppresses received pointer input; English/Chinese controlled viewport flows pass. Pan separately blocks pointer input, cancels queued wheels and preserves keys; actual TCP tests cover nested Observe transitions and responsive scrolling afterward | Physical iPhone toggle and input suppression acceptance |
 | Reconnect / session recovery | In-session reconnect clears input and restores remote typing. English/Chinese simulator socket-interruption tests pass with a new TCP connection, fresh frame, retained zoom/touch mode and received fresh modifier/key events. Core tests reject ended-session callbacks and old VNC/ARD password replies | Physical iPhone and Apple server recovery; real phone network interruption |
 | Quick connect / session selection | Temporary account/VNC requests and optional saving; installed Mac account connection and received typing passed; iPhone simulator validation, save toggle and error/disconnect flow passed | Physical iPhone quick connection; explicit active/background session choice |
@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 144 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 161 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -493,3 +493,116 @@ not offer an available connected physical-iPhone testing tunnel. The user's
 manual iPhone 12 Pro connection/basic-operation result stands; its reported
 lack of Screens-level smoothness remains unresolved. Do not infer two-phone
 acceptance from the successful simulator lanes.
+
+
+## Negotiated ZRLE compressed display (2026-10-01)
+
+The client now advertises implemented ZRLE before Zlib, retaining CopyRect and
+Raw fallbacks. This adds a lossless encoding option; it does not implement
+adaptive JPEG quality or establish that the target Apple server will choose it.
+The decoder implements the tile modes and compact BGR pixels for the BGRA32
+format the client requests, following
+[RFC 6143 section 7.7.6](https://www.rfc-editor.org/rfc/rfc6143.html#section-7.7.6).
+ZRLE maintains its own continuous zlib dictionary, separate from ordinary Zlib
+rectangles, and resets it on reconnect. Variable inflation uses bounded chunks;
+rectangle output is limited to 256 MiB and tile/compressed lengths are checked
+before decoding. Invalid indices, reserved modes, overruns, missing data and
+trailing tile data reject the entire failing rectangle before framebuffer writes.
+New connection failures have matching English/Chinese resource entries.
+
+Twelve decoder tests cover BGR/alpha conversion, edge tiles, packed palette
+row padding, non-power-of-two palettes, long runs, dictionary continuation,
+reset, malformed data and expansion limits. Five actual TCP tests inspect
+SetEncodings and verify pixel equality through interleaved ZRLE/Zlib/Raw,
+reconnect, compressed receives larger than 64 KiB, malformed-data rejection
+and oversized-announcement rejection. The malformed fixture first decodes a
+valid pixel before a later run fails, verifying that partially decoded pixels
+never overwrite the last good framebuffer.
+The first full suite passed 160 tests with five environment skips and no failures
+(`/tmp/aetherscreens-zrle-core.log`); subsequent final-suite evidence follows
+below, including the added reentrant-reconnect regression.
+Mac Release and signed iOS Release builds, including strict signature checks,
+passed. The small synthetic Full HD tile image compressed to 549 bytes from
+8,294,400 Raw pixel bytes and decoded in about 3.5 ms in the debug run.
+That ratio and timing describe this fixture only, not Apple desktop traffic or
+physical-device responsiveness.
+
+The controlled Python fixture has an optional `--encoding zrle` mode, creates
+one compressor per connection, requires ZRLE advertisement, and records actual
+encoding/payload lengths. Raw remains its default. An independent compiled
+Mac QA bundle displayed the fixture's 640x360 compressed image: first payload
+2,726 bytes versus 921,600 Raw pixel bytes, followed by continuous incremental
+updates and received mouse events. The desktop below the toolbar shadow
+matched the earlier Raw screenshot exactly, for region `(0,190,2160,1380)`;
+the wider comparison correctly detects the different toolbar shadow rather
+than labeling it a decoder difference. Evidence is retained at
+`/tmp/aetherscreens-zrle-native.png`,
+`/tmp/aetherscreens-zrle-native-events.json` and
+`/tmp/aetherscreens-zrle-native-pixel-comparison.txt`.
+The full-image protocol tests additionally verify complete framebuffer bytes;
+this screenshot crop alone is not that assertion. The QA bundle used temporary
+NoAuth loopback connections and did not replace the installed product.
+
+Target Mac encoding selection, both physical iPhones' sustained input/scroll
+feel, adaptive compression and the other original functional acceptance gates
+remain open. No public release or website publication follows from these
+controlled checks.
+
+The receive-notification reconnect regression initially timed out after five
+seconds, with no fresh frame and only one negotiated connection
+(`/tmp/aetherscreens-zrle-reentrant-first.log`). A post-notification connection
+identity guard prevents an old receive from reading the new handshake or
+reporting errors against the new socket. The same real TCP scenario then passed
+in about 0.09 seconds with complete pixel equality
+(`/tmp/aetherscreens-zrle-reentrant-fixed.log`). Stream dictionaries now reset
+on the serial connection queue's ready callback, not concurrently from the UI;
+ZRLE completion also rejects pixels/errors belonging to an old connection.
+This is reconnect-race evidence, not a measured fix for sustained iPhone lag.
+
+The first incrementally rebuilt iOS package printed BUILD SUCCEEDED while
+strict codesign verification rejected changed English/Chinese resource files
+(`/tmp/aetherscreens-zrle-incremental-signature-check.log`). The candidate was
+rebuilt in a fresh derived-data directory and subsequently rechecked. Do not
+accept Xcode's build-success message alone as signature verification.
+
+Final source passed 161 core tests with five environment skips and zero failures
+(`/tmp/aetherscreens-zrle-core-verified.log`). Mac Release build passed
+(`/tmp/aetherscreens-zrle-mac-verified.log`). The iOS Release build at
+`/tmp/aetherscreens-zrle-queue-final-signed-derived` passed strict/deep signature
+verification after the final code rebuild; its build log is
+`/tmp/aetherscreens-zrle-ios-verified.log`.
+
+Both initial and queue-reset controlled simulator runs passed all ten requested
+ZRLE EN/ZH cases with zero skips, failures and runtime warnings
+(`build/ios-zrle-controlled-qa`, `build/ios-zrle-final-controlled-qa`). The final
+receive-notification guard is being verified separately below before acceptance.
+
+A current device check found the 12 Pro wired/connected, booted, unlocked, with
+developer mode enabled; the 16 Pro Max's network development tunnel was
+still disconnected (`/tmp/aetherscreens-zrle-current-devices.json`). The 12 Pro
+was retried in its own ZRLE LAN lane on 6999/7000/8868, independently of the
+simulator lane. Its signed test build succeeded, but runner 14452 again timed
+out enabling UI automation during test discovery. The enumeration guard
+rejected all ten missing tests (`build/ios-zrle-12-controlled-qa`). No physical
+functional case executed. The prior phone-side automation confirmation remains
+required; no device password is entered or collected by the tools. This does
+not invalidate the user's earlier manual basic-operation result, and does not
+prove a new installed product revision or two-phone acceptance.
+
+The final receive-notification guard's fresh simulator run passed all ten
+requested controlled EN/ZH cases, with no skips, failures or runtime warnings
+(`build/ios-zrle-reentrant-controlled-qa`). Final event evidence is saved at
+`/tmp/aetherscreens-zrle-final-ui-events.json`.
+A subsequent internal buffer-ownership correction uses explicitly aligned
+UInt32 storage, transferring it to Data after successful decoding and freeing
+it on failure. It preserves the tested pixel bytes and avoids relying on Data's
+inline byte-buffer layout. All 161 core tests then passed again, with the same
+five environment skips and zero failures
+(`/tmp/aetherscreens-zrle-aligned-core.log`); the aligned implementation's Mac
+Release and signed iOS Release builds also passed. Final strict/deep signature
+verification succeeded (`/tmp/aetherscreens-zrle-final-signature.log`). The UI
+run preceded this internal allocation correction; protocol tests afterwards
+verify every received framebuffer byte and reconnect behavior with the new
+allocation. No UI layout or gesture mapping changed in that correction.
+The full original acceptance remains incomplete and awaits the separate
+physical/Apple-server gates listed above.
