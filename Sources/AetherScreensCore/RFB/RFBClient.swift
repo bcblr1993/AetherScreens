@@ -643,8 +643,12 @@ public final class RFBClient: @unchecked Sendable {
         let flags = payload.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
         let action = flags & 0xFF000000
         if action & 0x01000000 != 0 {
-            extendedClipboard = true
-            AppLogger.shared.info("Extended UTF-8 clipboard available", category: "RFB")
+            // Each advertised format has one size entry, including unknown formats.
+            let formats = UInt16(flags & 0xFFFF)
+            guard payload.count == 4 + formats.nonzeroBitCount * 4 else { return }
+            extendedClipboard = formats & 1 != 0
+            if !extendedClipboard { pendingClipboard = nil }
+            if extendedClipboard { AppLogger.shared.info("Extended UTF-8 clipboard available", category: "RFB") }
             sendExtendedClipboard(flags: 0x1F000001, payload: Data(repeating: 0, count: 4))
         } else if action == 0x02000000, flags & 1 != 0, let text = pendingClipboard {
             let utf8 = Data(text.utf8) + Data([0])
@@ -675,7 +679,8 @@ public final class RFBClient: @unchecked Sendable {
             let count = plain.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
             guard count > 0, Int(count) <= Int(size) - 4 else { return }
             var bytes = Data(plain[4..<(4 + Int(count))])
-            if bytes.last == 0 { bytes.removeLast() }
+            guard bytes.last == 0 else { return }
+            bytes.removeLast()
             if let text = String(data: bytes, encoding: .utf8) { onClipboardReceived?(RFBEncoder.clipboardText(text, extended: false)) }
         }
     }

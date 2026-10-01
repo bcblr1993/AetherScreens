@@ -1,5 +1,6 @@
 import XCTest
 import Network
+import zlib
 @testable import AetherScreensCore
 
 final class PointerTransportTests: XCTestCase {
@@ -255,6 +256,114 @@ final class ClipboardSessionTests: XCTestCase {
         XCTAssertEqual(inbox.texts, ["new session text"])
     }
 
+    func testExtendedUnicodeClipboardRoundTripAndObserveRequestSuppression() throws {
+        let ready = expectation(description: "Extended clipboard listener ready")
+        let connected = expectation(description: "Extended clipboard session ready")
+        let caps = expectation(description: "Client capabilities received on TCP")
+        let uploaded = expectation(description: "Compressed Unicode uploaded on TCP")
+        let downloaded = expectation(description: "Compressed Unicode downloaded through session")
+        let forbidden = expectation(description: "Observe provides clipboard after delayed request")
+        forbidden.isInverted = true
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let inbox = ClipboardInbox()
+        let session = SessionViewModel(device: RemoteDevice(name: "Extended clipboard QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true, clipboardWriter: { text in
+            inbox.texts.append(text)
+            if text == "远端 😀\nsecond line" { downloaded.fulfill() }
+        })
+        defer { session.endSession() }
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        wait(for: [connected], timeout: 3)
+        server.onExtendedClipboard = { (flags: UInt32, payload: Data) in
+            if flags == 0x1F000001 {
+                XCTAssertEqual(payload, Data([0, 0, 0, 0]))
+                caps.fulfill()
+            } else if flags == 0x08000001 {
+                server.sendExtendedClipboard(flags: 0x02000001)
+            } else if flags == 0x10000001 {
+                do {
+                    let plain = try ClipboardWireData.decompress(payload)
+                    let expected = Data("客户端 中文 😀\r\nsecond line\r\n".utf8) + Data([0])
+                    let declaredSize = plain.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+                    XCTAssertEqual(declaredSize, UInt32(expected.count))
+                    XCTAssertEqual(Data(plain.dropFirst(4)), expected)
+                    uploaded.fulfill()
+                } catch { XCTFail("Cannot read actual compressed clipboard: \(error)") }
+            }
+        }
+        server.sendExtendedClipboard(flags: 0x1F000001, payload: Data([0, 0, 0, 0]))
+        wait(for: [caps], timeout: 2)
+        XCTAssertTrue(session.client.sendCutText("客户端 中文 😀\nsecond line\n"))
+        wait(for: [uploaded], timeout: 2)
+        let remotePayload = try ClipboardWireData.compress("远端 😀\r\nsecond line")
+        session.isObserveOnly = true
+        server.onExtendedClipboard = { flags, _ in
+            if flags == 0x10000001 { forbidden.fulfill() }
+            if flags == 0x02000001 { server.sendExtendedClipboard(flags: 0x10000001, payload: remotePayload) }
+        }
+        XCTAssertFalse(session.client.sendCutText("Observe must not upload"))
+        server.sendExtendedClipboard(flags: 0x02000001)
+        server.sendExtendedClipboard(flags: 0x08000001)
+        // The received download is a barrier after the delayed server request.
+        wait(for: [downloaded], timeout: 2)
+        wait(for: [forbidden], timeout: 0.15)
+        XCTAssertEqual(inbox.texts, ["远端 😀\nsecond line"])
+    }
+
+    func testTruncatedCapabilityMessageDoesNotEnableUnicodeUploads() throws {
+        let ready = expectation(description: "Malformed capabilities listener ready")
+        let connected = expectation(description: "Malformed capabilities connection ready")
+        let barrier = expectation(description: "Following legacy clipboard decoded")
+        let nonTextBarrier = expectation(description: "Non-text capabilities followed by legacy text")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let session = SessionViewModel(device: RemoteDevice(name: "Malformed clipboard QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true, clipboardWriter: { text in
+            if text == "capability barrier" { barrier.fulfill() }
+            else if text == "non-text capability barrier" { nonTextBarrier.fulfill() }
+            else { XCTFail("Unexpected fixture clipboard text") }
+        })
+        defer { session.endSession() }
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        wait(for: [connected], timeout: 3)
+        // Text capabilities require a four-byte size after their flags.
+        server.sendExtendedClipboard(flags: 0x1F000001)
+        server.sendClipboard("capability barrier")
+        wait(for: [barrier], timeout: 2)
+        XCTAssertFalse(session.client.sendCutText("中文 😀"))
+        server.sendExtendedClipboard(flags: 0x1F000002, payload: Data([0, 0, 0, 0]))
+        server.sendClipboard("non-text capability barrier")
+        wait(for: [nonTextBarrier], timeout: 2)
+        XCTAssertFalse(session.client.sendCutText("中文 😀"), "RTF-only capabilities cannot enable UTF-8 text uploads")
+    }
+
+    func testUnterminatedExtendedTextDoesNotOverwriteClipboardOrBreakNextMessage() throws {
+        let ready = expectation(description: "Unterminated clipboard listener ready")
+        let connected = expectation(description: "Unterminated clipboard connection ready")
+        let barrier = expectation(description: "Valid clipboard after malformed payload received")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let inbox = ClipboardInbox()
+        let session = SessionViewModel(device: RemoteDevice(name: "Unterminated clipboard QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true, clipboardWriter: { text in
+            inbox.texts.append(text)
+            if text == "valid clipboard barrier" { barrier.fulfill() }
+        })
+        defer { session.endSession() }
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        wait(for: [connected], timeout: 3)
+        server.sendExtendedClipboard(flags: 0x1F000001, payload: Data([0, 0, 0, 0]))
+        server.sendExtendedClipboard(flags: 0x10000001, payload: try ClipboardWireData.compress("malformed 中文", terminated: false))
+        server.sendClipboard("valid clipboard barrier")
+        wait(for: [barrier], timeout: 2)
+        drainCallbacks()
+        XCTAssertEqual(inbox.texts, ["valid clipboard barrier"])
+    }
+
     private func drainCallbacks() {
         let drained = expectation(description: "Clipboard UI tasks drained")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { drained.fulfill() }
@@ -265,6 +374,27 @@ final class ClipboardSessionTests: XCTestCase {
 @MainActor
 private final class ClipboardInbox {
     var texts: [String] = []
+}
+
+private enum ClipboardWireData {
+    static func compress(_ text: String, terminated: Bool = true) throws -> Data {
+        let bytes = Data(text.utf8) + (terminated ? Data([0]) : Data())
+        var plain = Data()
+        plain.append(contentsOf: withUnsafeBytes(of: UInt32(bytes.count).bigEndian) { Array($0) })
+        plain.append(bytes)
+        var length = compressBound(uLong(plain.count))
+        var compressed = [UInt8](repeating: 0, count: Int(length))
+        let status = plain.withUnsafeBytes { compress2(&compressed, &length, $0.bindMemory(to: UInt8.self).baseAddress!, uLong(plain.count), Z_DEFAULT_COMPRESSION) }
+        XCTAssertEqual(status, Z_OK)
+        return Data(compressed.prefix(Int(length)))
+    }
+    static func decompress(_ compressed: Data) throws -> Data {
+        var length: uLongf = 1_048_576
+        var bytes = [UInt8](repeating: 0, count: Int(length))
+        let status = compressed.withUnsafeBytes { uncompress(&bytes, &length, $0.bindMemory(to: UInt8.self).baseAddress!, uLong(compressed.count)) }
+        guard status == Z_OK else { throw NSError(domain: "ClipboardWireFixture", code: Int(status)) }
+        return Data(bytes.prefix(Int(length)))
+    }
 }
 
 /// Inspects real TCP messages after a minimal RFB handshake; no client send hooks.
@@ -290,6 +420,11 @@ private final class PointerWireServer: @unchecked Sendable {
     var onCutText: ((Data) -> Void)? {
         get { lock.lock(); defer { lock.unlock() }; return cutTextHandler }
         set { lock.lock(); cutTextHandler = newValue; lock.unlock() }
+    }
+    private var extendedClipboardHandler: ((UInt32, Data) -> Void)?
+    var onExtendedClipboard: ((UInt32, Data) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return extendedClipboardHandler }
+        set { lock.lock(); extendedClipboardHandler = newValue; lock.unlock() }
     }
     var pointers: [Pointer] { lock.lock(); defer { lock.unlock() }; return received }
 
@@ -317,11 +452,20 @@ private final class PointerWireServer: @unchecked Sendable {
         }
         listener.start(queue: queue)
     }
-    func stop() { onPointer = nil; onKey = nil; onCutText = nil; connection?.cancel(); listener.cancel() }
+    func stop() { onPointer = nil; onKey = nil; onCutText = nil; onExtendedClipboard = nil; connection?.cancel(); listener.cancel() }
     func sendClipboard(_ text: String) {
         guard let body = text.data(using: .isoLatin1, allowLossyConversion: false) else { XCTFail("Legacy fixture text must be Latin-1"); return }
         var packet = Data([3, 0, 0, 0])
         packet.append(contentsOf: withUnsafeBytes(of: UInt32(body.count).bigEndian) { Array($0) })
+        packet.append(body)
+        send(packet)
+    }
+    func sendExtendedClipboard(flags: UInt32, payload: Data = Data()) {
+        var body = Data()
+        body.append(contentsOf: withUnsafeBytes(of: flags.bigEndian) { Array($0) })
+        body.append(payload)
+        var packet = Data([3, 0, 0, 0])
+        packet.append(contentsOf: withUnsafeBytes(of: Int32(-body.count).bigEndian) { Array($0) })
         packet.append(body)
         send(packet)
     }
@@ -363,9 +507,15 @@ private final class PointerWireServer: @unchecked Sendable {
             case 6:
                 self.read(7) { header in
                     let length = header.suffix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
-                    guard length <= 1_048_576 else { XCTFail("Unexpected legacy clipboard size"); return }
-                    self.read(Int(length)) { bytes in
-                        self.onCutText?(bytes)
+                    let signed = Int32(bitPattern: length)
+                    let size = abs(Int64(signed))
+                    guard size <= 1_048_576 else { XCTFail("Unexpected clipboard size"); return }
+                    self.read(Int(size)) { bytes in
+                        if signed < 0 {
+                            guard bytes.count >= 4 else { XCTFail("Truncated clipboard flags"); return }
+                            let flags = bytes.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+                            self.onExtendedClipboard?(flags, Data(bytes.dropFirst(4)))
+                        } else { self.onCutText?(bytes) }
                         self.readMessage()
                     }
                 }

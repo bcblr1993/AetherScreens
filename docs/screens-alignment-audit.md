@@ -12,7 +12,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Touch / trackpad gestures | Native iOS recognizers now wire immediate clicks, secondary/middle clicks, held-button dragging, two-axis scrolling and pinch zoom. Cursor movement uses remote-pixel scaling, smooth acceleration and an immediate UIKit layer. Core tests cover click release, scaling and engine drag state. English/Chinese iOS simulator flows additionally inspect packets received for single/double/right/middle click, held-button drag, direct touch, pinch coordinate changes and Observe suppression; both flows pass without runtime warnings. Actual loopback TCP tests additionally verify scrolling preserves held buttons, delayed wheels use the latest released-button state/coordinates, and Observe cancels old work without delaying resumed control behind the cancelled backlog. | Physical tap, secondary click, drag, pinch, scroll and mode changes; Apple server combined scroll/drag acceptance; perceived responsiveness; native two-axis scroll, secondary/middle drag indicators, three-finger shortcuts, two-finger fullscreen toggle and edge/hot-corner gestures |
 | Hardware pointing devices | Mac native mouse, drag, context menu and wheel passed | iPad pointer and hardware keyboard acceptance |
 | International keyboards / dictation | UTF-8 text drawer and Chinese keysyms passed; NSTextInputClient composition tests | Real IME; supplementary-plane characters; dictation workflow |
-| Clipboard transfers | Local clipboard insertion passed; extended UTF-8 parser, traditional Latin-1 wire bytes, double-direction loopback TCP text and ended/reconnected session guards tested | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
+| Clipboard transfers | Local clipboard insertion passed; traditional Latin-1 and negotiated compressed UTF-8 double-direction loopback TCP text, malformed message rejection and ended/reconnected session guards tested | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
 | Curtain privacy mode | System lock shortcut and password restoration passed | Actual remote display blackout while remaining unlocked; lock is not parity |
 | Display selection | ExtendedDesktopSize server layout decoding, stable screen IDs, selected-monitor crop and bounded input coordinates; no monitor-count inference from framebuffer aspect ratio. Actual TCP tests cover layout-only updates, rejected resize payloads and subsequent raw frames, plus framebuffer resizing. | Apple server layout negotiation and physical per-display acceptance; target Mac currently has one online LG HDR 4K display |
 | Adaptive image quality | Raw, Zlib and CopyRect decoding; Metal rendering | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 137 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; current clipboard integration still needs CI and physical acceptance. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 140 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; current extended-clipboard validation still needs CI and physical acceptance. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -285,3 +285,39 @@ failures (`/tmp/aetherscreens-clipboard-core-accepted.log`); CopyRect measured
 Release builds passed (`/tmp/aetherscreens-clipboard-mac-release.log`,
 `/tmp/aetherscreens-clipboard-ios-release.log`), and the signed iOS candidate
 passes deep, strict verification (`/tmp/aetherscreens-clipboard-signature.log`).
+
+Clipboard lifecycle/text-encoding commit `a411187` passed CI run 36838639008.
+
+## Negotiated UTF-8 clipboard TCP coverage
+
+The controlled TCP fixture now exercises negative-length extended clipboard
+messages after a real RFB handshake. Tests observe capability replies, the
+client's notify action, a server request and its compressed provide response.
+Independent decompression verifies exact Chinese, emoji, CRLF multi-line and
+trailing-null bytes rather than invoking the client's own decoder to check its
+encoder. A server notify/request/provide exchange then reaches the session's
+clipboard writer with normalized Chinese/emoji text. Observe cancels the pending
+upload and blocks an explicit new upload; a delayed server request sends no
+provide response, while the incoming clipboard download still succeeds.
+
+The expanded regression reproduced three failures before the fix
+(`/tmp/aetherscreens-clipboard-extended-validation-before.log`): a capability
+message missing its size entry enabled Unicode uploads, RTF-only capabilities
+also enabled text uploads, and a compressed text value without a terminating
+null overwrote the local clipboard. Capability payload length now matches the
+number of advertised format bits, UTF-8 availability requires the text format,
+and losing text capability clears pending uploads. Text provides require their
+terminating null. Following valid legacy messages still decode after malformed
+extended messages, proving the stream remains aligned. The rules follow the
+[RFB Extended Clipboard specification](https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#7729-extended-clipboard-pseudo-encoding).
+
+The complete core suite passed 140 tests with five environment skips and zero
+failures (`/tmp/aetherscreens-clipboard-extended-core.log`); CopyRect measured
+0.671 ms/frame without changing its threshold. Mac Release and signed iOS
+Release builds passed (`/tmp/aetherscreens-clipboard-extended-mac-release.log`,
+`/tmp/aetherscreens-clipboard-extended-ios-release.log`); the iOS app passes deep,
+strict signature verification (`/tmp/aetherscreens-clipboard-extended-signature.log`).
+The first new test compilation hit a Swift type-inference diagnostic; explicit
+closure types and UInt32 length assertions fixed the fixture before reproducing
+the product failures. None of these tests read or overwrite the user's system
+clipboard. Apple-server, physical-phone and rich-content acceptance remain open.
