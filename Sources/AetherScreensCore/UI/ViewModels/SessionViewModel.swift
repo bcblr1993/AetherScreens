@@ -78,7 +78,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public var isPanningViewport: Bool = false
     @Published public private(set) var inputGeneration = UUID()
     private var frameCountSinceLastSnapshot: Int = 0
-    private var lastFramebufferSize = CGSize.zero
+    @Published private var lastFramebufferSize = CGSize.zero
 
     public let isTemporary: Bool
     @Published public var keyboardConfiguration: KeyboardToolbarConfiguration {

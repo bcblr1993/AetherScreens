@@ -50,6 +50,16 @@ final class DeviceStoreTests: XCTestCase {
         XCTAssertTrue(session.hasReceivedFirstFrame)
         XCTAssertEqual(frameStateChanges, 1, "Incoming frames must not repeatedly invalidate the whole SwiftUI canvas")
         XCTAssertEqual(displayChanges, 1, "Unchanged display geometry must not be rebuilt for every frame")
+        var resizeNotifications = 0
+        let resizeSubscription = session.objectWillChange.sink { resizeNotifications += 1 }
+        session.client.framebuffer.resize(newWidth: 4, newHeight: 2)
+        session.client.onFrameUpdated?()
+        let resized = expectation(description: "Remote display resize delivered")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { resized.fulfill() }
+        wait(for: [resized], timeout: 2)
+        XCTAssertEqual(resizeNotifications, 1, "A real remote size change must still refresh canvas geometry")
+        XCTAssertEqual(displayChanges, 2)
+        resizeSubscription.cancel()
         frameSubscription.cancel()
         displaySubscription.cancel()
     }
