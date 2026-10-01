@@ -15,11 +15,13 @@ public struct KeyboardToolbarSettingsView: View {
                             Text(AppLocalization.string(size.rawValue)).tag(size)
                         }
                     }
+                    .accessibilityIdentifier("keyboard-size")
                     Picker(AppLocalization.string("Keyboard Position"), selection: $configuration.position) {
                         ForEach(KeyboardToolbarConfiguration.Position.allCases, id: \.self) { position in
                             Text(AppLocalization.string(position.rawValue)).tag(position)
                         }
                     }
+                    .accessibilityIdentifier("keyboard-position")
                 }
                 Section(AppLocalization.string("Buttons and Spacers")) {
                     ForEach($configuration.items) { $item in
@@ -28,18 +30,27 @@ public struct KeyboardToolbarSettingsView: View {
                                 .accessibilityIdentifier("keyboard-visible-\(item.action.rawValue)")
                             Button {
                                 configuration.move(item.id, by: -1)
-                            } label: { Image(systemName: "arrow.up") }
+                            } label: {
+                                Image(systemName: "arrow.up")
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                            }
                             .accessibilityLabel(AppLocalization.string("Move Up"))
                             .disabled(configuration.items.first?.id == item.id)
                             Button {
                                 configuration.move(item.id, by: 1)
-                            } label: { Image(systemName: "arrow.down") }
+                            } label: {
+                                Image(systemName: "arrow.down")
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                            }
                             .accessibilityLabel(AppLocalization.string("Move Down"))
                             .disabled(configuration.items.last?.id == item.id)
                             if item.action == .spacer {
                                 Button {
                                     configuration.items.removeAll { $0.id == item.id }
-                                } label: { Image(systemName: "minus.circle") }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                                }
                                 .accessibilityLabel(AppLocalization.string("Remove Spacer"))
                             }
                         }
@@ -54,7 +65,10 @@ public struct KeyboardToolbarSettingsView: View {
                     Button(AppLocalization.string("Reset Toolbar")) { configuration = KeyboardToolbarConfiguration() }
                 }
             }
-            .navigationTitle(AppLocalization.string("Customize Keyboard Toolbar"))
+            .navigationTitle(AppLocalization.string("Keyboard Toolbar"))
+            #if canImport(UIKit)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(AppLocalization.string("Done")) { dismiss() }

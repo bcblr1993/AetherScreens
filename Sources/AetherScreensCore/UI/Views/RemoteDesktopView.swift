@@ -441,6 +441,10 @@ public struct RemoteDesktopView: View {
             // Keep secondary controls inside a menu on narrow screens.
             Menu {
                 Toggle(AppLocalization.string("Observe Only"), isOn: $viewModel.isObserveOnly)
+                Button { showingKeyboardCustomization = true } label: {
+                    Label(AppLocalization.string("Customize Keyboard Toolbar"), systemImage: "slider.horizontal.3")
+                }
+                .accessibilityIdentifier("session-customize-keyboard")
                 Divider()
                 #if canImport(UIKit)
                 Button { showingLogs = true } label: {

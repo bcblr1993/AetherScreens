@@ -22,7 +22,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Secure connections / SSH keys | External Tailscale transport, device import client and Keychain | Real Tailnet route/import acceptance; integrated SSH tunnel/key handling |
 | File transfers | No transfer implementation | Bidirectional transfer and received-file verification |
 | Data / credential synchronization | Local persistence and Keychain migration | Cross-device synchronization and conflict handling |
-| Toolbar customization / keyboard options | Per-computer button size, top/bottom position, visibility, ordering and multiple spacers implemented. Installed Mac position/size/menu switching, hiding, moving, adding spacers, relaunch persistence and remote arrow/delete delivery passed. Temporary settings remain in memory; hiding a held modifier releases it. | Physical iPhone customization acceptance; keyboard mapping preferences and cross-device synchronization |
+| Toolbar customization / keyboard options | Per-computer button size, top/bottom position, visibility, ordering and multiple spacers implemented. Installed Mac position/size/menu switching, hiding, moving, adding spacers, relaunch persistence and remote arrow/delete delivery passed. iPhone 17 simulator settings flow passed; final English/Chinese flows on a 375-point iPhone 13 mini simulator passed and screenshots were inspected. Temporary settings remain in memory; hiding a held modifier releases it. | Physical iPhone customization acceptance; keyboard mapping preferences and cross-device synchronization |
 | On-disconnect actions | Disconnect only | Per-connection Mac hot-corner, lock and logout actions before disconnect; proof on an isolated acceptance desktop |
 | URL schemes / automation | No app URL handler | Saved and temporary connection URLs, account/VNC parameters and Observe selection; SSH-key URL support with real tunnel implementation; applicable shortcuts/widgets |
 | AirPlay / external display / Pencil | Not implemented | iOS display routing and peripheral acceptance |
@@ -58,3 +58,11 @@ that lock. The repair publishes on the main thread after releasing accumulator
 locks. Regression tests cover observable notification reentering frame recording
 and main-thread publication from a network thread. The previously stuck native
 position menu and continued remote key delivery passed in the installed repair.
+
+The iPhone keyboard-settings acceptance uses an invalid temporary destination;
+it verifies UI configuration, sheet stability, visible controls and disconnect,
+not live network delivery. Screenshot review caught an oversized truncated English
+title; the final inline title fits both languages. Sorting/removal controls have
+44-point targets, and the session menu exposes configuration without requiring
+horizontal toolbar scrolling. The final mini report contains two passed tests,
+zero failures and zero runtime warnings.

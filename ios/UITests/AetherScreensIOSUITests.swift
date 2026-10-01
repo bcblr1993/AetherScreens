@@ -1,6 +1,55 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testKeyboardCustomizationOnNarrowSession() {
+        verifyKeyboardCustomization(language: "en")
+    }
+
+    func testChineseKeyboardCustomizationOnNarrowSession() {
+        verifyKeyboardCustomization(language: "zh-Hans")
+    }
+
+    private func verifyKeyboardCustomization(language: String) {
+        let chinese = language == "zh-Hans"
+        func label(_ en: String, _ zh: String) -> String { chinese ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 10))
+        app.buttons[label("Quick Connect", "快速连接")].tap()
+        let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+        host.tap()
+        host.typeText("toolbar-qa.invalid")
+        app.buttons[label("Connect", "连接")].tap()
+        XCTAssertTrue(app.buttons[label("Disconnect", "断开连接")].waitForExistence(timeout: 10))
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons["session-customize-keyboard"].tap()
+        XCTAssertTrue(app.navigationBars[label("Keyboard Toolbar", "键盘工具栏")].waitForExistence(timeout: 5))
+        let position = app.buttons["keyboard-position"]
+        XCTAssertTrue(position.exists)
+        position.tap()
+        app.buttons[label("Top", "顶部")].tap()
+        XCTAssertTrue(app.buttons[label("Done", "完成")].exists, "Moving the toolbar must preserve its settings sheet")
+        app.buttons["keyboard-size"].tap()
+        app.buttons[label("Small", "小")].tap()
+        let command = app.switches["keyboard-visible-Cmd"]
+        XCTAssertTrue(command.exists)
+        command.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertEqual(command.value as? String, "0")
+        attachScreenshot(app, name: "Narrow Keyboard Customization")
+        app.buttons[label("Done", "完成")].tap()
+        app.buttons[label("Show Keyboard", "显示键盘")].tap()
+        XCTAssertTrue(app.buttons[label("Hide Keyboard", "隐藏键盘")].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Cmd")).count, 0)
+        attachScreenshot(app, name: "Customized Keyboard Session")
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons["session-customize-keyboard"].tap()
+        XCTAssertTrue(app.navigationBars[label("Keyboard Toolbar", "键盘工具栏")].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.switches["keyboard-visible-Cmd"].value as? String, "0")
+        app.buttons[label("Done", "完成")].tap()
+        app.buttons[label("Disconnect", "断开连接")].tap()
+        XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+    }
+
     func testChineseEnglishSwitchAndPersistence() {
         let app = makeApp(language: "zh-Hans")
         app.launch()
