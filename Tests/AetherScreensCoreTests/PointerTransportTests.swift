@@ -191,6 +191,82 @@ final class PointerTransportTests: XCTestCase {
     }
 }
 
+@MainActor
+final class ClipboardSessionTests: XCTestCase {
+    func testEndedSessionRejectsQueuedAndLaterClipboardDelivery() throws {
+        let ready = expectation(description: "Clipboard listener ready")
+        let connected = expectation(description: "Clipboard session connected")
+        let delivered = expectation(description: "Actual server clipboard delivered")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let inbox = ClipboardInbox()
+        let session = SessionViewModel(device: RemoteDevice(name: "Clipboard QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true, clipboardWriter: { text in
+            inbox.texts.append(text)
+            if text == "actual server clipboard café" { delivered.fulfill() }
+        })
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        wait(for: [connected], timeout: 3)
+        server.sendClipboard("actual server clipboard café")
+        wait(for: [delivered], timeout: 2)
+        let uploaded = expectation(description: "Actual Latin-1 client clipboard received")
+        server.onCutText = { bytes in
+            XCTAssertEqual(Array(bytes), [99, 97, 102, 233, 10, 110, 97, 239, 118, 101])
+            uploaded.fulfill()
+        }
+        XCTAssertTrue(session.client.sendCutText("café\r\nnaïve"))
+        XCTAssertFalse(session.client.sendCutText("中文 😀"), "A legacy-only server must not receive corrupt UTF-8 as Latin-1")
+        session.client.setInputEnabled(false)
+        XCTAssertFalse(session.client.sendCutText("blocked during Observe"))
+        session.client.setInputEnabled(true)
+        wait(for: [uploaded], timeout: 2)
+        session.client.onClipboardReceived?("queued before end")
+        session.endSession()
+        session.client.onClipboardReceived?("delivered after end")
+        drainCallbacks()
+        XCTAssertEqual(inbox.texts, ["actual server clipboard café"])
+    }
+
+    func testReconnectRejectsOldClipboardButAcceptsNewServerText() throws {
+        let ready = expectation(description: "Reconnect clipboard listener ready")
+        let connected = expectation(description: "First clipboard session connected")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let inbox = ClipboardInbox()
+        let delivered = expectation(description: "New server clipboard delivered")
+        let session = SessionViewModel(device: RemoteDevice(name: "Reconnect clipboard QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true, clipboardWriter: { text in
+            inbox.texts.append(text)
+            if text == "new session text" { delivered.fulfill() }
+        })
+        defer { session.endSession() }
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        wait(for: [connected], timeout: 3)
+        session.client.onClipboardReceived?("queued before reconnect")
+        let reconnected = expectation(description: "New clipboard session connected")
+        session.client.onStateChanged = { if $0 == .connected { reconnected.fulfill() } }
+        session.reconnectSession()
+        wait(for: [reconnected], timeout: 3)
+        server.sendClipboard("new session text")
+        wait(for: [delivered], timeout: 2)
+        drainCallbacks()
+        XCTAssertEqual(inbox.texts, ["new session text"])
+    }
+
+    private func drainCallbacks() {
+        let drained = expectation(description: "Clipboard UI tasks drained")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { drained.fulfill() }
+        wait(for: [drained], timeout: 1)
+    }
+}
+
+@MainActor
+private final class ClipboardInbox {
+    var texts: [String] = []
+}
+
 /// Inspects real TCP messages after a minimal RFB handshake; no client send hooks.
 private final class PointerWireServer: @unchecked Sendable {
     struct Pointer { let mask: UInt8; let x: UInt16; let y: UInt16 }
@@ -209,6 +285,11 @@ private final class PointerWireServer: @unchecked Sendable {
     var onKey: ((Key) -> Void)? {
         get { lock.lock(); defer { lock.unlock() }; return keyHandler }
         set { lock.lock(); keyHandler = newValue; lock.unlock() }
+    }
+    private var cutTextHandler: ((Data) -> Void)?
+    var onCutText: ((Data) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return cutTextHandler }
+        set { lock.lock(); cutTextHandler = newValue; lock.unlock() }
     }
     var pointers: [Pointer] { lock.lock(); defer { lock.unlock() }; return received }
 
@@ -236,12 +317,20 @@ private final class PointerWireServer: @unchecked Sendable {
         }
         listener.start(queue: queue)
     }
-    func stop() { onPointer = nil; onKey = nil; connection?.cancel(); listener.cancel() }
+    func stop() { onPointer = nil; onKey = nil; onCutText = nil; connection?.cancel(); listener.cancel() }
+    func sendClipboard(_ text: String) {
+        guard let body = text.data(using: .isoLatin1, allowLossyConversion: false) else { XCTFail("Legacy fixture text must be Latin-1"); return }
+        var packet = Data([3, 0, 0, 0])
+        packet.append(contentsOf: withUnsafeBytes(of: UInt32(body.count).bigEndian) { Array($0) })
+        packet.append(body)
+        send(packet)
+    }
     private func send(_ data: Data) { connection?.send(content: data, completion: .contentProcessed { _ in }) }
     private func read(_ count: Int, accumulated: Data = Data(), done: @escaping (Data) -> Void) {
         if accumulated.count == count { done(accumulated); return }
-        connection?.receive(minimumIncompleteLength: 1, maximumLength: count - accumulated.count) { [weak self] data, _, finished, error in
-            guard let self, let data, !data.isEmpty, error == nil else { return }
+        guard let connection else { return }
+        connection.receive(minimumIncompleteLength: 1, maximumLength: count - accumulated.count) { [weak self] data, _, finished, error in
+            guard let self, self.connection === connection, let data, !data.isEmpty, error == nil else { return }
             let next = accumulated + data
             if next.count == count { done(next) }
             else if !finished { self.read(count, accumulated: next, done: done) }
@@ -270,6 +359,15 @@ private final class PointerWireServer: @unchecked Sendable {
                     self.lock.lock(); self.received.append(pointer); self.lock.unlock()
                     self.onPointer?(pointer)
                     self.readMessage()
+                }
+            case 6:
+                self.read(7) { header in
+                    let length = header.suffix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+                    guard length <= 1_048_576 else { XCTFail("Unexpected legacy clipboard size"); return }
+                    self.read(Int(length)) { bytes in
+                        self.onCutText?(bytes)
+                        self.readMessage()
+                    }
                 }
             default: XCTFail("Unexpected client message in pointer test: \(type[0])")
             }

@@ -65,9 +65,15 @@ public enum RFBEncoder {
         return data
     }
 
+    /// Legacy text uses LF; extended UTF-8 clipboard text uses CRLF on the wire.
+    static func clipboardText(_ text: String, extended: Bool) -> String {
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        return extended ? lines.replacingOccurrences(of: "\n", with: "\r\n") : lines
+    }
+
     /// Encode `ClientCutText` (message-type 6) - Clipboard sync
-    public static func encodeClientCutText(_ text: String) -> Data {
-        let textData = Data(text.utf8)
+    public static func encodeClientCutText(_ text: String) -> Data? {
+        guard let textData = clipboardText(text, extended: false).data(using: .isoLatin1, allowLossyConversion: false) else { return nil }
         var data = Data(capacity: 8 + textData.count)
         data.append(RFBConstants.ClientMessageType.clientCutText.rawValue)
         data.append(contentsOf: [0, 0, 0]) // 3 bytes padding

@@ -96,16 +96,26 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
     }
     private let keyboardStore: KeyboardToolbarStore
+    private let clipboardWriter: @MainActor @Sendable (String) -> Void
     public var canRememberPassword: Bool { !isTemporary }
     private let deviceStore: DeviceStore
     private nonisolated let callbackGeneration = SessionCallbackGeneration()
 
     public init(device: RemoteDevice, password: String?, isTemporary: Bool = false,
-                deviceStore: DeviceStore = .shared, keyboardStore: KeyboardToolbarStore = .shared) {
+                deviceStore: DeviceStore = .shared, keyboardStore: KeyboardToolbarStore = .shared,
+                clipboardWriter: (@MainActor @Sendable (String) -> Void)? = nil) {
         self.device = device
         self.isTemporary = isTemporary
         self.deviceStore = deviceStore
         self.keyboardStore = keyboardStore
+        self.clipboardWriter = clipboardWriter ?? { text in
+            #if canImport(UIKit)
+            UIPasteboard.general.string = text
+            #elseif canImport(AppKit)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            #endif
+        }
         self.keyboardConfiguration = isTemporary ? KeyboardToolbarConfiguration() : keyboardStore.load(for: device.id)
         let rfb = RFBClient(
             host: device.host,
@@ -274,17 +284,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
 
         // Handle incoming clipboard text
-        client.onClipboardReceived = { text in
-            #if canImport(UIKit)
-            Task { @MainActor in
-                UIPasteboard.general.string = text
+        client.onClipboardReceived = { [weak self] text in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation),
+                      self.client.state == .connected else { return }
+                self.clipboardWriter(text)
             }
-            #elseif canImport(AppKit)
-            Task { @MainActor in
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-            }
-            #endif
         }
     }
 

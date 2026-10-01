@@ -5,7 +5,7 @@ import zlib
 final class ExtendedClipboardTests: XCTestCase {
     func testCompressedUnicodeClipboardDelivery() throws {
         let text = "中文 clipboard\nsecond line"
-        let utf8 = Data(text.utf8) + Data([0])
+        let utf8 = Data(text.replacingOccurrences(of: "\n", with: "\r\n").utf8) + Data([0])
         var plain = Data()
         plain.append(contentsOf: withUnsafeBytes(of: UInt32(utf8.count).bigEndian) { Array($0) })
         plain.append(utf8)

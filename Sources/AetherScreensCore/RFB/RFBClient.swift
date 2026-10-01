@@ -676,7 +676,7 @@ public final class RFBClient: @unchecked Sendable {
             guard count > 0, Int(count) <= Int(size) - 4 else { return }
             var bytes = Data(plain[4..<(4 + Int(count))])
             if bytes.last == 0 { bytes.removeLast() }
-            if let text = String(data: bytes, encoding: .utf8) { onClipboardReceived?(text) }
+            if let text = String(data: bytes, encoding: .utf8) { onClipboardReceived?(RFBEncoder.clipboardText(text, extended: false)) }
         }
     }
 
@@ -815,19 +815,22 @@ public final class RFBClient: @unchecked Sendable {
         }
     }
 
-    /// Send clipboard text to remote Mac.
-    public func sendCutText(_ text: String) {
+    /// Queue supported clipboard text. Acceptance does not acknowledge a remote paste.
+    @discardableResult
+    public func sendCutText(_ text: String) -> Bool {
         inputLock.lock()
         defer { inputLock.unlock() }
-        guard inputEnabled else { return }
-        guard text.utf8.count <= 1_048_000 else { return }
+        guard inputEnabled, state == .connected else { return false }
+        let normalized = RFBEncoder.clipboardText(text, extended: extendedClipboard)
+        guard normalized.utf8.count <= 1_048_000 else { return false }
         if extendedClipboard {
-            pendingClipboard = text
+            pendingClipboard = normalized
             sendExtendedClipboard(flags: 0x08000001)
         } else {
-            let data = RFBEncoder.encodeClientCutText(text)
+            guard let data = RFBEncoder.encodeClientCutText(normalized) else { return false }
             sendData(data)
         }
+        return true
     }
 
     // MARK: - Socket Helpers

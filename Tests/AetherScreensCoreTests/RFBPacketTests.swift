@@ -129,9 +129,20 @@ final class RFBPacketTests: XCTestCase {
         XCTAssertEqual(h, 600)
     }
 
-    func testEncoderClientCutText() {
+    func testLegacyClipboardUsesLatin1BytesAndLinefeedEndings() throws {
+        let packet = try XCTUnwrap(RFBEncoder.encodeClientCutText("café\r\nnaïve\rfin"))
+        XCTAssertEqual(Array(packet.suffix(from: 8)), [99, 97, 102, 233, 10, 110, 97, 239, 118, 101, 10, 102, 105, 110])
+        XCTAssertEqual(packet[7], 14)
+    }
+
+    func testLegacyClipboardRejectsUnrepresentableTextWithoutLossyConversion() {
+        XCTAssertNil(RFBEncoder.encodeClientCutText("中文 😀"))
+        XCTAssertEqual(RFBEncoder.clipboardText("a\nb\r\nc\rd", extended: true), "a\r\nb\r\nc\r\nd")
+    }
+
+    func testEncoderClientCutText() throws {
         let testString = "Hello from iPhone"
-        let data = RFBEncoder.encodeClientCutText(testString)
+        let data = try XCTUnwrap(RFBEncoder.encodeClientCutText(testString))
 
         XCTAssertEqual(data[0], RFBConstants.ClientMessageType.clientCutText.rawValue)
         let len = data.subdata(in: 4..<8).withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }
