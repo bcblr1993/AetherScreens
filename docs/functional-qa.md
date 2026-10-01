@@ -32,6 +32,7 @@ end-to-end latency. Record observable events and response behavior separately.
 - Real remote scrolling passed after moving the Apple server cursor before
   spacing wheel press/release events.
 - Actual Size, Pan View and Fit to Window were exercised in the installed GUI.
+- F8 was recorded as the correct remote key after reconnecting.
 - A 60-second authenticated 3840x2160 live session remained connected.
 - Ten click-specific full-background changes returned successfully: debug-build
   input-to-decoded-frame median 175 ms, maximum 225 ms. This excludes display
@@ -44,6 +45,9 @@ end-to-end latency. Record observable events and response behavior separately.
   into the focused remote field; this is not bidirectional clipboard synchronization.
 - Physical iPhone signed build passed; installation/gesture acceptance still
   require an unlocked phone. Lock/password entry/desktop restoration passed in the installed account session.
+  On this Mac the session can stop accepting input after the login transition;
+  reconnect restores it. A Reconnect action is available in the session menu and
+  lock notice, preserving the viewport and clearing held input.
   Direct physical IME and physical iPhone input acceptance remain gates.
 
 For repeatable response measurements, add `AETHERSCREENS_QA_LATENCY=1` to the

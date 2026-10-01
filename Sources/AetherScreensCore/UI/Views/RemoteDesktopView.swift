@@ -123,6 +123,7 @@ public struct RemoteDesktopView: View {
                     viewModel.sendNativeKey(down: down, keySym: keySym)
                 }
             )
+            .id(viewModel.inputGeneration)
             .frame(width: canvasWidth, height: canvasHeight)
             .position(x: originX + canvasWidth / 2, y: originY + canvasHeight / 2)
             #endif
@@ -160,6 +161,17 @@ public struct RemoteDesktopView: View {
                                 .background(Color.white.opacity(0.2), in: Capsule())
                         }
                         .buttonStyle(.plain)
+                        Button {
+                            viewModel.reconnectSession()
+                        } label: {
+                            Text("Reconnect")
+                                .font(.system(size: 11, weight: .semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.white.opacity(0.2), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Restore the session if input stops responding after unlocking")
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
@@ -453,6 +465,9 @@ public struct RemoteDesktopView: View {
                     viewModel.curtainManager.toggleCurtain()
                 } label: {
                     Label(viewModel.curtainManager.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac", systemImage: "lock")
+                }
+                Button { viewModel.reconnectSession() } label: {
+                    Label("Reconnect", systemImage: "arrow.clockwise")
                 }
             } label: {
                 controlIcon("ellipsis")

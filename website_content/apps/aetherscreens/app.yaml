@@ -62,10 +62,10 @@ features:
     - kicker: { zh: 画面, en: Display }
       title: { zh: Metal 渲染，双击切换缩放, en: Metal rendering with double-tap zoom }
       body:
-        zh: 远端画面直接上传为 GPU 纹理渲染；双击在「适合屏幕」与「原始像素」之间切换。
-        en: Remote frames are uploaded straight to GPU textures; double-tap switches between fit-to-screen and actual pixels.
+        zh: 远端画面直接上传为 GPU 纹理渲染；iPhone / iPad 双击切换缩放；Mac 提供适合窗口、实际尺寸、缩放和平移菜单。
+        en: Remote frames are uploaded straight to GPU textures; double-tap zooms on iPhone and iPad; Mac offers fit, actual size, zoom and pan controls.
       details:
-        - { zh: 可选的性能面板显示帧率、延迟与带宽。, en: An optional HUD shows frame rate, latency and bandwidth. }
+        - { zh: 性能面板显示本地绘制帧率与带宽；尚未测得的延迟显示为 —。, en: The HUD shows local draw rate and bandwidth; unmeasured latency is shown as —. }
         - { zh: 支持 Zlib、CopyRect 与 Raw 编码。, en: Supports Zlib, CopyRect and Raw encodings. }
     - kicker: { zh: 输入, en: Input }
       title: { zh: 虚拟触控板与 Mac 快捷键工具栏, en: Virtual trackpad and Mac shortcut toolbar }
@@ -82,7 +82,7 @@ faq:
   lead: { zh: 关于 AetherScreens 的常见问题。, en: Common questions about AetherScreens. }
   items:
     - q: { zh: 被控的 Mac 需要安装什么？, en: What do I install on the remote Mac? }
-      a: { zh: 不需要安装软件。在「系统设置 → 通用 → 共享」中打开「屏幕共享」，并在其选项里开启「VNC 使用者可以使用密码控制屏幕」、设置一个密码即可。, en: "Nothing. Turn on Screen Sharing in System Settings → General → Sharing, then enable “VNC viewers may control screen with password” and set a password." }
+      a: { zh: 不需要安装软件。在「系统设置 → 通用 → 共享」中打开「屏幕共享」，允许对应用户访问后，可用 Mac 用户名和账号密码连接；也可单独开启 VNC 密码，并在客户端留空用户名。, en: "Nothing. Turn on Screen Sharing in System Settings → General → Sharing, allow your Mac user, then connect with that username and account password. Alternatively, enable a VNC password and leave the client username empty." }
     - q: { zh: 在外面怎么连回家里的 Mac？, en: How do I reach my Mac from outside? }
       a: { zh: 让客户端设备和被控 Mac 登录同一个 Tailscale 网络，然后用 Mac 的 100.x.y.z 地址连接。连接经 Tailscale 端到端加密。, en: "Sign both devices in to the same Tailscale network and connect to the Mac’s 100.x.y.z address. The connection is end-to-end encrypted by Tailscale." }
     - q: { zh: 会上传我的数据吗？, en: Is any of my data uploaded? }

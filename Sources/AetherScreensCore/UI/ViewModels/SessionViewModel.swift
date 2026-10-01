@@ -66,6 +66,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     @Published public var actualSizeZoomScale: CGFloat = 2
     @Published public var isPanningViewport: Bool = false
+    @Published public private(set) var inputGeneration = UUID()
     private var frameCountSinceLastSnapshot: Int = 0
 
     public init(device: RemoteDevice, password: String?) {
@@ -237,6 +238,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         hasReceivedFirstFrame = false
         downloadProgress = nil
         client.connect()
+    }
+
+    /// Reauthenticate without leaving the viewport; also clear held local input.
+    public func reconnectSession() {
+        releaseAllModifiers()
+        client.disconnect()
+        inputGeneration = UUID()
+        if curtainManager.isCurtainActive { curtainManager.toggleCurtain() }
+        startSession()
     }
 
     /// Disconnect from remote Mac
