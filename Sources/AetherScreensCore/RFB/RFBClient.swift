@@ -532,25 +532,34 @@ public final class RFBClient: @unchecked Sendable {
                 }
 
             case .zlib:
-                // 4 bytes: length (UInt32 big endian)
-                self.readExact(4) { [weak self] lenData in
-                    guard let self = self, let lenData = lenData else { return }
-                    let compressedLength = Int(lenData.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
-                    let expectedBytes = Int(header.width) * Int(header.height) * 4
-                    self.readExact(compressedLength) { [weak self] compressedData in
-                        guard let self = self, let compressedData = compressedData else { return }
-                        if let decompressed = self.zlibDecompressor.decompress(data: compressedData, expectedBytes: expectedBytes) {
-                            self.updateHasPixels = expectedBytes > 0 || self.updateHasPixels
-                            self.framebuffer.updateRect(
-                                x: Int(header.x),
-                                y: Int(header.y),
-                                width: Int(header.width),
-                                height: Int(header.height),
-                                rawData: decompressed
-                            )
-                        } else {
-                            AppLogger.shared.error("Zlib decompression failed for rect \(header.width)x\(header.height)", category: "RFB")
+                guard let sourceConnection = self.connection else { return }
+                let width = Int(header.width), height = Int(header.height)
+                guard width > 0, height > 0,
+                      Int(header.x) + width <= self.framebuffer.width,
+                      Int(header.y) + height <= self.framebuffer.height,
+                      width <= ZRLEDecoder.maximumPixelBytes / 4 / height else {
+                    self.handleFailure("Invalid Zlib rectangle size")
+                    return
+                }
+                let expectedBytes = width * height * 4
+                self.readExact(4) { [weak self] lengthData in
+                    guard let self, let lengthData, self.connection === sourceConnection else { return }
+                    let length = Int(lengthData.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
+                    guard length > 0, length <= expectedBytes * 2 + 1024 else {
+                        self.handleFailure("Invalid Zlib compressed length")
+                        return
+                    }
+                    self.readExact(length) { [weak self] compressed in
+                        guard let self, let compressed, self.connection === sourceConnection else { return }
+                        let decoded = self.zlibDecompressor.decompress(data: compressed, expectedBytes: expectedBytes)
+                        guard self.connection === sourceConnection else { return }
+                        guard let pixels = decoded else {
+                            self.handleFailure("Invalid Zlib pixel data")
+                            return
                         }
+                        self.framebuffer.updateRect(x: Int(header.x), y: Int(header.y), width: width,
+                                                    height: height, rawData: pixels)
+                        self.updateHasPixels = true
                         self.readRectangles(count: count - 1)
                     }
                 }

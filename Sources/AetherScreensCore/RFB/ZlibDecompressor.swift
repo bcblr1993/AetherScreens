@@ -1,7 +1,7 @@
 import Foundation
 import zlib
 
-/// Persistent stream decompressor for RFB Zlib encoding (RFC 6143 Section 7.7.5).
+/// Persistent stream decompressor for the RFB Zlib encoding extension (type 6).
 /// In RFB, a single continuous zlib stream is shared across all rectangles and updates.
 public final class ZlibDecompressor: @unchecked Sendable {
     private var stream = z_stream()
@@ -61,38 +61,10 @@ public final class ZlibDecompressor: @unchecked Sendable {
         return success ? output : nil
     }
 
-    /// Decompresses `data` into expected uncompressed `expectedBytes`.
+    /// Decode exactly one rectangle, consuming its entire compressed payload.
     public func decompress(data: Data, expectedBytes: Int) -> Data? {
-        guard isInitialized, !data.isEmpty, expectedBytes > 0 else { return nil }
-
-        var output = Data(count: expectedBytes)
-        var producedBytes: Int?
-
-        let success = data.withUnsafeBytes { inPtr -> Bool in
-            guard let inBase = inPtr.baseAddress?.assumingMemoryBound(to: Bytef.self) else { return false }
-            stream.next_in = UnsafeMutablePointer(mutating: inBase)
-            stream.avail_in = uInt(data.count)
-
-            return output.withUnsafeMutableBytes { outPtr -> Bool in
-                guard let outBase = outPtr.baseAddress?.assumingMemoryBound(to: Bytef.self) else { return false }
-                stream.next_out = outBase
-                stream.avail_out = uInt(expectedBytes)
-
-                let status = inflate(&stream, Z_SYNC_FLUSH)
-                if status == Z_OK || status == Z_STREAM_END {
-                    producedBytes = expectedBytes - Int(stream.avail_out)
-                    if status == Z_STREAM_END {
-                        inflateReset(&stream)
-                    }
-                    return true
-                }
-                return false
-            }
-        }
-
-        if success, let produced = producedBytes {
-            return output.prefix(produced)
-        }
-        return nil
+        guard let output = decompress(data: data, maximumBytes: expectedBytes),
+              output.count == expectedBytes else { return nil }
+        return output
     }
 }

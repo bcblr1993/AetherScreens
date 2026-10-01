@@ -263,3 +263,6 @@
 "Invalid ZRLE compressed length" = "Invalid ZRLE compressed length";
 "Invalid ZRLE pixel data" = "Invalid ZRLE pixel data";
 "Network round-trip time; excludes remote processing and display delay." = "Network round-trip time; excludes remote processing and display delay.";
+"Invalid Zlib rectangle size" = "Invalid Zlib rectangle size";
+"Invalid Zlib compressed length" = "Invalid Zlib compressed length";
+"Invalid Zlib pixel data" = "Invalid Zlib pixel data";

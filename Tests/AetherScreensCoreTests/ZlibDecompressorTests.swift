@@ -3,6 +3,25 @@ import zlib
 @testable import AetherScreensCore
 
 final class ZlibDecompressorTests: XCTestCase {
+    func testContinuousRectanglesPreserveDictionaryAndExactPixels() throws {
+        let compressor = try ZRLETestDeflater()
+        let decoder = ZlibDecompressor()
+        for index in 0..<512 {
+            let size = index.isMultiple(of: 3) ? 65_540 : 4
+            let pixels = Data((0..<size).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ index) })
+            let compressed = try compressor.compress(pixels)
+            XCTAssertEqual(decoder.decompress(data: compressed, expectedBytes: size), pixels,
+                           "Persistent rectangle \(index) must preserve its complete pixel payload")
+        }
+    }
+
+    func testRejectsShortAndOversizedPixelPayloads() throws {
+        let pixels = Data([1, 2, 3, 255, 4, 5, 6, 255])
+        let compressed = try ZRLETestDeflater().compress(pixels)
+        XCTAssertNil(ZlibDecompressor().decompress(data: compressed, expectedBytes: 12))
+        XCTAssertNil(ZlibDecompressor().decompress(data: compressed, expectedBytes: 4))
+    }
+
     func testDecompressValidStream() throws {
         let decompressor = ZlibDecompressor()
         

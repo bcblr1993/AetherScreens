@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 161 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 167 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -606,3 +606,41 @@ verify every received framebuffer byte and reconnect behavior with the new
 allocation. No UI layout or gesture mapping changed in that correction.
 The full original acceptance remains incomplete and awaits the separate
 physical/Apple-server gates listed above.
+
+
+### Exact Zlib rectangle acceptance — 2026-10-01
+
+The subsequent Zlib audit reproduced an independent correctness defect:
+`decompress(expectedBytes:)` accepted both an eight-byte output for a declared
+twelve-byte rectangle and the first four bytes of an eight-byte output for a
+four-byte rectangle. Both rejection assertions failed against the previous
+implementation (`/tmp/aetherscreens-zlib-exact-before.log`). The separate
+512-rectangle persistent-stream test passed before the fix; this audit does
+not claim that valid continuous Zlib updates were previously broken.
+
+The exact-size decoder now uses bounded, fully consumed inflation and requires
+exactly the declared pixel count. The Zlib transport validates rectangle bounds
+and compressed lengths before reading/allocating, checks connection identity
+around reads and decoding, and fails instead of publishing a malformed frame.
+The new failure messages have matching English and Chinese catalog entries.
+This follows the [RFB Zlib extension definition](https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst#zlib-encoding):
+one ordered stream per connection carrying Raw-format rectangle pixels.
+
+Actual TCP tests verify short/oversized pixel payloads, oversized announced
+length and out-of-bounds rectangles preserve the preceding valid framebuffer.
+The mixed-encoding test now receives five rectangles including two ordinary
+Zlib rectangles interleaved with persistent ZRLE and Raw, and repeats after
+reconnect. The 512-rectangle test alternates four-byte and 65,540-byte payloads
+and checks complete pixel equality on every update.
+
+All 167 core tests completed with five environment skips and zero failures
+(`/tmp/aetherscreens-zlib-bounded-core.log`). Mac Release and fresh signed iOS
+Release builds passed (`/tmp/aetherscreens-zlib-bounded-mac.log`,
+`/tmp/aetherscreens-zlib-bounded-ios.log`); explicit deep/strict iOS signature
+verification passed (`/tmp/aetherscreens-zlib-bounded-signature.log`). The iOS
+build emitted only its existing AppIntents metadata-extraction warning. This
+transport-only change does not rerun or replace the prior ten-case controlled
+UI evidence, nor prove physical-device fluidity. Current read-only device
+inspection still finds the 12 Pro connected and the 16 Pro Max paired rather
+than connected (`/tmp/aetherscreens-current-devices-oct1.json`). Full physical
+acceptance and user review remain open; nothing has been publicly released.

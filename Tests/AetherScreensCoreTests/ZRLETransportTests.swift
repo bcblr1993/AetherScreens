@@ -58,6 +58,7 @@ final class ZRLETransportTests: XCTestCase {
                 Self.rectangle(.zrle, x: 0, y: 0, width: 4, height: 2, compressed: try zrle.compress(Data([1, 1, 2, 3]))),
                 Self.rectangle(.zlib, x: 0, y: 0, width: 2, height: 1, compressed: try zlib.compress(Data([20, 30, 40, 255, 20, 30, 40, 255]))),
                 Self.rectangle(.zrle, x: 1, y: 1, width: 2, height: 1, compressed: try zrle.compress(Data([2, 21, 22, 23, 31, 32, 33, 0x40]))),
+                Self.rectangle(.zlib, x: 2, y: 0, width: 1, height: 1, compressed: try zlib.compress(Data([20, 30, 40, 255]))),
                 Self.rectangle(.raw, x: 3, y: 0, width: 1, height: 1, payload: Data([61, 62, 63, 255]))
             ]
         }
@@ -65,11 +66,11 @@ final class ZRLETransportTests: XCTestCase {
         wait(for: [ready], timeout: 3)
         let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue)
         defer { client.disconnect() }
-        let expected = [UInt8](arrayLiteral: 20,30,40,255, 20,30,40,255, 1,2,3,255, 61,62,63,255,
+        let expected = [UInt8](arrayLiteral: 20,30,40,255, 20,30,40,255, 20,30,40,255, 61,62,63,255,
                               1,2,3,255, 21,22,23,255, 31,32,33,255, 1,2,3,255)
         for _ in 0..<2 {
-            let frames = expectation(description: "Four mixed actual wire rectangles decoded")
-            frames.expectedFulfillmentCount = 4
+            let frames = expectation(description: "Five mixed actual wire rectangles decoded")
+            frames.expectedFulfillmentCount = 5
             client.onFrameUpdated = { frames.fulfill() }
             client.connect()
             wait(for: [frames], timeout: 5)
@@ -92,6 +93,29 @@ final class ZRLETransportTests: XCTestCase {
                                              expectedReason: "Invalid ZRLE pixel data")
     }
 
+    func testShortZlibPayloadFailsWithoutPublishingOrOverwritingPixels() throws {
+        let compressed = try ZRLETestDeflater().compress(Data([1, 2, 3, 255]))
+        try assertFailurePreservesFramebuffer(Self.rectangle(.zlib, x: 1, y: 1, width: 2, height: 1, compressed: compressed),
+                                             expectedReason: "Invalid Zlib pixel data")
+    }
+
+    func testOversizedZlibPayloadFailsWithoutPublishingOrOverwritingPixels() throws {
+        let compressed = try ZRLETestDeflater().compress(Data([1, 2, 3, 255, 4, 5, 6, 255]))
+        try assertFailurePreservesFramebuffer(Self.rectangle(.zlib, x: 1, y: 1, width: 1, height: 1, compressed: compressed),
+                                             expectedReason: "Invalid Zlib pixel data")
+    }
+
+    func testOversizedZlibLengthFailsBeforeReadingPayload() throws {
+        var packet = Self.rectangle(.zlib, x: 0, y: 0, width: 4, height: 2, payload: Data())
+        packet.append(contentsOf: [255, 255, 255, 255])
+        try assertFailurePreservesFramebuffer(packet, expectedReason: "Invalid Zlib compressed length")
+    }
+
+    func testOutOfBoundsZlibRectangleFailsBeforeReadingLength() throws {
+        try assertFailurePreservesFramebuffer(Self.rectangle(.zlib, x: 3, y: 1, width: 2, height: 1, payload: Data()),
+                                             expectedReason: "Invalid Zlib rectangle size")
+    }
+
     func testOversizedAnnouncedLengthFailsBeforeReadingPayload() throws {
         var packet = Self.rectangle(.zrle, x: 0, y: 0, width: 4, height: 2, payload: Data())
         packet.append(contentsOf: [255, 255, 255, 255])
@@ -109,7 +133,7 @@ final class ZRLETransportTests: XCTestCase {
         let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue)
         defer { client.disconnect() }
         let first = expectation(description: "Valid framebuffer received")
-        let failed = expectation(description: "Invalid ZRLE rejected")
+        let failed = expectation(description: "Invalid compressed rectangle rejected")
         let counts = ZRLEFrameCounter()
         client.onFrameUpdated = { counts.increment(); first.fulfill() }
         client.onStateChanged = { if case .failed(let reason) = $0 { XCTAssertEqual(reason, expectedReason); failed.fulfill() } }

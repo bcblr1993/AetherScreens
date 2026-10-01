@@ -5,7 +5,7 @@ import Foundation
 /// RFBClient confines dictionary access and reset to its serial connection queue.
 final class ZRLEDecoder {
     private let decompressor = ZlibDecompressor()
-    private static let maximumPixelBytes = 256 * 1024 * 1024
+    static let maximumPixelBytes = 256 * 1024 * 1024
 
     func reset() { decompressor.reset() }
 

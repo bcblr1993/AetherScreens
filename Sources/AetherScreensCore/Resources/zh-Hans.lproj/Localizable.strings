@@ -263,3 +263,6 @@
 "Invalid ZRLE compressed length" = "远端压缩画面数据长度无效";
 "Invalid ZRLE pixel data" = "远端压缩画面数据无效";
 "Network round-trip time; excludes remote processing and display delay." = "网络往返时间，不包含远端处理和显示延迟。";
+"Invalid Zlib rectangle size" = "远端压缩画面尺寸无效";
+"Invalid Zlib compressed length" = "远端压缩画面数据长度无效";
+"Invalid Zlib pixel data" = "远端压缩画面数据无效";
