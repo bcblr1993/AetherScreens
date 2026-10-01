@@ -71,12 +71,14 @@ public final class RFBClient: @unchecked Sendable {
         let conn = NWConnection(host: nwHost, port: nwPort, using: params)
         self.connection = conn
 
-        conn.stateUpdateHandler = { [weak self] connState in
-            guard let self = self else { return }
+        conn.stateUpdateHandler = { [weak self, weak conn] connState in
+            guard let self = self, let conn = conn, self.connection === conn else { return }
             switch connState {
             case .ready:
                 AppLogger.shared.info("TCP socket established with \(self.host):\(self.port)", category: "Network")
                 self.startHandshake()
+            case .waiting(let error):
+                self.handleFailure("Network unavailable: \(error.localizedDescription). Allow AetherScreens in System Settings > Privacy & Security > Local Network, and check your LAN or Tailscale connection.")
             case .failed(let error):
                 AppLogger.shared.error("TCP connection failed: \(error.localizedDescription)", category: "Network")
                 self.handleFailure("Connection failed: \(error.localizedDescription)")
@@ -89,6 +91,10 @@ public final class RFBClient: @unchecked Sendable {
         }
 
         conn.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + 20) { [weak self, weak conn] in
+            guard let self = self, let conn = conn, self.connection === conn, self.state == .connecting else { return }
+            self.handleFailure("Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection.")
+        }
     }
 
     /// Disconnect current session.
@@ -521,7 +527,10 @@ public final class RFBClient: @unchecked Sendable {
         let needed = count - readBuffer.count
         let maxReceive = min(max(needed, 65536), 1048576) // cap at 1MB per receive
         conn.receive(minimumIncompleteLength: 1, maximumLength: maxReceive) { [weak self] content, context, isComplete, error in
-            guard let self = self else { return }
+            guard let self = self, self.connection === conn else {
+                completion(nil)
+                return
+            }
             let receivedBytes = content?.count ?? 0
             if receivedBytes > 0 {
                 self.readBuffer.append(content!)

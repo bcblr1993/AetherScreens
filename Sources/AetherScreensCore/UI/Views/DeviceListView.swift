@@ -468,6 +468,7 @@ public struct TailscaleSettingsSheet: View {
                     .padding(.vertical, 4)
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle("Tailscale Settings")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
@@ -480,5 +481,8 @@ public struct TailscaleSettingsSheet: View {
                 }
             }
         }
+        #if os(macOS)
+        .frame(width: 540, height: 480)
+        #endif
     }
 }

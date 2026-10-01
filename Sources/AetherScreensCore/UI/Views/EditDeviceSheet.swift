@@ -24,9 +24,19 @@ public struct EditDeviceSheet: View {
             Form {
                 Section(header: Text("Device Information")) {
                     TextField("Name", text: $name)
-                    TextField("Host / Tailscale IP", text: $host)
+                    TextField("Tailscale IP / Host (e.g. 100.80.1.25)", text: $host)
                         .autocorrectionDisabled()
-                    TextField("Port", text: $portString)
+                        #if canImport(UIKit)
+                        .keyboardType(.URL)
+                        #endif
+                    LabeledContent("Port") {
+                        TextField("Port", text: $portString)
+                            .accessibilityLabel("Port")
+                            .multilineTextAlignment(.trailing)
+                            #if canImport(UIKit)
+                            .keyboardType(.numberPad)
+                            #endif
+                    }
                 }
 
                 Section(header: Text("Operating System")) {
@@ -39,7 +49,7 @@ public struct EditDeviceSheet: View {
 
                 Section(
                     header: Text("Authentication"),
-                    footer: Text("Saved in macOS Keychain. Enter a new password to update or leave unchanged.")
+                    footer: Text("Saved in the system Keychain. Enter a new password to update or leave unchanged.")
                 ) {
                     SecureField("VNC Password", text: $password)
                         .onChange(of: password) { _, _ in
@@ -55,6 +65,7 @@ public struct EditDeviceSheet: View {
                         .autocorrectionDisabled()
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle("Edit Computer")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
@@ -68,7 +79,7 @@ public struct EditDeviceSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let port = UInt16(portString) ?? device.port
+                        guard let port = UInt16(portString), port > 0 else { return }
                         var updatedDev = device
                         updatedDev.name = name.trimmingCharacters(in: .whitespaces).isEmpty ? host : name
                         updatedDev.host = host.trimmingCharacters(in: .whitespaces)
@@ -82,7 +93,7 @@ public struct EditDeviceSheet: View {
                         viewModel.reload()
                         dismiss()
                     }
-                    .disabled(host.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || UInt16(portString) == nil || UInt16(portString) == 0)
                 }
             }
             .onAppear {
@@ -98,7 +109,7 @@ public struct EditDeviceSheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 400)
+        .frame(width: 540, height: 600)
         #endif
     }
 }

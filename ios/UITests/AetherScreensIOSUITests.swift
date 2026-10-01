@@ -39,7 +39,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(computer.waitForExistence(timeout: 5))
         computer.tap()
         XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 8))
-        let loading = app.staticTexts["正在同步远程桌面..."]
+        let loading = app.staticTexts["Loading remote desktop…"]
         XCTAssertTrue(loading.waitForNonExistence(timeout: 10))
         attachScreenshot(app, name: "Synthetic Remote Frame")
         XCUIDevice.shared.orientation = .landscapeLeft
@@ -54,6 +54,48 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Hide Keyboard"].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "Remote Keyboard")
         app.buttons["Disconnect"].tap()
+    }
+
+    func testLiveRemoteSession() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let host = env["AETHERSCREENS_LIVE_HOST"],
+              let password = env["AETHERSCREENS_LIVE_PASSWORD"] else {
+            throw XCTSkip("Set live host and password in the test runner environment")
+        }
+        let app = XCUIApplication()
+        app.launch()
+        app.buttons["Add Computer"].tap()
+        let name = app.textFields["Name (e.g. Studio Mac)"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("QA Live Mac")
+        let address = app.textFields["Tailscale IP / Host (e.g. 100.80.1.25)"]
+        address.tap()
+        address.typeText(host)
+        let secret = app.secureTextFields["VNC Password (Optional)"]
+        secret.tap()
+        secret.typeText(password)
+        app.buttons["Save"].tap()
+        let computer = app.buttons["Connect to QA Live Mac"].firstMatch
+        XCTAssertTrue(computer.waitForExistence(timeout: 10))
+        if !computer.isHittable { app.swipeUp() }
+        computer.tap()
+        XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 60))
+        XCTAssertFalse(app.buttons["Retry"].exists)
+        attachScreenshot(app, name: "Live Mac First Frame")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertGreaterThan(app.windows.firstMatch.frame.width, app.windows.firstMatch.frame.height)
+        XCTAssertTrue(app.buttons["Disconnect"].isHittable)
+        attachScreenshot(app, name: "Live Mac Landscape")
+        XCUIDevice.shared.orientation = .portrait
+        Thread.sleep(forTimeInterval: 1)
+        app.buttons["Show Keyboard"].tap()
+        XCTAssertTrue(app.buttons["Hide Keyboard"].waitForExistence(timeout: 5))
+        attachScreenshot(app, name: "Live Mac Keyboard")
+        app.buttons["Disconnect"].tap()
+        XCTAssertTrue(app.buttons["Add Computer"].waitForExistence(timeout: 10))
     }
 
     private func ensureLoopbackComputer(in app: XCUIApplication) -> XCUIElement {

@@ -41,8 +41,8 @@ hero:
     en: "Client: Apple silicon Mac (macOS 14+) or iPhone / iPad (iOS 17+) · Remote: a Mac with Screen Sharing on"
 
 notice:
-  zh: 开发中，暂未提供下载。目前需要在被控 Mac 的屏幕共享设置里开启「VNC 使用者可以使用密码控制屏幕」。
-  en: In development; no download yet. The remote Mac currently needs “VNC viewers may control screen with password” enabled in Screen Sharing settings.
+  zh: macOS 首版现已提供下载；iPhone / iPad 暂需通过 Xcode 安装。目前需要在被控 Mac 的屏幕共享设置里开启「VNC 使用者可以使用密码控制屏幕」。
+  en: The first macOS release is available; iPhone / iPad currently require an Xcode installation. The remote Mac needs “VNC viewers may control screen with password” enabled in Screen Sharing settings.
 
 features:
   eyebrow: { zh: 功能, en: Features }
@@ -89,5 +89,5 @@ faq:
       a: { zh: 不会。画面与输入只在你的设备和被控 Mac 之间直接传输；只有在你填写 Tailscale API Token 并同步设备时，才会访问 Tailscale 官方接口。, en: No. Screen and input data travel directly between your device and the remote Mac. The Tailscale API is contacted only when you enter a token and sync devices. }
 
 cta:
-  title: { zh: 正在开发中，敬请期待。, en: In development. Stay tuned. }
+  title: { zh: 下载 AetherScreens for Mac。, en: Download AetherScreens for Mac. }
   note: { zh: Apple 芯片 Mac · macOS 14+ ／ iPhone、iPad · iOS 17+, en: Apple silicon Mac · macOS 14+ / iPhone, iPad · iOS 17+ }

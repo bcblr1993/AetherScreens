@@ -35,6 +35,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
         TARGETED_DEVICE_FAMILY: '1,2'
         SWIFT_VERSION: '5.9'
   AetherScreensIOSUITests:
@@ -48,4 +50,5 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios.uitests
+        GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: '5.9'

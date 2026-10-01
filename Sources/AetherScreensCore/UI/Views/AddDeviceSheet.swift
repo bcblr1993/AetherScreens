@@ -26,10 +26,14 @@ public struct AddDeviceSheet: View {
                         #if canImport(UIKit)
                         .keyboardType(.URL)
                         #endif
-                    TextField("Port", text: $portString)
-                        #if canImport(UIKit)
-                        .keyboardType(.numberPad)
-                        #endif
+                    LabeledContent("Port") {
+                        TextField("Port", text: $portString)
+                            .accessibilityLabel("Port")
+                            .multilineTextAlignment(.trailing)
+                            #if canImport(UIKit)
+                            .keyboardType(.numberPad)
+                            #endif
+                    }
                 }
 
                 Section(header: Text("Operating System")) {
@@ -55,6 +59,7 @@ public struct AddDeviceSheet: View {
                         .autocorrectionDisabled()
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle("Add Computer")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
@@ -68,11 +73,11 @@ public struct AddDeviceSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let port = UInt16(portString) ?? RFBConstants.defaultPort
+                        guard let port = UInt16(portString), port > 0 else { return }
                         let finalName = name.isEmpty ? host : name
                         viewModel.addDevice(
                             name: finalName,
-                            host: host,
+                            host: host.trimmingCharacters(in: .whitespacesAndNewlines),
                             port: port,
                             type: deviceType,
                             password: password.isEmpty ? nil : password,
@@ -80,12 +85,12 @@ public struct AddDeviceSheet: View {
                         )
                         dismiss()
                     }
-                    .disabled(host.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || UInt16(portString) == nil || UInt16(portString) == 0)
                 }
             }
         }
         #if os(macOS)
-        .frame(minWidth: 480, minHeight: 500)
+        .frame(width: 540, height: 600)
         #endif
     }
 }

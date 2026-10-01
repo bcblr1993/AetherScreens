@@ -106,8 +106,8 @@ final class TailscaleLiveHandshakeTests: XCTestCase {
                 }
 
             case .failed(let err):
-                // If Tailscale node is unreachable in this test environment, pass gracefully
-                print("[TailscaleLiveHandshakeTests] Node \(self.targetHost) unreachable: \(err)")
+                // Explicitly requested live acceptance must fail when the host is unreachable.
+                XCTFail("Live Screen Sharing host is unreachable: \(err)")
                 expectation.fulfill()
 
             default:
@@ -129,13 +129,13 @@ final class TailscaleLiveHandshakeTests: XCTestCase {
             }
         }
 
-        guard let targetDev = dev,
-              let pwd = DeviceStore.shared.getPassword(for: targetDev), !pwd.isEmpty else {
-            print("[TailscaleLiveHandshakeTests] No saved password found for \(targetHost), skipping full session test")
-            return
+        let configuredPassword = ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_PASSWORD"]
+        let savedPassword = dev.flatMap { DeviceStore.shared.getPassword(for: $0) }
+        guard let pwd = configuredPassword ?? savedPassword, !pwd.isEmpty else {
+            throw XCTSkip("Provide AETHERSCREENS_LIVE_PASSWORD or save a password in Keychain for full live acceptance")
         }
 
-        print("[TailscaleLiveHandshakeTests] Found saved password for \(targetHost), running live session test...")
+        print("[TailscaleLiveHandshakeTests] Using supplied or Keychain password for \(targetHost), running live session test...")
         let frameExpectation = expectation(description: "Receive at least 1 screen frame from remote Mac")
         frameExpectation.assertForOverFulfill = false
 
@@ -150,6 +150,21 @@ final class TailscaleLiveHandshakeTests: XCTestCase {
 
         client.connect()
         wait(for: [frameExpectation], timeout: 60.0)
+        let stableSession = expectation(description: "Live connection remains active for 60 seconds")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+            XCTAssertEqual(client.state, .connected)
+            XCTAssertGreaterThan(client.framebuffer.width, 0)
+            XCTAssertGreaterThan(client.framebuffer.height, 0)
+            stableSession.fulfill()
+        }
+        wait(for: [stableSession], timeout: 65)
+        let unexpectedFailure = expectation(description: "Intentional disconnect must not fail")
+        unexpectedFailure.isInverted = true
+        client.onStateChanged = { state in
+            if case .failed = state { unexpectedFailure.fulfill() }
+        }
         client.disconnect()
+        wait(for: [unexpectedFailure], timeout: 1)
+        XCTAssertEqual(client.state, .disconnected)
     }
 }

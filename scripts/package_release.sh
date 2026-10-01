@@ -1,133 +1,68 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR"
-
-# 签名证书名称不进仓库：写在 scripts/signing.local.env（已被 git 忽略），或直接设置环境变量。
-#   AETHERSCREENS_SIGNING_IDENTITY="Developer ID Application: <Name> (<TEAMID>)"
 if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
-SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:-}"
-if [ -z "$SIGNING_IDENTITY" ]; then
-    echo "Error: set AETHERSCREENS_SIGNING_IDENTITY (or create scripts/signing.local.env)"
-    exit 1
-fi
+VERSION="${AETHERSCREENS_VERSION:-1.0.0}"
+BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-1}"
+SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
+NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
+OUTPUT="$DIR/build/release"
+mkdir -p "$OUTPUT"
+STAGE="$(mktemp -d "$OUTPUT/staging.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
 
-echo "===> 0. Running all automated test scenarios (58+ tests)..."
 swift test
-
-echo "===> 1. Building release binary (arm64)..."
-swift build -c release
-
-RELEASE_BIN="$DIR/.build/arm64-apple-macosx/release/AetherScreensApp"
-if [ ! -f "$RELEASE_BIN" ]; then
-    echo "Error: Release binary not found at $RELEASE_BIN"
-    exit 1
-fi
-
-echo "===> 2. Generating AppIcon.icns..."
-mkdir -p AppIcon.iconset
-sips -z 16 16     AppIcon_1024.png --out AppIcon.iconset/icon_16x16.png > /dev/null
-sips -z 32 32     AppIcon_1024.png --out AppIcon.iconset/icon_16x16@2x.png > /dev/null
-sips -z 32 32     AppIcon_1024.png --out AppIcon.iconset/icon_32x32.png > /dev/null
-sips -z 64 64     AppIcon_1024.png --out AppIcon.iconset/icon_32x32@2x.png > /dev/null
-sips -z 128 128   AppIcon_1024.png --out AppIcon.iconset/icon_128x128.png > /dev/null
-sips -z 256 256   AppIcon_1024.png --out AppIcon.iconset/icon_128x128@2x.png > /dev/null
-sips -z 256 256   AppIcon_1024.png --out AppIcon.iconset/icon_256x256.png > /dev/null
-sips -z 512 512   AppIcon_1024.png --out AppIcon.iconset/icon_256x256@2x.png > /dev/null
-sips -z 512 512   AppIcon_1024.png --out AppIcon.iconset/icon_512x512.png > /dev/null
-sips -z 1024 1024 AppIcon_1024.png --out AppIcon.iconset/icon_512x512@2x.png > /dev/null
-iconutil -c icns AppIcon.iconset -o AppIcon.icns
-rm -rf AppIcon.iconset
-
-echo "===> 3. Assembling AetherScreens.app bundle..."
-APP_DIR="$DIR/build/release/AetherScreens.app"
-rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/Contents/MacOS"
-mkdir -p "$APP_DIR/Contents/Resources"
-
+swift build -c release --arch arm64
+RELEASE_BIN="$(swift build -c release --arch arm64 --show-bin-path)/AetherScreensApp"
+APP_DIR="$STAGE/AetherScreens.app"
+mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$RELEASE_BIN" "$APP_DIR/Contents/MacOS/AetherScreens"
 cp AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
-
-cat << 'EOF' > "$APP_DIR/Contents/Info.plist"
+cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
-    <key>CFBundleExecutable</key>
-    <string>AetherScreens</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.aethernative.aetherscreens</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>AetherScreens</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2026 Aether Native. All rights reserved.</string>
-    <key>NSPrincipalClass</key>
-    <string>NSApplication</string>
-    <key>NSLocalNetworkUsageDescription</key>
-    <string>AetherScreens uses Bonjour to automatically discover nearby Macs with Screen Sharing enabled on your local network.</string>
-    <key>NSBonjourServices</key>
-    <array>
-        <string>_rfb._tcp</string>
-        <string>_apple-sas._tcp</string>
-    </array>
-</dict>
-</plist>
-EOF
-
-cat << 'EOF' > "$APP_DIR/Contents/MacOS/AetherScreens.entitlements"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.app-sandbox</key>
-    <false/>
-    <key>com.apple.security.network.client</key>
-    <true/>
-    <key>com.apple.security.network.server</key>
-    <true/>
-</dict>
-</plist>
-EOF
-
-echo "===> 4. Signing AetherScreens.app with Developer ID Application..."
-
-codesign --force --options runtime --timestamp \
-    --entitlements "$APP_DIR/Contents/MacOS/AetherScreens.entitlements" \
-    --sign "$SIGNING_IDENTITY" \
-    --deep "$APP_DIR"
-
-echo "===> 5. Verifying code signature..."
-codesign -vvv --deep --strict "$APP_DIR"
-
-echo "===> 6. Packaging distributable Zip..."
-cd "$DIR/build/release"
-rm -f "AetherScreens-macOS-AppleSilicon-v1.0.0.zip"
-zip -r -q "AetherScreens-macOS-AppleSilicon-v1.0.0.zip" "AetherScreens.app"
-
-echo "===> 7. Installing to /Applications/AetherScreens.app..."
-rm -rf /Applications/AetherScreens.app
-cp -R "$APP_DIR" /Applications/AetherScreens.app
-codesign -vvv --deep --strict /Applications/AetherScreens.app
-
-echo "===> Formal Release Build, Testing, Signing & Installation Complete!"
-echo "App Bundle: /Applications/AetherScreens.app"
-echo "Distributable Zip: $DIR/build/release/AetherScreens-macOS-AppleSilicon-v1.0.0.zip"
+<plist version="1.0"><dict>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleExecutable</key><string>AetherScreens</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>CFBundleIdentifier</key><string>com.aethernative.aetherscreens</string>
+<key>CFBundleName</key><string>AetherScreens</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>$VERSION</string>
+<key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
+<key>LSMinimumSystemVersion</key><string>14.0</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSPrincipalClass</key><string>NSApplication</string>
+<key>NSHumanReadableCopyright</key><string>Copyright © 2026 Aether Native.</string>
+<key>NSLocalNetworkUsageDescription</key><string>Discover nearby Macs with Screen Sharing enabled.</string>
+<key>NSBonjourServices</key><array><string>_rfb._tcp</string><string>_apple-sas._tcp</string></array>
+</dict></plist>
+PLIST
+codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP_DIR"
+codesign --verify --deep --strict "$APP_DIR"
+NOTARY_ZIP="$STAGE/notarization.zip"
+ditto -c -k --keepParent "$APP_DIR" "$NOTARY_ZIP"
+xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait --timeout 10m --output-format json > "$OUTPUT/notarization-$VERSION.json"
+python3 - "$OUTPUT/notarization-$VERSION.json" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1]))
+if result.get('status') != 'Accepted':
+    raise SystemExit('Notarization failed: ' + str(result.get('status')))
+PY
+xcrun stapler staple "$APP_DIR"
+xcrun stapler validate "$APP_DIR"
+spctl --assess --type execute --verbose "$APP_DIR"
+ZIP="$OUTPUT/AetherScreens-macOS-AppleSilicon-v$VERSION.zip"
+DMG="$OUTPUT/AetherScreens-macOS-AppleSilicon-v$VERSION.dmg"
+ditto -c -k --keepParent "$APP_DIR" "$ZIP"
+ln -s /Applications "$STAGE/Applications"
+rm "$NOTARY_ZIP"
+hdiutil create -volname "AetherScreens $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+codesign --timestamp --sign "$SIGNING_IDENTITY" "$DMG"
+ditto "$APP_DIR" "$OUTPUT/AetherScreens.app"
+shasum -a 256 "$ZIP" "$DMG" > "$OUTPUT/SHA256SUMS.txt"
+echo "Signed and notarized release ready: $OUTPUT"

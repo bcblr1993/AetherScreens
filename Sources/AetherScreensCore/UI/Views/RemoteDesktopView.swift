@@ -23,6 +23,7 @@ public struct RemoteDesktopView: View {
                 // Remote Screen View (Metal accelerated if available)
                 if viewModel.sessionState == .connected || viewModel.currentImage != nil {
                     remoteCanvas(geometry: geometry)
+                        .accessibilityIdentifier(viewModel.hasReceivedFirstFrame ? "remote-desktop-frame" : "remote-desktop-loading")
                 } else {
                     connectingStateView
                 }
@@ -136,13 +137,13 @@ public struct RemoteDesktopView: View {
                 VStack {
                     HStack(spacing: 8) {
                         Image(systemName: "eye.slash.fill")
-                        Text("Curtain Mode Active (Physical Mac Screen Hidden)")
+                        Text("Lock Screen shortcut sent")
                             .font(.system(size: 12, weight: .semibold))
 
                         Button {
                             viewModel.curtainManager.toggleCurtain()
                         } label: {
-                            Text("Turn Off")
+                            Text("Dismiss")
                                 .font(.system(size: 11, weight: .bold))
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 3)
@@ -304,7 +305,7 @@ public struct RemoteDesktopView: View {
                 .tint(.white)
                 .scaleEffect(1.2)
 
-            Text("正在同步远程桌面...")
+            Text("Loading remote desktop…")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.white)
 
@@ -315,12 +316,12 @@ public struct RemoteDesktopView: View {
                         .tint(.blue)
                         .frame(width: 220)
 
-                    Text(String(format: "已接收 %.1f MB / %.1f MB (%.0f%%)", progress.current, progress.total, (progress.current / progress.total) * 100))
+                    Text(String(format: "Received %.1f MB / %.1f MB (%.0f%%)", progress.current, progress.total, (progress.current / progress.total) * 100))
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundColor(.white.opacity(0.75))
                 }
             } else {
-                Text("连接已建立，正在接收远程画面...")
+                Text("Connected. Waiting for remote frames…")
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.65))
                     .multilineTextAlignment(.center)
@@ -415,11 +416,15 @@ public struct RemoteDesktopView: View {
                     viewModel.triggerHaptic()
                     viewModel.curtainManager.toggleCurtain()
                 } label: {
-                    Label(viewModel.curtainManager.isCurtainActive ? "Turn Off Curtain" : "Curtain Mode", systemImage: "eye.slash")
+                    Label(viewModel.curtainManager.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac", systemImage: "lock")
                 }
             } label: {
                 controlIcon("ellipsis")
             }
+            #if os(macOS)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            #endif
             .accessibilityLabel("Session Options")
 
             // Touch vs Trackpad Mode Toggle
@@ -428,6 +433,7 @@ public struct RemoteDesktopView: View {
                 Image(systemName: "hand.point.up.left.fill").tag(TrackpadEngine.Mode.trackpad)
                 Image(systemName: "hand.tap.fill").tag(TrackpadEngine.Mode.touch)
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
             .frame(width: 80)
             #else
@@ -451,6 +457,7 @@ public struct RemoteDesktopView: View {
             }
             .accessibilityLabel(viewModel.isKeyboardVisible ? "Hide Keyboard" : "Show Keyboard")
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(.black.opacity(0.72), in: Capsule())
