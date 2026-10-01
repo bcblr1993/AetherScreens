@@ -44,7 +44,12 @@ final class ZRLEDecoderTests: XCTestCase {
     }
 
     func testPlainRunsCrossRowsAndUseExtendedLengthBytes() throws {
-        let encoded = [UInt8(128)] + a + [255, 0] + b + Array(repeating: UInt8(255), count: 15) + [14]
+        var encoded: [UInt8] = [128]
+        encoded.append(contentsOf: a)
+        encoded.append(contentsOf: [255, 0])
+        encoded.append(contentsOf: b)
+        encoded.append(contentsOf: repeatElement(UInt8(255), count: 15))
+        encoded.append(14)
         let actual = try decode(encoded, width: 64, height: 64)
         XCTAssertEqual(actual, bgra(Array(repeating: a, count: 256) + Array(repeating: b, count: 3840)))
     }
