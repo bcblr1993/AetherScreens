@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 172 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 177 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -749,3 +749,36 @@ iOS Release device build and strict deep iOS signature verification passed.
 The preceding pixel-decoder/VM-runner commit `5e61aa1` passed CI run
 `36859071018`; the teardown repair needs its own exact-commit CI evidence.
 The VM's required human UI automation authentication is still outstanding.
+
+## Handshake state notification replacement guards
+
+The connected-state observer can synchronously disconnect/reconnect just like a
+failure observer. A new actual-TCP regression reproduced the original bug:
+after the callback, the old session issued update/read work on the replacement
+socket, which remained in version negotiation and never produced the expected
+frame (five assertion failures). Handshake state changes now retain the publishing
+connection identity and return when the observer replaces it. The initial
+connecting notification similarly returns if its attempt was cancelled or a
+nested connect already created the replacement.
+
+Five regressions cover connecting, version negotiation, authentication,
+initialization and connected notifications. They verify exactly one replacement
+frame, complete expected pixels, the final connected state, accepted socket
+counts and the replacement's encoding negotiation. The fixture counts accepted
+sockets separately from SetEncodings packets: cancellation need not flush the
+old socket's pending message. No unexpected connection failure is ignored.
+The initial 15-case TCP suite passes. Evidence:
+`/tmp/aetherscreens-state-reconnect-before.log` (reproduced failure) and
+`/tmp/aetherscreens-state-reconnect-verified.log` (15 passing TCP cases).
+The VM automation authentication and all physical/full Screens acceptance gaps
+remain open.
+
+The 15 TCP cases then passed 20 consecutive Debug executions (300 actual
+cases). Complete current Release core regression: 177 tests, 5 explicit
+live-environment skips, no failures. Mac Release compilation, iOS Release device
+build and strict deep signature verification passed. No new host UI automation
+was started. Previous teardown commit `506b248` passed all steps in CI run
+`36859492030`; this state-notification repair requires its own current-commit CI
+result. Logs: `/tmp/aetherscreens-state-reconnect-repeat.log`,
+`/tmp/aetherscreens-state-reconnect-core-release.log`,
+`/tmp/aetherscreens-state-reconnect-ios.log` and its signature log.

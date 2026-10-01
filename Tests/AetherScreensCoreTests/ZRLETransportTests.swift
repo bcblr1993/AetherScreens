@@ -3,6 +3,55 @@ import Network
 @testable import AetherScreensCore
 
 final class ZRLETransportTests: XCTestCase {
+    func testReconnectFromConnectingNotificationReplacesTheAttempt() throws {
+        try verifyReconnectFromState(.connecting)
+    }
+
+    func testReconnectFromVersionNotificationDoesNotReadTheNewBannerTwice() throws {
+        try verifyReconnectFromState(.negotiatingVersion)
+    }
+
+    func testReconnectFromAuthenticationNotificationKeepsNewHandshakeIndependent() throws {
+        try verifyReconnectFromState(.authenticating)
+    }
+
+    func testReconnectFromInitializationNotificationDoesNotSendOldClientInit() throws {
+        try verifyReconnectFromState(.initializing)
+    }
+
+    func testReconnectFromConnectedNotificationDoesNotSendAnOldRequestOnNewSocket() throws {
+        try verifyReconnectFromState(.connected)
+    }
+
+    private func verifyReconnectFromState(_ trigger: RFBClient.State) throws {
+        let ready = expectation(description: "State reconnect listener ready")
+        let expected = Data(repeating: 51, count: 4 * 2 * 4)
+        let server = try ZRLEWireServer(ready: { ready.fulfill() }) {
+            [Self.rectangle(.raw, x: 0, y: 0, width: 4, height: 2, payload: expected)]
+        }
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue)
+        defer { client.disconnect() }
+        let once = ZRLEReconnectOnce()
+        let delivered = expectation(description: "Replacement receives a complete frame")
+        let frames = ZRLEFrameCounter()
+        client.onStateChanged = { [weak client] state in
+            if state == trigger, once.take() { client?.disconnect(); client?.connect() }
+            if case .failed(let reason) = state { XCTFail(reason) }
+        }
+        client.onFrameUpdated = { frames.increment(); delivered.fulfill() }
+        client.connect()
+        wait(for: [delivered], timeout: 3)
+        XCTAssertEqual(client.state, .connected)
+        XCTAssertEqual(frames.value, 1)
+        // Cancelling the first socket need not flush its pending SetEncodings.
+        // Count accepted sockets separately from messages that reached the server.
+        XCTAssertEqual(server.connectionCount, trigger == .connecting ? 1 : 2)
+        XCTAssertEqual(server.offers.last?.first, RFBConstants.EncodingType.zrle.rawValue)
+        XCTAssertTrue(client.framebuffer.pixels.elementsEqual(expected))
+    }
+
     func testReconnectFromFailureNotificationKeepsTheNewConnectionAlive() throws {
         let ready = expectation(description: "Failure reconnect listener ready")
         let first = ZRLEReconnectOnce()
@@ -220,6 +269,7 @@ private final class ZRLEWireServer: @unchecked Sendable {
     private let lock = NSLock()
     private var connections: [NWConnection] = []
     private var receivedOffers: [[Int32]] = []
+    var connectionCount: Int { lock.lock(); defer { lock.unlock() }; return connections.count }
     var offers: [[Int32]] { lock.lock(); defer { lock.unlock() }; return receivedOffers }
 
     init(width: UInt16 = 4, height: UInt16 = 2, ready: @escaping () -> Void, packets: @escaping () throws -> [Data]) throws {

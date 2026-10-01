@@ -91,6 +91,8 @@ public final class RFBClient: @unchecked Sendable {
         extendedClipboard = false
         pendingClipboard = nil
         state = .connecting
+        // An observer can cancel or replace the attempt synchronously.
+        guard state == .connecting, connection == nil else { return }
         AppLogger.shared.info("Initiating connection to \(host):\(port)...", category: "Network")
 
         let nwHost = NWEndpoint.Host(host)
@@ -164,8 +166,16 @@ public final class RFBClient: @unchecked Sendable {
 
     // MARK: - Handshake Workflow
 
+    /// A state observer may synchronously replace the connection. The caller's
+    /// handshake work belongs only to the socket that published this state.
+    private func transitionCurrentConnection(to newState: State) -> Bool {
+        guard let current = connection else { return false }
+        state = newState
+        return connection === current
+    }
+
     private func startHandshake() {
-        state = .negotiatingVersion
+        guard transitionCurrentConnection(to: .negotiatingVersion) else { return }
         AppLogger.shared.info("Negotiating RFB protocol version...", category: "RFB")
         // Expect 12 bytes of version: "RFB 003.008\n"
         readExact(12) { [weak self] data in
@@ -190,7 +200,7 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     private func negotiateSecurity() {
-        state = .authenticating
+        guard transitionCurrentConnection(to: .authenticating) else { return }
         AppLogger.shared.info("Negotiating security mechanisms...", category: "Security")
         // Read 1 byte for number of security types
         readExact(1) { [weak self] countData in
@@ -382,7 +392,7 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     private func sendClientInit() {
-        state = .initializing
+        guard transitionCurrentConnection(to: .initializing) else { return }
         // ClientInit: 1 byte shared-flag (1 = shared, allows existing sessions to continue)
         sendData(Data([1])) { [weak self] in
             self?.readServerInit()
@@ -435,7 +445,7 @@ public final class RFBClient: @unchecked Sendable {
         ])
         sendData(encodingsData)
 
-        state = .connected
+        guard transitionCurrentConnection(to: .connected) else { return }
         AppLogger.shared.info("Session state -> connected! Requesting initial full-frame update (0,0,\(framebuffer.width)x\(framebuffer.height))...", category: "RFB")
 
         // Send initial full screen update request
