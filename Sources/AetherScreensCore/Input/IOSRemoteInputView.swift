@@ -8,10 +8,16 @@ struct IOSRemoteInputView: UIViewRepresentable {
     let engine: TrackpadEngine
     let canvas: CGRect
     let zoom: CGFloat
+    let isPanning: Bool
+    let isObserveOnly: Bool
+    let onPan: (CGFloat, CGFloat) -> Void
     let onZoom: (CGFloat) -> Void
 
     func makeUIView(context: Context) -> RemoteTouchView { RemoteTouchView() }
     func updateUIView(_ view: RemoteTouchView, context: Context) {
+        if isPanning || isObserveOnly { view.releaseDrag() }
+        view.isLocalNavigation = isPanning || isObserveOnly
+        view.onPan = onPan
         view.engine = engine
         view.canvas = canvas
         view.zoom = zoom
@@ -27,6 +33,8 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
     var canvas = CGRect.zero
     var zoom: CGFloat = 1
     var onZoom: ((CGFloat) -> Void)?
+    var onPan: ((CGFloat, CGFloat) -> Void)?
+    var isLocalNavigation = false
     private let cursor = CAShapeLayer()
     private var dragButton: RFBConstants.ButtonMask = []
     private var initialZoom: CGFloat = 1
@@ -90,7 +98,7 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func tapped(_ gesture: UITapGestureRecognizer) {
-        guard gesture.state == .ended else { return }
+        guard gesture.state == .ended, !isLocalNavigation else { return }
         positionDirectly(gesture.location(in: self))
         engine?.click(button: button(for: gesture.numberOfTouchesRequired))
         updateCursor()
@@ -101,6 +109,7 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         gesture.setTranslation(.zero, in: self)
         guard dragButton.isEmpty else { return }
         if gesture.state == .began || gesture.state == .changed {
+            if isLocalNavigation { onPan?(delta.x, delta.y); return }
             if engine?.mode == .touch { positionDirectly(gesture.location(in: self)) }
             else { movePointer(dx: delta.x, dy: delta.y) }
             updateCursor()
@@ -108,6 +117,7 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func held(_ gesture: UILongPressGestureRecognizer) {
+        guard !isLocalNavigation else { return }
         if gesture.state == .began {
             positionDirectly(gesture.location(in: self))
             dragButton = button(for: gesture.numberOfTouchesRequired)
@@ -136,6 +146,7 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         gesture.setTranslation(.zero, in: self)
         guard dragButton.isEmpty else { return }
         guard gesture.state == .began || gesture.state == .changed else { return }
+        if isLocalNavigation { onPan?(delta.x, delta.y); return }
         scrollRemainder.x += delta.x
         scrollRemainder.y += delta.y
         // RFB wheel events are discrete; retain sub-step movement between samples.
@@ -156,6 +167,10 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         if gesture.state == .began || gesture.state == .changed { onZoom?(max(1, min(4, initialZoom * gesture.scale))) }
     }
 
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        !(isLocalNavigation && gesture is UILongPressGestureRecognizer)
+    }
+
     func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
         // A held mouse button must continue moving while its pan recognizer runs.
         gesture is UILongPressGestureRecognizer || other is UILongPressGestureRecognizer
@@ -165,7 +180,7 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         guard let engine else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        cursor.isHidden = engine.mode != .trackpad
+        cursor.isHidden = isLocalNavigation || engine.mode != .trackpad
         cursor.position = CGPoint(x: canvas.minX + engine.cursorX * canvas.width / max(1, engine.remoteWidth),
                                   y: canvas.minY + engine.cursorY * canvas.height / max(1, engine.remoteHeight))
         cursor.fillColor = dragButton.isEmpty ? UIColor.white.cgColor : UIColor.systemBlue.cgColor

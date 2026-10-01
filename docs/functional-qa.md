@@ -33,6 +33,37 @@ the reports finish. No real credentials or desktop data are used.
 Native two-finger scrolling and the two physical iPhones' interaction
 and perceived smoothness remain separate acceptance gates.
 
+## iOS local viewport navigation (2026-10-01)
+
+The old simulator build failed a new acceptance test because zoomed iOS
+sessions offered no Pan View control. Observe also removed the native input
+surface, preventing local zoom and navigation. iOS now exposes the existing
+localized Pan View toggle while zoomed; Observe retains local gestures and
+suppresses click/hold/wheel delivery. Pan/Observe hide the local remote cursor.
+Entering Pan releases held pointer buttons. A localized Pan status identifies
+why local canvas gestures do not send remote input. Viewport offsets are bounded to
+visible overflow, including after a zoom or geometry change; pan samples use
+the current offset rather than a captured view-render offset. Fit to Window
+resets both zoom and offset. Existing macOS Pan availability is preserved.
+
+The new English/Chinese scenarios verify zero received pointer packets during
+local pan and Observe, changed touch coordinates after pan, further coordinate
+changes after Observe navigation, restored remote control and the original
+x=416 mapping after Fit. The six-test report
+`build/ios-viewport-bilingual-regression.xcresult` passes both viewport flows plus
+the existing English/Chinese native gestures and recovery, without failures,
+skips or runtime warnings. Inspected packet attachments show x=244 after local
+pan and x=320 after Observe navigation in both languages. Four local-navigation
+screenshots were inspected. After adding the localized Pan status, the final
+`build/ios-viewport-status-bilingual.xcresult` passes both viewport flows with
+no failures, skips or runtime warnings; both Pan status screenshots were
+inspected. The final core suite passes 120 tests with five
+environment skips and no failures; Mac and signed iOS Release builds pass.
+Physical viewport navigation and perceived responsiveness remain unaccepted.
+This does not complete all reference gestures; native two-axis scrolling,
+secondary/middle drag indicators, three-finger shortcuts, fullscreen and edge/
+hot-corner gestures remain in `docs/screens-alignment-audit.md`.
+
 ## Streaming progress publication (2026-10-01)
 
 Two regressions reproduced unnecessary loading work after the first desktop was

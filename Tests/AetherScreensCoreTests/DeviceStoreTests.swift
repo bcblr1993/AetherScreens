@@ -79,6 +79,10 @@ final class DeviceStoreTests: XCTestCase {
         session.inputMode = .touch
         XCTAssertTrue(session.trackpadEngine.activeButtons.isEmpty)
         session.trackpadEngine.beginDrag()
+        session.isPanningViewport = true
+        XCTAssertTrue(session.trackpadEngine.activeButtons.isEmpty)
+        session.isPanningViewport = false
+        session.trackpadEngine.beginDrag()
         session.endSession()
         XCTAssertTrue(session.trackpadEngine.activeButtons.isEmpty)
     }

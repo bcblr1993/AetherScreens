@@ -6,6 +6,71 @@ final class AetherScreensIOSUITests: XCTestCase {
     func testControlledConnectionRecovery() throws { try verifyControlledConnectionRecovery(language: "en") }
     func testChineseControlledConnectionRecovery() throws { try verifyControlledConnectionRecovery(language: "zh-Hans") }
 
+    func testControlledViewportNavigation() throws { try verifyControlledViewportNavigation(language: "en") }
+    func testChineseControlledViewportNavigation() throws { try verifyControlledViewportNavigation(language: "zh-Hans") }
+
+    private func verifyControlledViewportNavigation(language: String) throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
+        func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        app.buttons[label("Quick Connect", "快速连接")].tap()
+        let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+        host.tap(); host.typeText("127.0.0.1")
+        let port = app.textFields[label("Port", "端口")]
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        app.buttons[label("Connect", "连接")].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
+        let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
+        app.buttons[label("Input Mode", "输入模式")].tap()
+        app.buttons[label("Touch", "触控")].tap()
+        input.pinch(withScale: 1.5, velocity: 1)
+        let center = input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        try resetGestureFixture()
+        center.tap()
+        let before = try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 }?["x"])
+        app.buttons[label("Session Options", "会话选项")].tap()
+        let pan = app.buttons[label("Pan View", "移动视图")]
+        XCTAssertTrue(pan.waitForExistence(timeout: 3), "Zoomed iOS sessions must expose local viewport navigation")
+        guard pan.exists else { return }
+        pan.tap()
+        XCTAssertTrue(app.staticTexts[label("Pan · 127.0.0.1", "移动视图 · 127.0.0.1")].exists)
+        try resetGestureFixture()
+        center.press(forDuration: 0.05, thenDragTo: input.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
+        center.tap()
+        XCTAssertTrue(try gesturePointers().isEmpty, "Local panning and taps must not send remote input")
+        attachScreenshot(app, name: "Controlled Local Pan " + language)
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Pan View", "移动视图")].tap()
+        center.tap()
+        let after = try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 }?["x"])
+        XCTAssertLessThan(after, before - 20, "Local panning must actually move the displayed remote viewport")
+        try attachGesturePackets(try gesturePointers(), name: "Received Touch After Local Pan " + language)
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Observe Only", "仅观看")].tap()
+        XCTAssertTrue(input.waitForExistence(timeout: 3), "Observe must retain local navigation")
+        try resetGestureFixture()
+        input.pinch(withScale: 1.3, velocity: 1)
+        center.press(forDuration: 0.4, thenDragTo: input.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5)))
+        center.tap()
+        XCTAssertTrue(try gesturePointers().isEmpty)
+        XCTAssertFalse(app.buttons[label("Show Keyboard", "显示键盘")].isEnabled)
+        attachScreenshot(app, name: "Controlled Observe Navigation " + language)
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Observe Only", "仅观看")].tap()
+        center.tap()
+        let observed = try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 }?["x"])
+        XCTAssertGreaterThan(observed, after + 30, "Observe navigation must move the viewport while suppressing remote input")
+        try attachGesturePackets(try gesturePointers(), name: "Received Touch After Observe Navigation " + language)
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Fit to Window", "适应窗口")].tap()
+        try resetGestureFixture()
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.5)).tap()
+        let fitted = try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 }?["x"])
+        XCTAssertEqual(Double(fitted), 416, accuracy: 5, "Fit must reset both zoom and viewport offset")
+        app.buttons[label("Disconnect", "断开连接")].tap()
+    }
+
     private func verifyControlledConnectionRecovery(language: String) throws {
         guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
         func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }

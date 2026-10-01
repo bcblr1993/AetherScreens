@@ -77,7 +77,11 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     private var macAccountContinuation: ((String?, String?) -> Void)?
 
     @Published public var actualSizeZoomScale: CGFloat = 2
-    @Published public var isPanningViewport: Bool = false
+    @Published public var isPanningViewport: Bool = false {
+        didSet {
+            if isPanningViewport { trackpadEngine.releaseAllButtons() }
+        }
+    }
     @Published public private(set) var inputGeneration = UUID()
     private var frameCountSinceLastSnapshot: Int = 0
     @Published private var lastFramebufferSize = CGSize.zero
@@ -320,6 +324,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         macAccountContinuation = nil
         accountContinuation?(nil, nil)
         client.disconnect()
+    }
+
+    /// Move the local viewport without emitting remote pointer events.
+    public func panViewport(dx: CGFloat, dy: CGFloat, limitX: CGFloat, limitY: CGFloat) {
+        let x = max(-limitX, min(limitX, viewOffset.width))
+        let y = max(-limitY, min(limitY, viewOffset.height))
+        viewOffset = CGSize(width: max(-limitX, min(limitX, x + dx)),
+                            height: max(-limitY, min(limitY, y + dy)))
     }
 
     /// Connect to remote Mac

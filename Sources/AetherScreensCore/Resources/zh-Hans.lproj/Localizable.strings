@@ -247,3 +247,5 @@
 "The computer in this link is not in your library." = "此链接中的电脑不在你的列表中。";
 
 "Several computers match this link. Use a link copied from the computer's menu." = "多台电脑与此链接匹配，请使用电脑菜单中复制的链接。";
+
+"Pan · %@" = "移动视图 · %@";

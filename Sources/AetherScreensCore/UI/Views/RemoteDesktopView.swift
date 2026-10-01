@@ -101,8 +101,12 @@ public struct RemoteDesktopView: View {
         let fitScale = min(geometry.size.width / safeWidth, geometry.size.height / safeHeight)
         let canvasWidth = safeWidth * fitScale * viewModel.zoomScale
         let canvasHeight = safeHeight * fitScale * viewModel.zoomScale
-        let originX = (geometry.size.width - canvasWidth) / 2 + viewModel.viewOffset.width
-        let originY = (geometry.size.height - canvasHeight) / 2 + viewModel.viewOffset.height
+        let limitX = max(0, (canvasWidth - geometry.size.width) / 2)
+        let limitY = max(0, (canvasHeight - geometry.size.height) / 2)
+        let offsetX = max(-limitX, min(limitX, viewModel.viewOffset.width))
+        let offsetY = max(-limitY, min(limitY, viewModel.viewOffset.height))
+        let originX = (geometry.size.width - canvasWidth) / 2 + offsetX
+        let originY = (geometry.size.height - canvasHeight) / 2 + offsetY
 
         ZStack(alignment: .topLeading) {
             // High Performance Metal View
@@ -125,10 +129,7 @@ public struct RemoteDesktopView: View {
                 remoteHeight: imageHeight > 0 ? imageHeight : 1080,
                 isPanning: viewModel.isPanningViewport,
                 onPan: { dx, dy in
-                    let limitX = max(0, (canvasWidth - geometry.size.width) / 2)
-                    let limitY = max(0, (canvasHeight - geometry.size.height) / 2)
-                    viewModel.viewOffset.width = max(-limitX, min(limitX, viewModel.viewOffset.width + dx))
-                    viewModel.viewOffset.height = max(-limitY, min(limitY, viewModel.viewOffset.height + dy))
+                    viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
                 },
                 onTextEvent: { text in viewModel.sendTextString(text) },
                 onPointerEvent: { mask, x, y in
@@ -145,15 +146,19 @@ public struct RemoteDesktopView: View {
             #endif
 
             #if canImport(UIKit)
-            if !viewModel.isObserveOnly {
-                IOSRemoteInputView(
-                    engine: viewModel.trackpadEngine,
-                    canvas: CGRect(x: originX, y: originY, width: canvasWidth, height: canvasHeight),
-                    zoom: viewModel.zoomScale,
-                    onZoom: { viewModel.zoomScale = $0 }
-                )
-                .frame(width: geometry.size.width, height: geometry.size.height)
-            }
+            IOSRemoteInputView(
+                engine: viewModel.trackpadEngine,
+                canvas: CGRect(x: originX, y: originY, width: canvasWidth, height: canvasHeight),
+                zoom: viewModel.zoomScale,
+                isPanning: viewModel.isPanningViewport,
+                isObserveOnly: viewModel.isObserveOnly,
+                onPan: { dx, dy in
+                    viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
+                },
+                onZoom: { viewModel.zoomScale = $0 }
+            )
+            .id(viewModel.inputGeneration)
+            .frame(width: geometry.size.width, height: geometry.size.height)
             #endif
 
             // Curtain Mode Active Overlay Banner
@@ -343,7 +348,7 @@ public struct RemoteDesktopView: View {
                 Circle()
                     .fill(viewModel.sessionState == .connected ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
-                Text(viewModel.isObserveOnly ? AppLocalization.format("Observe · %@", viewModel.device.name) : viewModel.device.name)
+                Text(sessionTitle)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
@@ -398,10 +403,12 @@ public struct RemoteDesktopView: View {
                         viewModel.isPanningViewport = false
                     }
                 }
-                #if os(macOS)
                 Toggle(AppLocalization.string("Pan View"), isOn: $viewModel.isPanningViewport)
+                    #if canImport(UIKit)
+                    .disabled(viewModel.zoomScale <= 1 || viewModel.isObserveOnly)
+                    #else
                     .disabled(viewModel.zoomScale <= 1)
-                #endif
+                    #endif
                 Divider()
                 ForEach(viewModel.multiDisplayManager.availableDisplays) { display in
                     Button {
@@ -471,6 +478,12 @@ public struct RemoteDesktopView: View {
             .foregroundStyle(.white)
             .frame(width: 34, height: 34)
             .contentShape(Rectangle())
+    }
+
+    private var sessionTitle: String {
+        if viewModel.isObserveOnly { return AppLocalization.format("Observe · %@", viewModel.device.name) }
+        if viewModel.isPanningViewport { return AppLocalization.format("Pan · %@", viewModel.device.name) }
+        return viewModel.device.name
     }
 
     private var sessionNameWidth: CGFloat {
