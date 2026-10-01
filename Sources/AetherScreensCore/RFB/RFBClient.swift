@@ -45,8 +45,9 @@ public final class RFBClient: @unchecked Sendable {
     private var inputGeneration = UUID()
     private var heldKeys = Set<UInt32>()
     private var pointerPosition: (UInt16, UInt16) = (0, 0)
-    private var heldPointer = false
+    private var heldPointerButtons: RFBConstants.ButtonMask = []
     private var nextWheelDeadline = DispatchTime.now()
+    private var wheelScheduleGeneration: UUID?
     private var extendedClipboard = false
     private var pendingClipboard: String?
 
@@ -129,7 +130,8 @@ public final class RFBClient: @unchecked Sendable {
     public func disconnect() {
         inputLock.lock()
         heldKeys.removeAll()
-        heldPointer = false
+        heldPointerButtons = []
+        inputGeneration = UUID()
         inputLock.unlock()
         AppLogger.shared.info("Disconnecting session with \(host)", category: "Network")
         connection?.cancel()
@@ -649,10 +651,10 @@ public final class RFBClient: @unchecked Sendable {
         if !enabled && inputEnabled {
             for key in heldKeys { sendData(RFBEncoder.encodeKeyEvent(down: false, keySym: key)) }
             heldKeys.removeAll()
-            if heldPointer {
+            if !heldPointerButtons.isEmpty {
                 sendData(RFBEncoder.encodePointerEvent(buttonMask: [], x: pointerPosition.0, y: pointerPosition.1))
             }
-            heldPointer = false
+            heldPointerButtons = []
             pendingClipboard = nil
         }
         inputEnabled = enabled
@@ -665,8 +667,24 @@ public final class RFBClient: @unchecked Sendable {
         guard inputEnabled else { return false }
         if let generation, generation != inputGeneration { return false }
         pointerPosition = (x, y)
-        heldPointer = mask.rawValue & 7 != 0
+        heldPointerButtons = RFBConstants.ButtonMask(rawValue: mask.rawValue & 7)
         sendData(RFBEncoder.encodePointerEvent(buttonMask: mask, x: x, y: y))
+        return true
+    }
+
+    /// Delayed wheel work reads the latest pointer state under the same lock as
+    /// ordinary movement. Its press/release pair cannot revive an old drag or
+    /// overwrite a newer position, and releasing the wheel keeps held buttons.
+    @discardableResult
+    private func sendWheelPacket(_ wheel: RFBConstants.ButtonMask, generation: UUID) -> Bool {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        guard inputEnabled, generation == inputGeneration else { return false }
+        let (x, y) = pointerPosition
+        sendData(RFBEncoder.encodePointerEvent(buttonMask: heldPointerButtons.union(wheel), x: x, y: y))
+        if !wheel.isEmpty {
+            sendData(RFBEncoder.encodePointerEvent(buttonMask: heldPointerButtons, x: x, y: y))
+        }
         return true
     }
 
@@ -681,18 +699,26 @@ public final class RFBClient: @unchecked Sendable {
         inputLock.lock()
         let generation = inputGeneration
         let enabled = inputEnabled
+        if enabled {
+            pointerPosition = (x, y)
+            heldPointerButtons = RFBConstants.ButtonMask(rawValue: buttonMask.rawValue & 7)
+        }
         inputLock.unlock()
         guard enabled else { return }
         queue.async { [weak self] in
             guard let self = self, let connection = self.connection else { return }
-            guard self.sendPointerPacket([], x: x, y: y, generation: generation) else { return }
+            guard self.sendWheelPacket([], generation: generation) else { return }
+            if self.wheelScheduleGeneration != generation {
+                // Cancelled ticks must not reserve time in the resumed session.
+                self.wheelScheduleGeneration = generation
+                self.nextWheelDeadline = .now()
+            }
             let earliest = DispatchTime.now() + .milliseconds(25)
             let deadline = self.nextWheelDeadline > earliest ? self.nextWheelDeadline : earliest
             self.nextWheelDeadline = deadline + .milliseconds(16)
             self.queue.asyncAfter(deadline: deadline) { [weak self, weak connection] in
                 guard let self = self, let connection = connection, self.connection === connection else { return }
-                self.sendPointerPacket(buttonMask, x: x, y: y, generation: generation)
-                self.sendPointerPacket([], x: x, y: y, generation: generation)
+                self.sendWheelPacket(RFBConstants.ButtonMask(rawValue: buttonMask.rawValue & 0x78), generation: generation)
             }
         }
     }

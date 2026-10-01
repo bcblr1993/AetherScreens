@@ -1,5 +1,27 @@
 # Controlled remote input acceptance
 
+## Pointer transport regression (2026-10-01)
+
+A loopback RFB server captures actual TCP pointer messages after the handshake.
+Before the repair, two scenarios failed: wheel positioning/release cleared a
+held left button, and a delayed wheel re-pressed that button at the old position
+after a newer release/move. The repair retains the current physical button mask
+and reads current coordinates when delayed wheel work executes. Wheel press and
+release share the input lock; disabling input invalidates queued work even if
+control resumes immediately. Disconnect also invalidates old work. A further
+regression queued 300 wheel events, entered Observe, then resumed control:
+the fresh wheel failed its one-second delivery gate before repair because the
+cancelled backlog still reserved timing slots. A changed input generation now
+resets those slots; the resumed wheel passes the same gate.
+
+`swift test --filter PointerTransportTests` covers held-button preservation,
+release/move before delayed wheel delivery, Observe cancellation and responsive
+delivery after cancelling a backlog. The full core suite passed 113 tests with
+five environment skips and no failures.
+This proves transport behavior on a real local TCP stream, not Apple server
+scroll/drag behavior or physical iPhone gesture responsiveness. Those acceptance
+gates remain open.
+
 ## Connection link routing acceptance (2026-10-01)
 
 The core suite passed 109 tests with five environment skips and no failures.
