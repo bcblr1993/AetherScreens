@@ -3,6 +3,76 @@ import XCTest
 final class AetherScreensIOSUITests: XCTestCase {
     func testReceivedNativeGesturesOnControlledDesktop() throws { try verifyReceivedNativeGestures(language: "en") }
     func testReceivedChineseNativeGesturesOnControlledDesktop() throws { try verifyReceivedNativeGestures(language: "zh-Hans") }
+    func testControlledConnectionRecovery() throws { try verifyControlledConnectionRecovery(language: "en") }
+    func testChineseControlledConnectionRecovery() throws { try verifyControlledConnectionRecovery(language: "zh-Hans") }
+
+    private func verifyControlledConnectionRecovery(language: String) throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
+        func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        app.buttons[label("Quick Connect", "快速连接")].tap()
+        let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+        host.tap(); host.typeText("127.0.0.1")
+        let port = app.textFields[label("Port", "端口")]
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        try resetGestureFixture()
+        app.buttons[label("Connect", "连接")].tap()
+        let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
+        XCTAssertTrue(frame.waitForExistence(timeout: 10))
+        let oldConnection = try lastFixtureConnection()
+        let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
+        app.buttons[label("Input Mode", "输入模式")].tap()
+        app.buttons[label("Touch", "触控")].tap()
+        input.pinch(withScale: 1.5, velocity: 1)
+        app.buttons[label("Show Keyboard", "显示键盘")].tap()
+        let shift = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Shift")).firstMatch
+        XCTAssertTrue(shift.waitForExistence(timeout: 5))
+        shift.tap()
+        _ = try waitForFixtureEvents { $0.contains { $0["type"] as? String == "key" && $0["key"] as? Int == 65505 && $0["down"] as? Int == 1 } }
+        _ = try gestureFixtureData(path: "drop")
+        XCTAssertTrue(app.buttons[label("Retry Connection", "重试连接")].waitForExistence(timeout: 10))
+        attachScreenshot(app, name: "Controlled Remote Connection Lost " + language)
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Reconnect", "重新连接")].tap()
+        XCTAssertTrue(frame.waitForExistence(timeout: 10))
+        let newConnection = try lastFixtureConnection()
+        XCTAssertNotEqual(newConnection, oldConnection, "Recovery must establish a new TCP session")
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.5)).tap()
+        let events = try waitForFixtureEvents { $0.contains { $0["type"] as? String == "pointer" && $0["connection"] as? Int == newConnection && $0["mask"] as? Int == 1 } }
+        let click = try XCTUnwrap(events.first { $0["type"] as? String == "pointer" && $0["connection"] as? Int == newConnection && $0["mask"] as? Int == 1 })
+        XCTAssertEqual(Double(try XCTUnwrap(click["x"] as? Int)), 384, accuracy: 5, "Recovery must preserve zoom and touch mode")
+        shift.tap()
+        app.buttons["esc"].tap()
+        _ = try waitForFixtureEvents { events in
+            let fresh = events.filter { $0["connection"] as? Int == newConnection && $0["type"] as? String == "key" }
+            return fresh.contains { $0["key"] as? Int == 65505 && $0["down"] as? Int == 1 } && fresh.contains { $0["key"] as? Int == 65505 && $0["down"] as? Int == 0 }
+        }
+        let packets = XCTAttachment(data: try gestureFixtureData(path: "events"), uniformTypeIdentifier: "public.json")
+        packets.name = "Received New Session Input " + language
+        packets.lifetime = .keepAlways
+        add(packets)
+        attachScreenshot(app, name: "Controlled Remote Reconnected " + language)
+        app.buttons[label("Disconnect", "断开连接")].tap()
+        XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+    }
+
+    private func lastFixtureConnection() throws -> Int {
+        let events = try fixtureEvents()
+        return try XCTUnwrap(events.last { $0["type"] as? String == "ready" }?["connection"] as? Int)
+    }
+
+    private func fixtureEvents() throws -> [[String: Any]] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: gestureFixtureData(path: "events")) as? [[String: Any]])
+    }
+
+    private func waitForFixtureEvents(_ predicate: ([[String: Any]]) -> Bool) throws -> [[String: Any]] {
+        let deadline = Date().addingTimeInterval(3)
+        var events = try fixtureEvents()
+        while !predicate(events), Date() < deadline { Thread.sleep(forTimeInterval: 0.025); events = try fixtureEvents() }
+        XCTAssertTrue(predicate(events), "Expected received packets must reach the new session")
+        return events
+    }
 
     private func verifyReceivedNativeGestures(language: String) throws {
         guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else {

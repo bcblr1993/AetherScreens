@@ -30,8 +30,37 @@ the UI test target's xctestrun EnvironmentVariables. Run sequentially with
 `testReceivedNativeGesturesOnControlledDesktop` and
 `testReceivedChineseNativeGesturesOnControlledDesktop`. Stop the fixture after
 the reports finish. No real credentials or desktop data are used.
-Native two-finger scrolling, recovery and the two physical iPhones' interaction
+Native two-finger scrolling and the two physical iPhones' interaction
 and perceived smoothness remain separate acceptance gates.
+
+## Session recovery and stale callbacks (2026-10-01)
+
+Before repair, queued frame/progress/connected callbacks restored ended-session
+state and successful-connection history. Held trackpad buttons survived mode
+changes and session termination. Actual loopback handshakes also showed that
+cancelling a password prompt from the old VNC connection failed the replacement
+connection. Session callback generations now reject queued notifications from an
+ended session; input is released on mode changes, failure, reconnect and end.
+VNC/ARD password replies and send completions are bound to their originating
+connection. Failed writes stop handshake continuation.
+
+The final core suite passed 118 tests, with five environment skips and no
+failures. Mac Release and unsigned iOS device Release builds passed. The final
+report `build/ios-controlled-recovery-bilingual-final.xcresult` contains four
+passed tests, no skips/failures/runtime warnings: English/Chinese recovery and
+the existing English/Chinese native gesture scenarios. The first recovery run
+failed because the test looked for `Esc` instead of the actual `esc` control;
+the corrected driver passes without renaming the product control.
+
+The loopback fixture's `/drop` shuts down the active TCP socket. Each recovery
+test receives a fresh frame on a different connection, preserves zoom/touch mode
+(the same touch still reaches x=384), and verifies fresh Shift down/up around
+Escape down/up. Retained JSON shows Chinese connection IDs 7 to 8 and English
+9 to 10. Both failure and recovered-state screenshots were inspected. Repeat
+with the gesture fixture/environment above and select
+`testControlledConnectionRecovery` and `testChineseControlledConnectionRecovery`.
+This proves simulator UIKit-to-TCP recovery, not Apple server recovery, physical
+phone network interruption or improved hand feel. These gates remain open.
 
 ## Pointer transport regression (2026-10-01)
 

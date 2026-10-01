@@ -4,6 +4,7 @@ No credentials or real desktop content. Run before the opt-in gesture UI test.
 """
 import argparse
 import json
+import socket
 import socketserver
 import struct
 import threading
@@ -12,6 +13,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 EVENTS = []
 LOCK = threading.Lock()
+CONNECTIONS = {}
+NEXT_CONNECTION_ID = 0
 WIDTH, HEIGHT = 640, 360
 
 
@@ -21,6 +24,9 @@ def record(event):
 
 
 class Desktop(socketserver.BaseRequestHandler):
+    def record(self, event):
+        record(dict(event, connection=self.connection_id))
+
     def read(self, count):
         data = bytearray()
         while len(data) < count:
@@ -39,8 +45,14 @@ class Desktop(socketserver.BaseRequestHandler):
         else:
             pixels = bytes((120, 100, 45, 255))
         self.request.sendall(header + pixels)
+        self.record({'type': 'frame', 'full': full})
 
     def handle(self):
+        global NEXT_CONNECTION_ID
+        with LOCK:
+            NEXT_CONNECTION_ID += 1
+            self.connection_id = NEXT_CONNECTION_ID
+            CONNECTIONS[self.connection_id] = self.request
         try:
             self.request.sendall(b'RFB 003.008\n')
             if self.read(12) != b'RFB 003.008\n':
@@ -53,6 +65,7 @@ class Desktop(socketserver.BaseRequestHandler):
             pixel_format = struct.pack('>BBBBHHHBBBxxx', 32, 24, 0, 1, 255, 255, 255, 16, 8, 0)
             name = b'Gesture QA'
             self.request.sendall(struct.pack('>HH', WIDTH, HEIGHT) + pixel_format + struct.pack('>I', len(name)) + name)
+            self.record({'type': 'ready'})
             pending_update = False
             while True:
                 message = self.read(1)[0]
@@ -69,10 +82,10 @@ class Desktop(socketserver.BaseRequestHandler):
                         pending_update = True
                 elif message == 4:
                     packet = self.read(7)
-                    record({'type': 'key', 'down': packet[0], 'key': struct.unpack('>I', packet[3:])[0]})
+                    self.record({'type': 'key', 'down': packet[0], 'key': struct.unpack('>I', packet[3:])[0]})
                 elif message == 5:
                     mask, x, y = struct.unpack('>BHH', self.read(5))
-                    record({'type': 'pointer', 'mask': mask, 'x': x, 'y': y})
+                    self.record({'type': 'pointer', 'mask': mask, 'x': x, 'y': y})
                     if pending_update:
                         self.frame()
                         pending_update = False
@@ -82,10 +95,14 @@ class Desktop(socketserver.BaseRequestHandler):
                         return
                     self.read(length)
                 else:
-                    record({'type': 'unexpected', 'message': message})
+                    self.record({'type': 'unexpected', 'message': message})
                     return
         except (EOFError, ConnectionError, OSError):
             return
+        finally:
+            with LOCK:
+                CONNECTIONS.pop(self.connection_id, None)
+            self.record({'type': 'disconnected'})
 
 
 class Inspection(BaseHTTPRequestHandler):
@@ -93,9 +110,17 @@ class Inspection(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path not in ('/events', '/reset'):
+        if self.path not in ('/events', '/reset', '/drop'):
             self.send_error(404)
             return
+        if self.path == '/drop':
+            with LOCK:
+                targets = list(CONNECTIONS.values())
+            for target in targets:
+                try:
+                    target.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
         with LOCK:
             if self.path == '/reset':
                 EVENTS.clear()

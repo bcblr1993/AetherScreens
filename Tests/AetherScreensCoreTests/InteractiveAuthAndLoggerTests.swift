@@ -49,6 +49,68 @@ final class InteractiveAuthAndLoggerTests: XCTestCase {
         XCTAssertEqual(client.username, "qa-account")
     }
 
+    func testCancelledOldPasswordPromptCannotFailAReconnectedClient() throws {
+        try verifyCancelledOldPasswordPrompt(firstMacAccount: false)
+    }
+
+    func testCancelledOldARDPasswordPromptCannotFailAReconnectedClient() throws {
+        try verifyCancelledOldPasswordPrompt(firstMacAccount: true)
+    }
+
+    private func verifyCancelledOldPasswordPrompt(firstMacAccount: Bool) throws {
+        let ready = expectation(description: "Listener ready")
+        let prompt = expectation(description: "First connection requests password")
+        let connected = expectation(description: "Second connection completes handshake")
+        var connections: [NWConnection] = []
+        var number = 0
+        let oldReply = CapturedPasswordReply()
+        listener = try NWListener(using: .tcp, on: .any)
+        listener?.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener?.newConnectionHandler = { connection in
+            number += 1
+            let first = number == 1
+            connections.append(connection)
+            connection.start(queue: self.queue)
+            connection.send(content: Data("RFB 003.008\n".utf8), completion: .contentProcessed { _ in
+                connection.receive(minimumIncompleteLength: 12, maximumLength: 12) { _, _, _, _ in
+                    connection.send(content: Data([1, first ? (firstMacAccount ? 30 : 2) : 1]), completion: .contentProcessed { _ in
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in
+                            if first {
+                                connection.send(content: Data(repeating: 42, count: 16), completion: .contentProcessed { _ in })
+                            } else {
+                                connection.send(content: Data([0, 0, 0, 0]), completion: .contentProcessed { _ in
+                                    connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in
+                                        var initial = Data([0, 16, 0, 16])
+                                        initial.append(RFBPixelFormat.standardBGRA32.serializedData)
+                                        initial.append(contentsOf: [0, 0, 0, 2, 81, 65])
+                                        connection.send(content: initial, completion: .contentProcessed { _ in })
+                                    }
+                                })
+                            }
+                        }
+                    })
+                }
+            })
+        }
+        listener?.start(queue: queue)
+        wait(for: [ready], timeout: 3)
+        let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(listener?.port).rawValue, username: firstMacAccount ? "qa-account" : nil)
+        defer { client.disconnect(); connections.forEach { $0.cancel() } }
+        client.onRequestPassword = { reply in oldReply.store(reply); prompt.fulfill() }
+        client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        client.connect()
+        wait(for: [prompt], timeout: 3)
+        client.disconnect()
+        client.username = nil
+        client.connect()
+        wait(for: [connected], timeout: 3)
+        try XCTUnwrap(oldReply.load())(nil)
+        let drained = expectation(description: "Old password continuation drained")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+        XCTAssertEqual(client.state, .connected)
+    }
+
     func testAppLoggerRecordingAndExport() {
         let logger = AppLogger.shared
         logger.clear()
@@ -179,4 +241,11 @@ final class InteractiveAuthAndLoggerTests: XCTestCase {
         wait(for: [promptInvoked, authCompleted], timeout: 5.0)
         client.disconnect()
     }
+}
+
+private final class CapturedPasswordReply: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: (@Sendable (String?) -> Void)?
+    func store(_ reply: @escaping @Sendable (String?) -> Void) { lock.lock(); value = reply; lock.unlock() }
+    func load() -> (@Sendable (String?) -> Void)? { lock.lock(); defer { lock.unlock() }; return value }
 }

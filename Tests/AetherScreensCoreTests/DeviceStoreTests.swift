@@ -35,6 +35,55 @@ final class DeviceStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testEndingSessionRejectsAlreadyQueuedFrameAndConnectionNotifications() {
+        let store = makeStore()
+        let device = RemoteDevice(name: "Ended callback QA", host: "qa.invalid")
+        store.addDevice(device)
+        let session = SessionViewModel(device: device, password: nil, deviceStore: store)
+        session.client.framebuffer.resize(newWidth: 2, newHeight: 2)
+        session.client.onFrameUpdated?()
+        session.client.onDownloadProgress?(1, 2)
+        session.client.onStateChanged?(.connected)
+        session.endSession()
+        let drained = expectation(description: "Queued old callbacks drained")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+        XCTAssertFalse(session.hasReceivedFirstFrame)
+        XCTAssertNil(session.downloadProgress)
+        XCTAssertNil(store.devices.first { $0.id == device.id }?.lastConnected)
+        XCTAssertEqual(session.sessionState, .disconnected)
+    }
+
+    @MainActor
+    func testEndedSessionRejectsQueuedPasswordPrompts() {
+        let session = SessionViewModel(device: RemoteDevice(name: "Ended prompt QA", host: "qa.invalid"), password: nil, isTemporary: true, deviceStore: makeStore())
+        let passwordCancelled = expectation(description: "Old password prompt cancelled")
+        let accountCancelled = expectation(description: "Old account prompt cancelled")
+        session.client.onRequestPassword? { password in XCTAssertNil(password); passwordCancelled.fulfill() }
+        session.client.onRequestMacAccount? { account, password in
+            XCTAssertNil(account); XCTAssertNil(password); accountCancelled.fulfill()
+        }
+        session.endSession()
+        wait(for: [passwordCancelled, accountCancelled], timeout: 2)
+        XCTAssertFalse(session.isPromptingPassword)
+    }
+
+    @MainActor
+    func testObserveModeChangeAndEndClearHeldTrackpadButtons() {
+        let session = SessionViewModel(device: RemoteDevice(name: "Held input QA", host: "qa.invalid"), password: nil, isTemporary: true, deviceStore: makeStore())
+        session.trackpadEngine.beginDrag(button: [.left, .right])
+        session.isObserveOnly = true
+        XCTAssertTrue(session.trackpadEngine.activeButtons.isEmpty)
+        session.isObserveOnly = false
+        session.trackpadEngine.beginDrag()
+        session.inputMode = .touch
+        XCTAssertTrue(session.trackpadEngine.activeButtons.isEmpty)
+        session.trackpadEngine.beginDrag()
+        session.endSession()
+        XCTAssertTrue(session.trackpadEngine.activeButtons.isEmpty)
+    }
+
+    @MainActor
     func testRepeatedFramesDoNotRepublishUnchangedCanvasAndDisplayState() throws {
         let session = SessionViewModel(device: RemoteDevice(name: "Frame state QA", host: "qa.invalid"), password: nil, isTemporary: true, deviceStore: makeStore())
         guard session.metalRenderer != nil else { throw XCTSkip("Requires a Metal device") }

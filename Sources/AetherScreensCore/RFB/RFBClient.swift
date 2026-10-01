@@ -242,6 +242,7 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     private func performARDAuth(username: String) {
+        let pendingConnection = connection
         let authenticate: @Sendable (String) -> Void = { [weak self] password in
             guard let self = self else { return }
             self.readExact(4) { header in
@@ -269,11 +270,16 @@ public final class RFBClient: @unchecked Sendable {
             authenticate(password)
         } else if let request = onRequestPassword {
             request { [weak self] entered in
-                guard let entered = entered, !entered.isEmpty else {
-                    self?.handleFailure("Mac account password required")
-                    return
+                guard let self else { return }
+                self.queue.async {
+                    guard self.connection === pendingConnection, self.state == .authenticating else { return }
+                    guard let entered, !entered.isEmpty else {
+                        self.handleFailure("Mac account password required")
+                        return
+                    }
+                    self.password = entered
+                    authenticate(entered)
                 }
-                authenticate(entered)
             }
         } else {
             handleFailure("Mac account password required")
@@ -285,17 +291,21 @@ public final class RFBClient: @unchecked Sendable {
             AppLogger.shared.info("Using configured password for VNC Auth", category: "Auth")
             self.executeVNCChallenge(withPassword: pwd)
         } else if let onRequest = self.onRequestPassword {
+            let pendingConnection = connection
             AppLogger.shared.info("No saved password. Requesting user input via modal sheet...", category: "Auth")
             onRequest { [weak self] enteredPwd in
                 guard let self = self else { return }
-                guard let pwd = enteredPwd, !pwd.isEmpty else {
-                    AppLogger.shared.warning("User cancelled password prompt", category: "Auth")
-                    self.handleFailure("VNC Password required to connect")
-                    return
+                self.queue.async {
+                    guard self.connection === pendingConnection, self.state == .authenticating else { return }
+                    guard let pwd = enteredPwd, !pwd.isEmpty else {
+                        AppLogger.shared.warning("User cancelled password prompt", category: "Auth")
+                        self.handleFailure("VNC Password required to connect")
+                        return
+                    }
+                    self.password = pwd
+                    AppLogger.shared.info("Password entered, executing challenge...", category: "Auth")
+                    self.executeVNCChallenge(withPassword: pwd)
                 }
-                self.password = pwd
-                AppLogger.shared.info("Password entered, executing challenge...", category: "Auth")
-                self.executeVNCChallenge(withPassword: pwd)
             }
         } else {
             AppLogger.shared.error("Server requires VNC password, but none was provided", category: "Auth")
@@ -768,9 +778,12 @@ public final class RFBClient: @unchecked Sendable {
     // MARK: - Socket Helpers
 
     private func sendData(_ data: Data, completion: (@Sendable () -> Void)? = nil) {
-        connection?.send(content: data, completion: .contentProcessed({ error in
+        guard let connection else { return }
+        connection.send(content: data, completion: .contentProcessed({ [weak self, weak connection] error in
+            guard let self, let connection, self.connection === connection else { return }
             if let error = error {
-                print("[RFBClient] Send error: \(error)")
+                self.handleFailure("Connection failed: \(error.localizedDescription)")
+                return
             }
             completion?()
         }))

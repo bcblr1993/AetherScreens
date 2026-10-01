@@ -25,12 +25,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public var downloadProgress: (current: Double, total: Double)? = nil
     @Published public var inputMode: TrackpadEngine.Mode = .trackpad {
         didSet {
+            trackpadEngine.releaseAllButtons()
             trackpadEngine.mode = inputMode
         }
     }
     @Published public var isObserveOnly = false {
         didSet {
             releaseAllModifiers()
+            trackpadEngine.releaseAllButtons()
             if isObserveOnly { isKeyboardVisible = false }
             client.setInputEnabled(!isObserveOnly)
             inputGeneration = UUID()
@@ -91,6 +93,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     private let keyboardStore: KeyboardToolbarStore
     public var canRememberPassword: Bool { !isTemporary }
     private let deviceStore: DeviceStore
+    private nonisolated let callbackGeneration = SessionCallbackGeneration()
 
     public init(device: RemoteDevice, password: String?, isTemporary: Bool = false,
                 deviceStore: DeviceStore = .shared, keyboardStore: KeyboardToolbarStore = .shared) {
@@ -165,9 +168,16 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
         // Handle RFB client state changes
         client.onStateChanged = { [weak self] state in
-            Task { @MainActor in
-                self?.sessionState = state
-                if state == .connected, let self, !self.isTemporary {
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else { return }
+                self.sessionState = state
+                if case .failed = state {
+                    self.releaseAllModifiers()
+                    self.trackpadEngine.releaseAllButtons()
+                }
+                if state == .connected, !self.isTemporary {
                     self.deviceStore.recordConnection(for: self.device)
                 }
             }
@@ -175,8 +185,10 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
         // Handle Interactive VNC Password Prompt from Server
         client.onRequestPassword = { [weak self] continuation in
-            Task { @MainActor in
-                guard let self = self else {
+            guard let self else { continuation(nil); return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else {
                     continuation(nil)
                     return
                 }
@@ -188,8 +200,10 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
 
         client.onRequestMacAccount = { [weak self] continuation in
-            Task { @MainActor in
-                guard let self else { continuation(nil, nil); return }
+            guard let self else { continuation(nil, nil); return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else { continuation(nil, nil); return }
                 self.macAccountContinuation = continuation
                 self.requiresMacAccountPrompt = true
                 self.passwordPromptError = nil
@@ -202,17 +216,22 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
         // Handle incoming frame download progress
         client.onDownloadProgress = { [weak self] current, total in
-            Task { @MainActor in
-                self?.downloadProgress = (current, total)
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else { return }
+                self.downloadProgress = (current, total)
             }
         }
 
         // Handle incoming screen frame updates
         let renderer = metalRenderer
         client.onFrameUpdated = { [weak self] in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
             renderer?.notifyFrameUpdated()
-            Task { @MainActor in
-                guard let self = self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else { return }
                 if !self.hasReceivedFirstFrame { self.hasReceivedFirstFrame = true }
                 if self.downloadProgress != nil { self.downloadProgress = nil }
                 if self.metalRenderer == nil {
@@ -304,6 +323,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Connect to remote Mac
     public func startSession() {
+        callbackGeneration.advance()
         hasReceivedFirstFrame = false
         downloadProgress = nil
         client.connect()
@@ -312,7 +332,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Reauthenticate without leaving the viewport; also clear held local input.
     public func reconnectSession() {
         releaseAllModifiers()
-        client.disconnect()
+        trackpadEngine.releaseAllButtons()
+        cancelPasswordPrompt()
         inputGeneration = UUID()
         if curtainManager.isCurtainActive { curtainManager.toggleCurtain() }
         startSession()
@@ -320,6 +341,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Disconnect from remote Mac
     public func endSession() {
+        callbackGeneration.advance()
+        releaseAllModifiers()
+        trackpadEngine.releaseAllButtons()
         let framebuffer = client.framebuffer
         let deviceId = device.id
         if !isTemporary {
@@ -331,7 +355,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
         hasReceivedFirstFrame = false
         downloadProgress = nil
-        client.disconnect()
+        cancelPasswordPrompt()
     }
 
     // MARK: - Modifiers & Sticky Keys (Screens 3-State Logic)
@@ -522,4 +546,12 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public func sendNativeKey(down: Bool, keySym: UInt32) {
         client.sendKeyEvent(down: down, keySym: keySym)
     }
+}
+
+private final class SessionCallbackGeneration: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = UUID()
+    func capture() -> UUID { lock.lock(); defer { lock.unlock() }; return value }
+    func matches(_ generation: UUID) -> Bool { capture() == generation }
+    func advance() { lock.lock(); value = UUID(); lock.unlock() }
 }

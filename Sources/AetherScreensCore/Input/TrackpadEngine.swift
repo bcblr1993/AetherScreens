@@ -104,6 +104,12 @@ public final class TrackpadEngine: @unchecked Sendable {
         emitPointerEvent()
     }
 
+    public func releaseAllButtons() {
+        guard !activeButtons.isEmpty else { return }
+        activeButtons = []
+        emitPointerEvent()
+    }
+
     /// Two-finger scroll delta (natural scrolling)
     public func handleScroll(deltaY: CGFloat) {
         guard deltaY != 0 else { return }
