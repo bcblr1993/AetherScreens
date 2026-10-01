@@ -18,6 +18,29 @@ final class ZRLEDecoderTests: XCTestCase {
         XCTAssertEqual(ZRLEDecoder().decode(data: compressed, width: 257, height: 257), fixture.pixels)
     }
 
+    func test4KRawTilesPreserveEveryPixelAcrossRepeatedFrames() throws {
+        let fixture = zrleRawTileFixture(width: 3840, height: 2160)
+        let encoder = try ZRLETestDeflater()
+        let packets = try (0..<3).map { _ in try encoder.compress(fixture.tiles) }
+        let decoder = ZRLEDecoder()
+        var durations: [Double] = []
+        for packet in packets {
+            let started = ProcessInfo.processInfo.systemUptime
+            let pixels = try XCTUnwrap(decoder.decode(data: packet, width: 3840, height: 2160))
+            durations.append((ProcessInfo.processInfo.systemUptime - started) * 1000)
+            XCTAssertEqual(pixels, fixture.pixels)
+        }
+        print("[ZRLE 4K raw tiles] decode milliseconds: \(durations); first packet bytes: \(packets[0].count)")
+    }
+
+    func testRejectsTruncatedRawPixelsInTheFinalPartialTile() throws {
+        let fixture = zrleRawTileFixture(width: 65, height: 65)
+        for removed in 1...3 {
+            let packet = try ZRLETestDeflater().compress(Data(fixture.tiles.dropLast(removed)))
+            XCTAssertNil(ZRLEDecoder().decode(data: packet, width: 65, height: 65))
+        }
+    }
+
     func testSolidTilesTraverseRowsAndPartialEdges() throws {
         let colors: [[UInt8]] = [a, b, [1, 2, 3], [4, 5, 6]]
         let encoded = colors.flatMap { [UInt8(1)] + $0 }

@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 169 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 171 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -682,3 +682,44 @@ The initial VM `build-for-testing` completed successfully. Actual
 `Timed out while enabling automation mode`; no functional test ran. Human
 authentication is pending; no Mac VM functional case is counted as passed yet. The existing VM
 and other projects were not reset. Passwords are neither scripted nor recorded.
+
+## 4K compact-pixel decoding and repeatable VM runner
+
+A 3840x2160 high-entropy raw-tile ZRLE fixture verifies every decoded pixel over
+three frames using the persistent zlib dictionary. Before optimization, Release
+samples were 21.9/22.1/23.8 ms; after checking each compact-pixel tile in one
+bounded read instead of three throwing byte reads per pixel, samples were
+17.5/17.1/16.5 ms. The full-core run measured 17.7/18.0/18.0 ms and passed
+171 tests with 5 live-environment skips. Truncation of any of the last three
+compact-pixel bytes in a final 1x1 edge tile is explicitly rejected. These are
+host CPU/fixture samples, not a claim about physical-iPhone latency, network
+adaptation or Screens smoothness. Logs are under `/tmp/aetherscreens-zrle-4k-*`
+and `/tmp/aetherscreens-zrle-tile-bounds-core.log`.
+
+`scripts/qa/run_macos_vm_ui_qa.py` supplies a repeatable VM UI entry point. It
+resolves an existing Tart VM, requires macOS 27 and `kern.hv_vmm_present=1`,
+requires a separately identified `.vmqa` app, copies into a fresh guest directory,
+builds XCTest in the guest, configures the QA app path and retrieves the actual
+result bundle. The acceptance gate requires exactly two passing initial Mac UI
+cases and no failures, skips or runtime warnings. It does not restart a VM,
+retry a timed-out test or enter a password. Syntax/help and refusal of a
+non-isolated app were verified; end-to-end VM execution awaits human automation
+authentication as recorded above.
+
+Example (use the current isolated Xcode and freshly built QA app):
+
+```sh
+python3 scripts/qa/run_macos_vm_ui_qa.py \
+  --vm macos27 --user chenxu \
+  --developer-dir /Users/chenxu/aetherscreens-ui-tools.ec1zbU/Xcode.app/Contents/Developer \
+  --app /tmp/AetherScreens-macOS27-VM-QA.app \
+  --output build/macos27-ui-qa-new-run
+```
+
+The example QA app must be regenerated from the current Release binary before
+acceptance; an older bundle or an already-used output path is not current proof.
+
+Current decoder-change verification also passed the iOS Release device build and
+strict deep signature check. Mac Release compilation is included in the Release
+core-test build. No new host UI automation was started; the VM auth gate and
+physical-device/full Screens requirements remain open.

@@ -47,10 +47,16 @@ final class ZRLEDecoder {
                         }
                         switch type {
                         case 0:
+                            // Validate a complete compact-pixel tile once, then expand it
+                            // without three throwing byte reads for every pixel.
+                            let compact = try reader.take(count * 3)
                             for row in 0..<tileHeight {
                                 let start = (y + row) * width + x
                                 for column in 0..<tileWidth {
-                                    output[start + column] = try reader.pixel().littleEndian
+                                    let index = (row * tileWidth + column) * 3
+                                    let color = UInt32(compact[index]) | UInt32(compact[index + 1]) << 8
+                                        | UInt32(compact[index + 2]) << 16 | 0xff000000
+                                    output[start + column] = color.littleEndian
                                 }
                             }
                         case 1:
@@ -100,6 +106,12 @@ final class ZRLEDecoder {
     private struct TileReader {
         let bytes: UnsafeBufferPointer<UInt8>
         var offset = 0
+        mutating func take(_ count: Int) throws -> UnsafeBufferPointer<UInt8> {
+            guard count >= 0, count <= bytes.count - offset else { throw TileError.invalid }
+            let end = offset + count
+            defer { offset = end }
+            return UnsafeBufferPointer(rebasing: bytes[offset..<end])
+        }
         mutating func byte() throws -> UInt8 {
             guard offset < bytes.count else { throw TileError.invalid }
             defer { offset += 1 }
