@@ -37,7 +37,7 @@ swift test --filter TailscaleLiveHandshakeTests
 
 The live suite verifies authentication, a real framebuffer, 60 seconds of continued connection and clean disconnect. Missing live configuration is reported as skipped. Never publish credentials or private desktop captures.
 
-For iPhone UI acceptance, forward those variables to Xcode with the `TEST_RUNNER_` prefix and run `AetherScreensIOSUITests/testLiveRemoteSession` on an unlocked, paired iPhone. The test verifies a real frame, landscape controls, keyboard toolbar and disconnect. `testPrimaryScreensOnIPhone` covers add/edit, settings and diagnostics. The synthetic session test additionally requires a loopback RFB server on port 5999.
+For Mac account acceptance also set `AETHERSCREENS_LIVE_USERNAME`. For iPhone UI acceptance, forward those variables to Xcode with the `TEST_RUNNER_` prefix and run `AetherScreensIOSUITests/testLiveRemoteSession` on an unlocked, paired iPhone. The test verifies a real frame, landscape controls, keyboard toolbar and disconnect. `testPrimaryScreensOnIPhone` covers add/edit, settings and diagnostics. The synthetic session test additionally requires a loopback RFB server on port 5999.
 
 ## Release
 

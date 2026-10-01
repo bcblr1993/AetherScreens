@@ -33,6 +33,19 @@ final class DeviceStoreTests: XCTestCase {
         DeviceStore(userDefaults: tempDefaults, legacySources: legacySources, keychain: keychain)
     }
 
+    @MainActor
+    func testConnectionAttemptDoesNotRecordSuccess() {
+        let store = makeStore()
+        let device = RemoteDevice(name: "Unverified Mac", host: "invalid.example")
+        store.addDevice(device)
+        let discovery = BonjourDiscoveryService()
+        defer { discovery.stopDiscovery() }
+        let viewModel = DeviceListViewModel(store: store, bonjourService: discovery)
+        viewModel.connect(to: device)
+        XCTAssertEqual(viewModel.activeSessionDevice?.id, device.id)
+        XCTAssertNil(store.devices.first?.lastConnected, "Opening a session is not a successful connection")
+    }
+
     func testAddAndRetrieveDevice() {
         let store = makeStore()
         let device = RemoteDevice(

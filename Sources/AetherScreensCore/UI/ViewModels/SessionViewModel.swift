@@ -139,6 +139,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         client.onStateChanged = { [weak self] state in
             Task { @MainActor in
                 self?.sessionState = state
+                if state == .connected, let device = self?.device {
+                    DeviceStore.shared.recordConnection(for: device)
+                }
             }
         }
 

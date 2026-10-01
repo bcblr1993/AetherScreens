@@ -140,7 +140,6 @@ public final class DeviceListViewModel: ObservableObject {
 
     /// Start a remote desktop session with the given device
     public func connect(to device: RemoteDevice) {
-        store.recordConnection(for: device)
         activeSessionDevice = device
     }
 }

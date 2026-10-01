@@ -9,6 +9,12 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.buttons["Add Computer"].tap()
         XCTAssertTrue(app.navigationBars["Add Computer"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.textFields["Port"].exists)
+        let username = app.textFields["Username (Mac account, optional)"]
+        XCTAssertTrue(username.exists)
+        username.tap()
+        username.typeText("qa-user")
+        XCTAssertTrue(app.secureTextFields["Mac Account Password"].exists)
+        XCTAssertFalse(app.secureTextFields["VNC Password (Optional)"].exists)
         attachScreenshot(app, name: "Add Computer")
         app.buttons["Cancel"].tap()
 
@@ -72,7 +78,15 @@ final class AetherScreensIOSUITests: XCTestCase {
         let address = app.textFields["Tailscale IP / Host (e.g. 100.80.1.25)"]
         address.tap()
         address.typeText(host)
-        let secret = app.secureTextFields["VNC Password (Optional)"]
+        let username = env["AETHERSCREENS_LIVE_USERNAME"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let username, !username.isEmpty {
+            let account = app.textFields["Username (Mac account, optional)"]
+            XCTAssertTrue(account.waitForExistence(timeout: 5))
+            account.tap()
+            account.typeText(username)
+        }
+        let secret = app.secureTextFields[(username?.isEmpty == false) ? "Mac Account Password" : "VNC Password (Optional)"]
+        XCTAssertTrue(secret.waitForExistence(timeout: 5))
         secret.tap()
         secret.typeText(password)
         app.buttons["Save"].tap()

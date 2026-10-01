@@ -44,9 +44,9 @@ public struct DeviceCardView: View {
                             Spacer()
                             HStack(spacing: 6) {
                                 Circle()
-                                    .fill(device.isOnline ? Color(red: 0.30, green: 0.77, blue: 0.53) : .gray)
+                                    .fill(device.isTailscaleNode && device.isOnline ? Color(red: 0.30, green: 0.77, blue: 0.53) : .gray)
                                     .frame(width: 6, height: 6)
-                                Text(device.isOnline ? "Online" : "Offline")
+                                Text(device.isTailscaleNode ? (device.isOnline ? "Tailnet Online" : "Tailnet Offline") : "Saved")
                                     .font(.system(size: 11, weight: .semibold))
                             }
                             .foregroundStyle(.white)

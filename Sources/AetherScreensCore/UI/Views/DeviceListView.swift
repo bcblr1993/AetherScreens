@@ -45,7 +45,7 @@ public struct DeviceListView: View {
             mainGridView
                 .navigationTitle(selectedCategory.rawValue)
         }
-        .sheet(item: $activeSessionVM) { sessionVM in
+        .sheet(item: $activeSessionVM, onDismiss: { viewModel.reload() }) { sessionVM in
             RemoteDesktopView(viewModel: sessionVM)
                 .frame(minWidth: 800, minHeight: 560)
         }
@@ -66,7 +66,7 @@ public struct DeviceListView: View {
             mainGridView
                 .navigationTitle("AetherScreens")
                 .navigationBarTitleDisplayMode(.inline)
-                .fullScreenCover(item: $activeSessionVM) { sessionVM in
+                .fullScreenCover(item: $activeSessionVM, onDismiss: { viewModel.reload() }) { sessionVM in
                     RemoteDesktopView(viewModel: sessionVM)
                 }
                 .sheet(item: $editingDevice) { dev in
@@ -297,7 +297,7 @@ public struct DeviceListView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Text("\(viewModel.filteredDevices.filter(\.isOnline).count) online")
+            Text("\(viewModel.filteredDevices.count) computers")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 11)
