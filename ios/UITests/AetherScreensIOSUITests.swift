@@ -20,6 +20,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertFalse(app.buttons["连接"].isEnabled)
         attachScreenshot(app, name: "Chinese Quick Connect")
         app.buttons["取消"].tap()
+        app.buttons["更多操作"].tap()
         app.buttons["设置"].tap()
         XCTAssertTrue(app.navigationBars["Tailscale 设置"].waitForExistence(timeout: 5))
         app.buttons["app-language"].tap()
@@ -129,6 +130,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         attachScreenshot(app, name: "Add Computer")
         app.buttons["Cancel"].tap()
 
+        app.buttons["More Actions"].tap()
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Tailscale Settings"].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "Settings")
@@ -244,7 +246,10 @@ final class AetherScreensIOSUITests: XCTestCase {
             host.tap()
             host.typeText("127.0.0.1")
             port.tap()
-            port.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4) + "5999")
+            port.typeKey("a", modifierFlags: .command)
+            port.typeText("5999")
+            XCTAssertEqual(port.value as? String, "5999")
+            XCTAssertTrue(app.buttons["Save"].isEnabled)
             app.buttons["Save"].tap()
         }
         return computer

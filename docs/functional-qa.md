@@ -124,3 +124,23 @@ Both language menus expose diagnostics and Tailscale sync under More Actions.
 The sync action disables while running to prevent duplicate requests. CI
 `36812376187` passed for resource fix `32dbfd1`. Signed physical iPhone and
 iPhone mini layout tests are running; these are not yet acceptance results.
+
+### Narrow toolbar acceptance and physical test status
+
+The first compact menu still truncated the product name on iPhone 12 mini.
+Settings, diagnostics and sync now share the leading menu; Quick Connect and
+Add remain direct trailing actions. The mini Chinese/English switch/persistence
+and full add/edit/settings/diagnostic workflow both passed in
+`build/ios-mini-toolbar-verified.xcresult`; the full title was visually checked.
+The fresh-library test exposed an old fixture helper entering `59995900` because
+deleting at the beginning left the default port intact. It now selects all,
+asserts `5999` and enabled Save before submitting. Core suite remains 87 tests,
+four external skips, zero failures.
+
+iPhone 16 Pro Max was unlocked with Developer Mode enabled over Wi-Fi. The
+signed app installed and launched. XCTest failed before executing cases: its
+runner exited 74 after the IDE peer refused
+`dtxproxy:XCTestDriverInterface:XCTestManager_IDEInterface`. Evidence:
+`build/ios-physical-localization.xcresult` and its exported runner diagnostics.
+This is not physical functional acceptance. The user connected USB; the current
+USB test is waiting for the device to unlock after automatic locking.

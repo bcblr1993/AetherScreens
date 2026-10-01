@@ -244,14 +244,7 @@ public struct DeviceListView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                #if canImport(UIKit)
-                Menu {
-                    libraryUtilityActions
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel(AppLocalization.string("More Actions"))
-                #else
+                #if os(macOS)
                 libraryUtilityActions
                     .labelStyle(.iconOnly)
                 #endif
@@ -277,12 +270,18 @@ public struct DeviceListView: View {
 
             #if canImport(UIKit)
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showingSettingsSheet = true
+                Menu {
+                    Button {
+                        showingSettingsSheet = true
+                    } label: {
+                        Label(AppLocalization.string("Settings"), systemImage: "gear")
+                    }
+                    Divider()
+                    libraryUtilityActions
                 } label: {
                     Image(systemName: "gear")
                 }
-                .accessibilityLabel(AppLocalization.string("Settings"))
+                .accessibilityLabel(AppLocalization.string("More Actions"))
             }
             #endif
         }
