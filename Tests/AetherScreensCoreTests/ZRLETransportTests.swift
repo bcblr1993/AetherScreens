@@ -3,6 +3,38 @@ import Network
 @testable import AetherScreensCore
 
 final class ZRLETransportTests: XCTestCase {
+    func testReconnectFromFailureNotificationKeepsTheNewConnectionAlive() throws {
+        let ready = expectation(description: "Failure reconnect listener ready")
+        let first = ZRLEReconnectOnce()
+        let invalid = try ZRLETestDeflater().compress(Data([17]))
+        let expected = Data(repeating: 42, count: 4 * 2 * 4)
+        let server = try ZRLEWireServer(ready: { ready.fulfill() }) {
+            if first.take() {
+                return [Self.rectangle(.zrle, x: 0, y: 0, width: 4, height: 2, compressed: invalid)]
+            }
+            return [Self.rectangle(.raw, x: 0, y: 0, width: 4, height: 2, payload: expected)]
+        }
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue)
+        defer { client.disconnect() }
+        let failed = expectation(description: "Malformed first connection rejected")
+        let delivered = expectation(description: "Replacement connection survives failure callback")
+        client.onStateChanged = { [weak client] state in
+            if case .failed(let reason) = state {
+                XCTAssertEqual(reason, "Invalid ZRLE pixel data")
+                failed.fulfill()
+                client?.connect()
+            }
+        }
+        client.onFrameUpdated = { delivered.fulfill() }
+        client.connect()
+        wait(for: [failed, delivered], timeout: 3)
+        XCTAssertEqual(client.state, .connected)
+        XCTAssertEqual(server.offers.count, 2)
+        XCTAssertTrue(client.framebuffer.pixels.elementsEqual(expected))
+    }
+
     func testReconnectFromReceiveNotificationCannotConsumeOldPayloadOnNewConnection() throws {
         let ready = expectation(description: "Reentrant reconnect fixture ready")
         let image = zrleRawTileFixture(width: 257, height: 257)

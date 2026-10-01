@@ -154,9 +154,11 @@ public final class RFBClient: @unchecked Sendable {
         inputLock.unlock()
         AppLogger.shared.info("Disconnecting session with \(host)", category: "Network")
         stopTransportReports()
-        connection?.cancel()
+        let previous = connection
         connection = nil
         readBuffer.removeAll()
+        // Invalidate callbacks before cancellation can deliver a terminal receive.
+        previous?.cancel()
         state = .disconnected
     }
 
@@ -993,9 +995,12 @@ public final class RFBClient: @unchecked Sendable {
 
     private func handleFailure(_ message: String) {
         AppLogger.shared.error("Session failed: \(message)", category: "RFB")
-        state = .failed(message)
         stopTransportReports()
-        connection?.cancel()
+        let previous = connection
         connection = nil
+        previous?.cancel()
+        // A failure observer may reconnect synchronously. Teardown must finish
+        // before publishing, so it cannot cancel the replacement connection.
+        state = .failed(message)
     }
 }

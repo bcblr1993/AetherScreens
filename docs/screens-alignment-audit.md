@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 171 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 172 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -723,3 +723,29 @@ Current decoder-change verification also passed the iOS Release device build and
 strict deep signature check. Mac Release compilation is included in the Release
 core-test build. No new host UI automation was started; the VM auth gate and
 physical-device/full Screens requirements remain open.
+
+## Reentrant failure teardown regression
+
+The earlier CI run `36858535958` failed in
+`testReconnectFromReceiveNotificationCannotConsumeOldPayloadOnNewConnection`
+with an EOF notification; its following run `36858571568` passed. The exact
+interleaving of that intermittent EOF is not proven by the CI text. Inspection
+found cancellation preceded invalidating the connection reference, and failure
+notifications preceded all teardown. A new deterministic TCP test reconnects
+synchronously from the failure notification after a malformed ZRLE rectangle.
+Before repair it timed out and never negotiated the second connection (four
+assertion failures); after repair all ten ZRLE transport cases pass. Both teardown
+paths now invalidate the old connection before cancelling it; the failure path
+finishes old teardown before publishing the failure. The new test proves the
+replacement completes its handshake, publishes the expected full image and
+remains connected. It does not ignore any failure or weaken the EOF assertion.
+Evidence: `/tmp/aetherscreens-reentrant-failure-before.log` and
+`/tmp/aetherscreens-reentrant-failure-after.log`.
+
+After repair, all ten TCP transport cases passed 20 consecutive executions
+(200 actual cases, no failures). The complete Release core suite passed
+172 tests with 5 explicit live-environment skips. Mac Release compilation,
+iOS Release device build and strict deep iOS signature verification passed.
+The preceding pixel-decoder/VM-runner commit `5e61aa1` passed CI run
+`36859071018`; the teardown repair needs its own exact-commit CI evidence.
+The VM's required human UI automation authentication is still outstanding.
