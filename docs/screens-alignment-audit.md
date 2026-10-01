@@ -26,12 +26,12 @@ The release remains a draft until the user has reviewed the completed acceptance
 | On-disconnect actions | Disconnect only | Per-connection Mac hot-corner, lock and logout actions before disconnect; proof on an isolated acceptance desktop |
 | URL schemes / automation | No app URL handler | Saved and temporary connection URLs, account/VNC parameters and Observe selection; SSH-key URL support with real tunnel implementation; applicable shortcuts/widgets |
 | AirPlay / external display / Pencil | Not implemented | iOS display routing and peripheral acceptance |
-| Mac multi-window sessions | A single active sheet | Independent concurrent session windows |
+| Mac multi-window sessions | Independent native windows; real Mac concurrent account sessions, minimizing/restoring, saved-session reuse, Observe isolation and closing one window while continuing remote input in the other passed. Numbered window/menu titles distinguish the same computer. | iOS active/background session selection remains in its separate requirement |
 | Wake-on-LAN | Packet construction tests and send-success notice | Real wake verification on an appropriately configured sleeping Mac |
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests and iOS simulator language switch/persistence pass, Mac switch passes | Physical iPhone acceptance; iPhone 17 and mini switch/persistence and narrow layouts passed |
-| Release readiness | 87 latest-source tests (4 environment skips) pass under both package build systems; resource fix passed CI; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
+| Release readiness | 90 latest-source tests (4 environment skips) pass under both package build systems; Mac release and iOS simulator builds pass; resource fix passed CI; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and

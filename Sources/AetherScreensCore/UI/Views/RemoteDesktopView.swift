@@ -11,9 +11,13 @@ public struct RemoteDesktopView: View {
     @State private var lastDragLocation: CGPoint?
     @State private var isDraggingMouse: Bool = false
     @State private var showingLogs: Bool = false
+    private let managesSessionLifecycle: Bool
+    private let onDisconnect: (() -> Void)?
 
-    public init(viewModel: SessionViewModel) {
+    public init(viewModel: SessionViewModel, managesSessionLifecycle: Bool = true, onDisconnect: (() -> Void)? = nil) {
         self.viewModel = viewModel
+        self.managesSessionLifecycle = managesSessionLifecycle
+        self.onDisconnect = onDisconnect
     }
 
     public var body: some View {
@@ -49,10 +53,10 @@ public struct RemoteDesktopView: View {
             }
         }
         .onAppear {
-            viewModel.startSession()
+            if managesSessionLifecycle { viewModel.startSession() }
         }
         .onDisappear {
-            viewModel.endSession()
+            if managesSessionLifecycle { viewModel.endSession() }
         }
         .sheet(isPresented: $viewModel.isPromptingPassword) {
             PasswordPromptSheet(
@@ -381,8 +385,12 @@ public struct RemoteDesktopView: View {
         HStack(spacing: 8) {
             // Close / Disconnect
             Button {
-                viewModel.endSession()
-                dismiss()
+                if let onDisconnect {
+                    onDisconnect()
+                } else {
+                    viewModel.endSession()
+                    dismiss()
+                }
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 12, weight: .bold))

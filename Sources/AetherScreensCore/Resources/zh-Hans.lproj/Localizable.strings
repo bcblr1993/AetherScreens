@@ -206,3 +206,5 @@
 "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network." = "连接超时。请检查地址、屏幕共享及局域网或 Tailscale 连接，并在“系统设置”>“隐私与安全性”>“本地网络”中允许 AetherScreens。";
 "More Actions" = "更多操作";
 "Syncing…" = "正在同步…";
+"Open Sessions" = "打开的会话";
+"Open in New Window" = "在新窗口中打开";

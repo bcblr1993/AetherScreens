@@ -32,6 +32,9 @@ public struct DeviceListView: View {
     @State private var activeSessionVM: SessionViewModel?
     @State private var editingDevice: RemoteDevice?
     @State private var showingLogs = false
+    #if os(macOS)
+    @ObservedObject private var sessionRegistry = SessionRegistry.shared
+    #endif
 
     private let columns = [
         GridItem(.adaptive(minimum: 230, maximum: 320), spacing: 16)
@@ -49,10 +52,7 @@ public struct DeviceListView: View {
             mainGridView
                 .navigationTitle(AppLocalization.string(selectedCategory.rawValue))
         }
-        .sheet(item: $activeSessionVM, onDismiss: { viewModel.reload() }) { sessionVM in
-            RemoteDesktopView(viewModel: sessionVM)
-                .frame(minWidth: 800, minHeight: 560)
-        }
+        .onChange(of: sessionRegistry.sessions.count) { _, _ in viewModel.reload() }
         .sheet(item: $editingDevice) { dev in
             EditDeviceSheet(device: dev, viewModel: viewModel)
         }
@@ -207,6 +207,15 @@ public struct DeviceListView: View {
                                         Label(AppLocalization.string("Connect"), systemImage: "arrow.up.right.video")
                                     }
 
+                                    #if os(macOS)
+                                    Button {
+                                        let session = SessionViewModel(device: device, password: DeviceStore.shared.getPassword(for: device))
+                                        SessionWindowManager.shared.open(session, reuseExisting: false)
+                                    } label: {
+                                        Label(AppLocalization.string("Open in New Window"), systemImage: "macwindow.badge.plus")
+                                    }
+                                    #endif
+
                                     Button {
                                         editingDevice = device
                                     } label: {
@@ -247,6 +256,19 @@ public struct DeviceListView: View {
                 #if os(macOS)
                 libraryUtilityActions
                     .labelStyle(.iconOnly)
+                Menu {
+                    ForEach(sessionRegistry.sessions) { entry in
+                        Button(entry.title) {
+                            SessionWindowManager.shared.focus(entry.id)
+                        }
+                    }
+                } label: {
+                    Label(AppLocalization.string("Open Sessions"), systemImage: "display.2")
+                        .labelStyle(.iconOnly)
+                }
+                .accessibilityLabel(AppLocalization.string("Open Sessions"))
+                .help(AppLocalization.string("Open Sessions"))
+                .disabled(sessionRegistry.sessions.isEmpty)
                 #endif
 
                 // Temporary or optionally saved connection
@@ -425,7 +447,7 @@ public struct DeviceListView: View {
     private func openSession(for device: RemoteDevice) {
         let password = DeviceStore.shared.getPassword(for: device)
         let session = SessionViewModel(device: device, password: password)
-        self.activeSessionVM = session
+        presentSession(session)
     }
 
     private var quickConnectSheet: some View {
@@ -437,7 +459,15 @@ public struct DeviceListView: View {
     private func openPendingQuickSession() {
         guard let session = pendingQuickSession else { return }
         pendingQuickSession = nil
+        presentSession(session)
+    }
+
+    private func presentSession(_ session: SessionViewModel) {
+        #if os(macOS)
+        SessionWindowManager.shared.open(session)
+        #else
         activeSessionVM = session
+        #endif
     }
 
     private var emptyStateView: some View {
