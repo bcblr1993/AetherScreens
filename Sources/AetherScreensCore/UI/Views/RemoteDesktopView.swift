@@ -8,8 +8,6 @@ public struct RemoteDesktopView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
 
-    @State private var lastDragLocation: CGPoint?
-    @State private var isDraggingMouse: Bool = false
     @State private var showingLogs: Bool = false
     @State private var showingKeyboardCustomization = false
     private let managesSessionLifecycle: Bool
@@ -67,11 +65,12 @@ public struct RemoteDesktopView: View {
             PasswordPromptSheet(
                 deviceName: viewModel.device.name,
                 host: viewModel.device.host,
-                username: viewModel.device.username,
+                username: viewModel.client.username,
                 errorMessage: viewModel.passwordPromptError,
                 canRememberPassword: viewModel.canRememberPassword,
-                onSubmit: { pwd, saveToKeychain in
-                    viewModel.submitPassword(pwd, rememberInKeychain: saveToKeychain)
+                requiresMacAccount: viewModel.requiresMacAccountPrompt,
+                onSubmit: { pwd, account, saveToKeychain in
+                    viewModel.submitPassword(pwd, rememberInKeychain: saveToKeychain, accountUsername: account)
                 },
                 onCancel: {
                     viewModel.cancelPasswordPrompt()
@@ -144,18 +143,15 @@ public struct RemoteDesktopView: View {
             }
             #endif
 
-            // Virtual Cursor Overlay (in Trackpad mode on iOS)
             #if canImport(UIKit)
-            if !viewModel.isObserveOnly && viewModel.inputMode == .trackpad && imageWidth > 0 && imageHeight > 0 {
-                let cursorScreenX = originX + viewModel.trackpadEngine.cursorX * canvasWidth / imageWidth
-                let cursorScreenY = originY + viewModel.trackpadEngine.cursorY * canvasHeight / imageHeight
-
-                Circle()
-                    .fill(Color.white.opacity(0.9))
-                    .frame(width: 14, height: 14)
-                    .overlay(Circle().stroke(Color.black, lineWidth: 1.5))
-                    .shadow(color: .black.opacity(0.3), radius: 4)
-                    .position(x: cursorScreenX, y: cursorScreenY)
+            if !viewModel.isObserveOnly {
+                IOSRemoteInputView(
+                    engine: viewModel.trackpadEngine,
+                    canvas: CGRect(x: originX, y: originY, width: canvasWidth, height: canvasHeight),
+                    zoom: viewModel.zoomScale,
+                    onZoom: { viewModel.zoomScale = $0 }
+                )
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
             #endif
 
@@ -205,74 +201,6 @@ public struct RemoteDesktopView: View {
         .onChange(of: fitScale, initial: true) { _, scale in
             viewModel.actualSizeZoomScale = max(1, 1 / max(0.001, scale * displayScale))
         }
-        #if canImport(UIKit)
-        .onContinuousHover { phase in
-            switch phase {
-            case .active(let point):
-                if viewModel.inputMode == .touch {
-                    viewModel.trackpadEngine.handleDirectTouch(
-                        point: CGPoint(x: point.x - originX, y: point.y - originY),
-                        viewSize: CGSize(width: canvasWidth, height: canvasHeight)
-                    )
-                }
-            case .ended:
-                break
-            }
-        }
-        .gesture(
-            // Pan / Drag gesture with tactile haptics
-            DragGesture(minimumDistance: 1)
-                .onChanged { value in
-                    if let last = lastDragLocation {
-                        let dx = value.location.x - last.x
-                        let dy = value.location.y - last.y
-
-                        if viewModel.inputMode == .trackpad {
-                            viewModel.trackpadEngine.handlePanDelta(dx: dx, dy: dy)
-                        } else {
-                            viewModel.trackpadEngine.handleDirectTouch(
-                                point: CGPoint(x: value.location.x - originX, y: value.location.y - originY),
-                                viewSize: CGSize(width: canvasWidth, height: canvasHeight)
-                            )
-                        }
-                    }
-                    lastDragLocation = value.location
-                }
-                .onEnded { _ in
-                    lastDragLocation = nil
-                    if isDraggingMouse {
-                        viewModel.trackpadEngine.endDrag()
-                        isDraggingMouse = false
-                    }
-                }
-        )
-        .simultaneousGesture(
-            SpatialTapGesture(count: 2)
-                .exclusively(before: SpatialTapGesture(count: 1))
-                .onEnded { result in
-                    switch result {
-                    case .first:
-                        viewModel.handleDoubleTapZoom()
-                    case .second(let tap):
-                        if viewModel.inputMode == .touch {
-                            viewModel.trackpadEngine.handleDirectTouch(
-                                point: CGPoint(x: tap.location.x - originX, y: tap.location.y - originY),
-                                viewSize: CGSize(width: canvasWidth, height: canvasHeight)
-                            )
-                        }
-                        viewModel.triggerHaptic()
-                        viewModel.trackpadEngine.handleTap()
-                    }
-                }
-        )
-        .simultaneousGesture(
-            // Pinch to Zoom
-            MagnificationGesture()
-                .onChanged { scale in
-                    viewModel.zoomScale = max(1.0, min(scale, 4.0))
-                }
-        )
-        #endif
     }
 
     // MARK: - Connecting State

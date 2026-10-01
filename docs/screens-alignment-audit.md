@@ -7,9 +7,9 @@ The release remains a draft until the user has reviewed the completed acceptance
 
 | Requirement | Current implementation and evidence | Remaining work |
 | --- | --- | --- |
-| Mac account / VNC connections | ARD type 30 and VNC implemented; real Mac authentication, frame and 60-second session passed | Physical iPhone account session |
+| Mac account / VNC connections | ARD type 30 and VNC implemented; real Mac authentication, frame and 60-second session passed. iPhone 12 Pro received the requested target Mac's desktop; user confirmed connection. | iPhone 16 Pro Max target session; sustained physical-device interaction |
 | Interactive shortcut toolbar | Sticky modifiers, common shortcuts, F1-F12; Mac F8 observed remotely | Physical iPhone modifier/shortcut delivery and narrow layouts |
-| Touch / trackpad gestures | TrackpadEngine tests and synthetic simulator session | Physical tap, secondary click, drag, pinch, scroll and mode changes |
+| Touch / trackpad gestures | Native iOS recognizers now wire immediate clicks, secondary/middle clicks, held-button dragging, two-axis scrolling and pinch zoom. Cursor movement uses remote-pixel scaling, smooth acceleration and an immediate UIKit layer. Core tests cover click release, scaling and engine drag state. | Physical tap, secondary click, drag, pinch, scroll and mode changes; perceived responsiveness and reference gesture gaps |
 | Hardware pointing devices | Mac native mouse, drag, context menu and wheel passed | iPad pointer and hardware keyboard acceptance |
 | International keyboards / dictation | UTF-8 text drawer and Chinese keysyms passed; NSTextInputClient composition tests | Real IME; supplementary-plane characters; dictation workflow |
 | Clipboard transfers | Local clipboard insertion passed; extended protocol parser tests | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
@@ -30,7 +30,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Wake-on-LAN | Packet construction tests and send-success notice | Real wake verification on an appropriately configured sleeping Mac |
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
-| English / Simplified Chinese | Implemented; core/catalog tests and iOS simulator language switch/persistence pass, Mac switch passes | Physical iPhone acceptance; iPhone 17 and mini switch/persistence and narrow layouts passed |
+| English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
 | Release readiness | 95 latest-source tests (4 environment skips) pass under both package build systems; Mac release and iOS simulator builds pass; multi-window commit passed CI; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
@@ -41,9 +41,40 @@ The iOS live test now accepts the Mac username and selects the account password
 field. Previously it could only exercise the VNC-password path. The updated account form
 simulator test passed. Connection attempts no longer stamp successful-connection
 history; a regression test verifies this boundary. Physical iPhone
-launch on iPhone 12 Pro was denied because it requires its passcode.
-iPhone 16 Pro Max installed and launched; Wi-Fi XCTest failed during IDE
-connection bootstrapping, and the USB run currently waits for unlock.
+initially required unlocking both devices. Parallel USB runs subsequently
+completed the six UI scenarios on iPhone 12 Pro and iPhone 16 Pro Max. The 12 Pro
+passed 6/6; the 16 Pro Max passed 5/6 before an interrupted menu tap was retried.
+The English and Chinese toolbar scenarios then passed 2/2 on each device.
+These scenarios check UI and intentionally failed destinations, not live input.
+
+Physical connection diagnosis found that Bonjour instance display names had
+been incorrectly converted to DNS host names. The fix resolves the actual SRV
+host and port and repairs only old generated addresses, preserving device IDs,
+accounts, Keychain associations and manually configured IP addresses. A live
+LAN discovery regression verifies a display name differing from its DNS host.
+The 12 Pro received a real framebuffer from its saved MacBook Pro after repair;
+that machine is 192.168.50.26, not the requested 192.168.50.226 target. The
+16 Pro Max's saved configuration lacked a username, so its Mac-only server
+rejected VNC authentication. Interactive Mac username/password prompting is now
+implemented with handshake and saved-versus-temporary persistence regressions.
+The 12 Pro subsequently passed the account-session test against 192.168.50.226;
+its screenshot shows the controlled QA desktop. The user confirmed connection
+but reported poorer responsiveness than Screens. The 16 Pro Max target test
+was interrupted before reaching Quick Connect and remains pending; its subsequent
+normal launch was denied while locked. CoreDevice refused pasteboard
+transfer because the current clipboard is marked transient/remote-synchronized;
+no password was copied into it or written to test arguments/results.
+
+The responsiveness repair removes single-click waiting for double-tap zoom and
+the 50 ms click-release timer, connects the previously unwired iOS gestures,
+scales finger points to remote pixels, moves the cursor directly in a UIKit
+layer, and avoids publishing unchanged first-frame/display state for every
+frame. Metal invalidation is coalesced and removes the extra main-thread hop.
+The latest core suite passed 102 tests with four environment skips. Mac and iOS
+Release builds passed. The optimized iOS candidate was installed on both phones;
+normal launch passed on the 12 Pro and awaits unlocking on the 16 Pro Max.
+Actual improved hand feel and physical gesture delivery remain unaccepted.
+This is an internal test candidate, not a public release.
 
 Reference detail checked on 2026-10-01: [Toolbar customization](https://help.edovia.com/en/screens-5/features/toolbar-customization),
 [on-disconnect actions](https://help.edovia.com/en/screens-5/features/on-disconnect-actions),

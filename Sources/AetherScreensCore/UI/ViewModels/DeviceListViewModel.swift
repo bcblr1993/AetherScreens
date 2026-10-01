@@ -31,7 +31,11 @@ public final class DeviceListViewModel: ObservableObject {
     private func setupBonjourBindings() {
         bonjourService.$discoveredMacs
             .receive(on: DispatchQueue.main)
-            .assign(to: \.discoveredNearbyMacs, on: self)
+            .sink { [weak self] discovered in
+                guard let self else { return }
+                self.discoveredNearbyMacs = discovered
+                if self.store.repairLegacyBonjourHosts(using: discovered) { self.reload() }
+            }
             .store(in: &cancellables)
 
         bonjourService.$isSearching

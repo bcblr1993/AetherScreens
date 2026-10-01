@@ -18,7 +18,7 @@ public final class RFBClient: @unchecked Sendable {
     public let host: String
     public let port: UInt16
     public var password: String?
-    public let username: String?
+    public var username: String?
     public let framebuffer: Framebuffer
 
     public private(set) var state: State = .disconnected {
@@ -32,6 +32,7 @@ public final class RFBClient: @unchecked Sendable {
     public var onFrameUpdated: (@Sendable () -> Void)?
     public var onClipboardReceived: (@Sendable (String) -> Void)?
     public var onRequestPassword: (@Sendable (@escaping @Sendable (String?) -> Void) -> Void)?
+    public var onRequestMacAccount: (@Sendable (@escaping @Sendable (String?, String?) -> Void) -> Void)?
     public var onBytesReceived: (@Sendable (Int) -> Void)?
     public var onDownloadProgress: (@Sendable (Double, Double) -> Void)?
 
@@ -214,6 +215,22 @@ public final class RFBClient: @unchecked Sendable {
             // Select None (1)
             sendData(Data([RFBConstants.SecurityType.none.rawValue])) {
                 self.handleSecurityResult(type: .none)
+            }
+        } else if types.contains(.ardDiffieHellman), let request = onRequestMacAccount {
+            let pendingConnection = connection
+            request { [weak self] account, password in
+                guard let self else { return }
+                self.queue.async {
+                    guard self.connection === pendingConnection, self.state == .authenticating else { return }
+                    guard let account = account?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !account.isEmpty, let password, !password.isEmpty else {
+                        self.handleFailure("Mac account username and password required")
+                        return
+                    }
+                    self.username = account
+                    self.password = password
+                    self.sendData(Data([30])) { self.performARDAuth(username: account) }
+                }
             }
         } else {
             let offeredStr = types.map { "\($0.rawValue)" }.joined(separator: ", ")

@@ -41,6 +41,12 @@ public final class BonjourDiscoveryService: ObservableObject, @unchecked Sendabl
     private var browser: NWBrowser?
     private let queue = DispatchQueue(label: "com.aethernative.aetherscreens.bonjour", qos: .utility)
     private let lock = NSLock()
+    private var discoveryGeneration = UUID()
+    // Resolution and publication run on the main run loop used by NetService.
+    private var resolvers: [String: BonjourServiceResolver] = [:]
+    private var resolvedDevices: [String: DiscoveredMac] = [:]
+    private var activeServiceKeys: Set<String> = []
+    private var directDevices: [DiscoveredMac] = []
 
     public init() {}
 
@@ -50,6 +56,7 @@ public final class BonjourDiscoveryService: ObservableObject, @unchecked Sendabl
         defer { lock.unlock() }
 
         guard browser == nil else { return }
+        discoveryGeneration = UUID()
 
         let descriptor = NWBrowser.Descriptor.bonjour(type: "_rfb._tcp", domain: "local.")
         let parameters = NWParameters()
@@ -86,44 +93,96 @@ public final class BonjourDiscoveryService: ObservableObject, @unchecked Sendabl
 
         browser?.cancel()
         browser = nil
+        discoveryGeneration = UUID()
 
         Task { @MainActor in
             self.isSearching = false
+            self.resolvers.values.forEach { $0.stop() }
+            self.resolvers.removeAll()
+            self.resolvedDevices.removeAll()
+            self.activeServiceKeys.removeAll()
+            self.discoveredMacs = []
         }
     }
 
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
-        var devices: [DiscoveredMac] = []
-
-        for result in results {
-            switch result.endpoint {
-            case .service(let name, _, let domain, _):
-                let friendlyName = name
-                let host = "\(name).\(domain)".replacingOccurrences(of: " ", with: "-")
-                devices.append(
-                    DiscoveredMac(
-                        name: friendlyName,
-                        host: host,
-                        port: RFBConstants.defaultPort,
-                        isScreenSharing: true
-                    )
-                )
-            case .hostPort(let host, let port):
-                devices.append(
-                    DiscoveredMac(
-                        name: "Mac (\(host))",
-                        host: "\(host)",
-                        port: port.rawValue,
-                        isScreenSharing: true
-                    )
-                )
-            default:
-                break
-            }
-        }
-
+        lock.lock()
+        let generation = discoveryGeneration
+        lock.unlock()
         Task { @MainActor in
-            self.discoveredMacs = devices
+            guard self.isCurrentDiscovery(generation) else { return }
+            var services: [String: (String, String, String)] = [:]
+            var devices: [DiscoveredMac] = []
+            for result in results {
+                switch result.endpoint {
+                case .service(let name, let type, let domain, _):
+                    services["\(name)|\(type)|\(domain)"] = (name, type, domain)
+                case .hostPort(let host, let port):
+                    devices.append(
+                        DiscoveredMac(
+                            name: "Mac (\(host))",
+                            host: "\(host)",
+                            port: port.rawValue,
+                            isScreenSharing: true
+                        )
+                    )
+                default:
+                    break
+                }
+            }
+            self.activeServiceKeys = Set(services.keys)
+            self.directDevices = devices
+            for key in Array(self.resolvers.keys) where services[key] == nil {
+                self.resolvers.removeValue(forKey: key)?.stop()
+                self.resolvedDevices.removeValue(forKey: key)
+            }
+            for (key, (name, type, domain)) in services where self.resolvers[key] == nil {
+                let resolver = BonjourServiceResolver(name: name, type: type, domain: domain) { [weak discovery = self] device in
+                    guard let discovery, discovery.activeServiceKeys.contains(key), discovery.isCurrentDiscovery(generation) else { return }
+                    discovery.resolvedDevices[key] = device
+                    discovery.publishResolvedDevices()
+                }
+                self.resolvers[key] = resolver
+                resolver.start()
+            }
+            self.publishResolvedDevices()
         }
+    }
+
+    private func publishResolvedDevices() {
+        discoveredMacs = (directDevices + Array(resolvedDevices.values)).sorted { $0.id < $1.id }
+    }
+
+    private func isCurrentDiscovery(_ generation: UUID) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return browser != nil && discoveryGeneration == generation
+    }
+}
+
+/// Bonjour instance names are display labels, not DNS host names. Resolve the
+/// service's SRV record rather than guessing an address from its label.
+private final class BonjourServiceResolver: NSObject, NetServiceDelegate {
+    private let service: NetService
+    private let completion: (DiscoveredMac) -> Void
+
+    init(name: String, type: String, domain: String, completion: @escaping (DiscoveredMac) -> Void) {
+        service = NetService(domain: domain, type: type, name: name)
+        self.completion = completion
+        super.init()
+        service.delegate = self
+    }
+
+    func start() { service.resolve(withTimeout: 5) }
+    func stop() { service.stop() }
+
+    func netServiceDidResolveAddress(_ sender: NetService) {
+        guard let device = Self.resolvedDevice(name: sender.name, host: sender.hostName, port: sender.port) else { return }
+        completion(device)
+    }
+
+    static func resolvedDevice(name: String, host: String?, port: Int) -> DiscoveredMac? {
+        guard let host, !host.isEmpty, let port = UInt16(exactly: port), port > 0 else { return nil }
+        return DiscoveredMac(name: name, host: host, port: port)
     }
 }

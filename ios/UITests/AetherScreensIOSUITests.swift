@@ -1,6 +1,37 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testEnglishMacAccountPrompt() throws { try verifyMacAccountPrompt(language: "en") }
+    func testChineseMacAccountPrompt() throws { try verifyMacAccountPrompt(language: "zh-Hans") }
+
+    private func verifyMacAccountPrompt(language: String) throws {
+        guard let targetHost = ProcessInfo.processInfo.environment["AETHERSCREENS_MAC_ONLY_HOST"] else {
+            throw XCTSkip("Requires an explicitly selected Mac-only authentication server")
+        }
+        func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        app.buttons[label("Quick Connect", "快速连接")].tap()
+        let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+        host.tap()
+        host.typeText(targetHost)
+        app.buttons[label("Connect", "连接")].tap()
+        let username = app.textFields[label("Mac Account Username", "Mac 账户用户名")]
+        XCTAssertTrue(username.waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons[label("Connect", "连接")].isEnabled)
+        username.tap()
+        username.typeText("qa-placeholder")
+        let password = app.secureTextFields[label("Mac Account Password", "Mac 账户密码")]
+        password.tap()
+        password.typeText("qa-placeholder")
+        XCTAssertTrue(app.buttons[label("Connect", "连接")].isEnabled)
+        attachScreenshot(app, name: "Mac Account Prompt " + language)
+        // Verify the prompt without submitting dummy credentials to the Mac.
+        app.buttons[label("Cancel", "取消")].tap()
+        app.buttons[label("Disconnect", "断开连接")].tap()
+        XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+    }
+
     func testKeyboardCustomizationOnNarrowSession() {
         verifyKeyboardCustomization(language: "en")
     }
@@ -23,7 +54,14 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(app.buttons[label("Disconnect", "断开连接")].waitForExistence(timeout: 10))
         app.buttons[label("Session Options", "会话选项")].tap()
         app.buttons["session-customize-keyboard"].tap()
-        XCTAssertTrue(app.navigationBars[label("Keyboard Toolbar", "键盘工具栏")].waitForExistence(timeout: 5))
+        let reopenedToolbar = app.navigationBars[label("Keyboard Toolbar", "键盘工具栏")]
+        if !reopenedToolbar.waitForExistence(timeout: 5) {
+            // A transient system banner can consume the menu tap on hardware.
+            // Retry only while the original menu item is still visible.
+            let menuItem = app.buttons["session-customize-keyboard"]
+            if menuItem.exists && menuItem.isHittable { menuItem.tap() }
+        }
+        XCTAssertTrue(reopenedToolbar.waitForExistence(timeout: 5))
         let position = app.buttons["keyboard-position"]
         XCTAssertTrue(position.exists)
         position.tap()
@@ -43,7 +81,11 @@ final class AetherScreensIOSUITests: XCTestCase {
         attachScreenshot(app, name: "Customized Keyboard Session")
         app.buttons[label("Session Options", "会话选项")].tap()
         app.buttons["session-customize-keyboard"].tap()
-        XCTAssertTrue(app.navigationBars[label("Keyboard Toolbar", "键盘工具栏")].waitForExistence(timeout: 5))
+        if !reopenedToolbar.waitForExistence(timeout: 5) {
+            let menuItem = app.buttons["session-customize-keyboard"]
+            if menuItem.exists && menuItem.isHittable { menuItem.tap() }
+        }
+        XCTAssertTrue(reopenedToolbar.waitForExistence(timeout: 5))
         XCTAssertEqual(app.switches["keyboard-visible-Cmd"].value as? String, "0")
         app.buttons[label("Done", "完成")].tap()
         app.buttons[label("Disconnect", "断开连接")].tap()
@@ -276,6 +318,60 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Add Computer"].waitForExistence(timeout: 10))
     }
 
+    func testPreviouslyConfiguredMacReceivesRealDesktop() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Requires the previously configured physical-device Mac")
+        #endif
+        guard let name = ProcessInfo.processInfo.environment["AETHERSCREENS_CONFIGURED_MAC_NAME"] else {
+            throw XCTSkip("Requires an explicitly selected saved Mac")
+        }
+        let app = makeApp()
+        app.launch()
+        let computer = app.buttons["Connect to " + name].firstMatch
+        XCTAssertTrue(computer.waitForExistence(timeout: 15))
+        scrollComputerIntoView(computer, in: app)
+        computer.tap()
+        XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 10))
+        let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
+        let received = frame.waitForExistence(timeout: 45)
+        attachScreenshot(app, name: received ? "Physical Mac Real Desktop" : "Physical Mac Connection Failure")
+        XCTAssertTrue(received, "Configured Mac must authenticate and deliver a real framebuffer")
+        app.buttons["Disconnect"].tap()
+    }
+
+    // Enter the credential on the physical device so it never appears in test
+    // arguments, typeText activity logs, source code, or result bundle metadata.
+    func testPhysicalTargetMacAccountConnection() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Requires physical-device credential entry for the authorized LAN Mac")
+        #endif
+        let env = ProcessInfo.processInfo.environment
+        guard let targetHost = env["AETHERSCREENS_LIVE_HOST"], let username = env["AETHERSCREENS_LIVE_USERNAME"] else {
+            throw XCTSkip("Requires an explicitly selected physical-device Mac and account")
+        }
+        let app = makeApp()
+        app.launch()
+        app.buttons["Quick Connect"].tap()
+        let host = app.textFields["Tailscale IP / Host (e.g. 100.80.1.25)"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        host.typeText(targetHost)
+        let account = app.textFields["Username (Mac account, optional)"]
+        account.tap()
+        app.activate()
+        account.tap()
+        account.typeText(username)
+        let secret = app.secureTextFields["Mac Account Password"]
+        secret.tap()
+        // The user submits after finishing input. Never infer completion from
+        // the first password character or read the secure-field contents.
+        let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
+        let received = frame.waitForExistence(timeout: 300)
+        attachScreenshot(app, name: received ? "Target Physical Desktop" : "Target Physical Connection Failure")
+        XCTAssertTrue(received, "Target Mac must authenticate and deliver a real framebuffer")
+        app.buttons["Disconnect"].tap()
+    }
+
     private func makeApp(language: String = "en") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-com.aethernative.aetherscreens.language", language]
@@ -301,7 +397,22 @@ final class AetherScreensIOSUITests: XCTestCase {
             XCTAssertTrue(app.buttons["Save"].isEnabled)
             app.buttons["Save"].tap()
         }
+        scrollComputerIntoView(computer, in: app)
         return computer
+    }
+
+    private func scrollComputerIntoView(_ computer: XCUIElement, in app: XCUIApplication) {
+        let window = app.windows.firstMatch.frame
+        // A partially visible card may be hittable while its long-press center
+        // sits below the display. Bring the whole card above the safe area first.
+        for _ in 0..<5 {
+            let frame = computer.frame
+            if frame.minY >= window.minY + 120 && frame.maxY <= window.maxY - 60 { break }
+            if frame.maxY > window.maxY - 60 { app.swipeUp() }
+            else { app.swipeDown() }
+        }
+        XCTAssertGreaterThanOrEqual(computer.frame.minY, window.minY + 120)
+        XCTAssertLessThanOrEqual(computer.frame.maxY, window.maxY - 60)
     }
 
     private func attachScreenshot(_ app: XCUIApplication, name: String) {

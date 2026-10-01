@@ -14,6 +14,41 @@ final class InteractiveAuthAndLoggerTests: XCTestCase {
         super.tearDown()
     }
 
+    func testMacOnlyServerRequestsAccountInsteadOfFailingAsUnsupported() throws {
+        let ready = expectation(description: "Listener ready")
+        let requested = expectation(description: "Mac account requested")
+        let selected = expectation(description: "ARD type selected after entering account")
+        listener = try NWListener(using: .tcp, on: .any)
+        listener?.stateUpdateHandler = { state in if case .ready = state { ready.fulfill() } }
+        listener?.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            connection.start(queue: self.queue)
+            connection.send(content: Data(RFBConstants.protocolVersion38.utf8), completion: .contentProcessed { _ in
+                connection.receive(minimumIncompleteLength: 12, maximumLength: 12) { _, _, _, _ in
+                    connection.send(content: Data([1, 30]), completion: .contentProcessed { _ in
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { data, _, _, _ in
+                            XCTAssertEqual(data, Data([30]))
+                            selected.fulfill()
+                            connection.cancel()
+                        }
+                    })
+                }
+            })
+        }
+        listener?.start(queue: queue)
+        wait(for: [ready], timeout: 3)
+        let port = try XCTUnwrap(listener?.port)
+        let client = RFBClient(host: "127.0.0.1", port: port.rawValue)
+        defer { client.disconnect() }
+        client.onRequestMacAccount = { continuation in
+            requested.fulfill()
+            continuation("qa-account", "dummy-password")
+        }
+        client.connect()
+        wait(for: [requested, selected], timeout: 5)
+        XCTAssertEqual(client.username, "qa-account")
+    }
+
     func testAppLoggerRecordingAndExport() {
         let logger = AppLogger.shared
         logger.clear()

@@ -88,6 +88,31 @@ final class TrackpadEngineTests: XCTestCase {
         engine.handleTap()
         XCTAssertFalse(collector.events.isEmpty)
         XCTAssertTrue(collector.events.first?.mask.contains(.left) ?? false)
+        XCTAssertEqual(collector.events.count, 2, "Press and release must be immediate, without a delayed main-queue timer")
+        XCTAssertTrue(collector.events.last?.mask.isEmpty ?? false)
+    }
+
+    func testFingerMovementUsesRemotePixelScaleWithoutChangingAcceleration() {
+        let normal = TrackpadEngine(remoteWidth: 4000, remoteHeight: 2000)
+        let scaled = TrackpadEngine(remoteWidth: 4000, remoteHeight: 2000)
+        normal.handlePanDelta(dx: 4, dy: 2)
+        scaled.handlePanDelta(dx: 4, dy: 2, coordinateScale: 10)
+        XCTAssertEqual(scaled.cursorX - 2000, (normal.cursorX - 2000) * 10, accuracy: 0.001)
+        XCTAssertEqual(scaled.cursorY - 1000, (normal.cursorY - 1000) * 10, accuracy: 0.001)
+    }
+
+    func testScrollingAndClickingPreserveHeldDragButton() {
+        let engine = TrackpadEngine()
+        let collector = EventCollector()
+        engine.onPointerEvent = { collector.addEvent(mask: $0, x: $1, y: $2) }
+        engine.beginDrag(button: .right)
+        engine.handleScroll(deltaY: 8)
+        engine.handleHorizontalScroll(deltaX: -8)
+        engine.click(button: .middle)
+        XCTAssertTrue(collector.events.allSatisfy { $0.mask.contains(.right) })
+        XCTAssertTrue(collector.events.contains { $0.mask.contains(.scrollRight) })
+        engine.endDrag(button: .right)
+        XCTAssertTrue(collector.events.last?.mask.isEmpty ?? false)
     }
 
     func testScrollEvent() {

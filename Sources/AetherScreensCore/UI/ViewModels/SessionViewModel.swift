@@ -71,11 +71,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public var isPromptingPassword: Bool = false
     @Published public var passwordPromptError: String? = nil
     private var passwordContinuation: ((String?) -> Void)? = nil
+    @Published public var requiresMacAccountPrompt = false
+    private var macAccountContinuation: ((String?, String?) -> Void)?
 
     @Published public var actualSizeZoomScale: CGFloat = 2
     @Published public var isPanningViewport: Bool = false
     @Published public private(set) var inputGeneration = UUID()
     private var frameCountSinceLastSnapshot: Int = 0
+    private var lastFramebufferSize = CGSize.zero
 
     public let isTemporary: Bool
     @Published public var keyboardConfiguration: KeyboardToolbarConfiguration {
@@ -178,6 +181,17 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                     return
                 }
                 self.passwordContinuation = continuation
+                self.requiresMacAccountPrompt = false
+                self.passwordPromptError = nil
+                self.isPromptingPassword = true
+            }
+        }
+
+        client.onRequestMacAccount = { [weak self] continuation in
+            Task { @MainActor in
+                guard let self else { continuation(nil, nil); return }
+                self.macAccountContinuation = continuation
+                self.requiresMacAccountPrompt = true
                 self.passwordPromptError = nil
                 self.isPromptingPassword = true
             }
@@ -194,23 +208,29 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
 
         // Handle incoming screen frame updates
+        let renderer = metalRenderer
         client.onFrameUpdated = { [weak self] in
+            renderer?.notifyFrameUpdated()
             Task { @MainActor in
                 guard let self = self else { return }
-                self.hasReceivedFirstFrame = true
-                self.downloadProgress = nil
-                self.metalRenderer?.notifyFrameUpdated()
+                if !self.hasReceivedFirstFrame { self.hasReceivedFirstFrame = true }
+                if self.downloadProgress != nil { self.downloadProgress = nil }
                 if self.metalRenderer == nil {
                     self.currentImage = self.client.framebuffer.makeCGImage()
                 }
 
                 let w = self.client.framebuffer.width
                 let h = self.client.framebuffer.height
-                if self.activeCropRect == nil {
-                    self.trackpadEngine.remoteWidth = CGFloat(w)
-                    self.trackpadEngine.remoteHeight = CGFloat(h)
+                let size = CGSize(width: w, height: h)
+                if self.lastFramebufferSize != size {
+                    self.lastFramebufferSize = size
+                    if self.activeCropRect == nil {
+                        self.trackpadEngine.remoteWidth = CGFloat(w)
+                        self.trackpadEngine.remoteHeight = CGFloat(h)
+                        self.trackpadEngine.resetCursor()
+                    }
+                    self.multiDisplayManager.updateFromFramebuffer(width: w, height: h)
                 }
-                self.multiDisplayManager.updateFromFramebuffer(width: w, height: h)
 
                 // Periodically save thumbnail for device list view
                 self.frameCountSinceLastSnapshot += 1
@@ -242,7 +262,20 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     }
 
     /// Submit entered password to active RFB handshake
-    public func submitPassword(_ pwd: String, rememberInKeychain: Bool) {
+    public func submitPassword(_ pwd: String, rememberInKeychain: Bool, accountUsername: String? = nil) {
+        if let accountContinuation = macAccountContinuation {
+            guard let account = accountUsername?.trimmingCharacters(in: .whitespacesAndNewlines), !account.isEmpty else { return }
+            macAccountContinuation = nil
+            if canRememberPassword {
+                var updated = device
+                updated.username = account
+                updated.authMethod = .macAccount
+                deviceStore.updateDevice(updated, password: rememberInKeychain ? pwd : nil)
+            }
+            isPromptingPassword = false
+            accountContinuation(account, pwd)
+            return
+        }
         client.password = pwd
         if rememberInKeychain && canRememberPassword {
             deviceStore.updatePassword(pwd, for: device)
@@ -263,6 +296,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         let cont = passwordContinuation
         passwordContinuation = nil
         cont?(nil)
+        let accountContinuation = macAccountContinuation
+        macAccountContinuation = nil
+        accountContinuation?(nil, nil)
         client.disconnect()
     }
 

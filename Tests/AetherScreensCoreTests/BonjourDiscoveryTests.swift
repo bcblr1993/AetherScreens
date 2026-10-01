@@ -1,8 +1,32 @@
 import XCTest
+import Combine
 @testable import AetherScreensCore
 
 final class BonjourDiscoveryTests: XCTestCase {
-
+    @MainActor
+    func testLiveServiceResolvesActualHostInsteadOfDisplayName() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard let name = env["AETHERSCREENS_BONJOUR_TEST_NAME"],
+              let host = env["AETHERSCREENS_BONJOUR_TEST_HOST"] else {
+            throw XCTSkip("Requires an explicitly selected LAN Bonjour service")
+        }
+        let discovery = BonjourDiscoveryService()
+        let resolved = expectation(description: "Selected Bonjour service resolves its SRV host")
+        resolved.assertForOverFulfill = false
+        var device: DiscoveredMac?
+        let subscription = discovery.$discoveredMacs.sink { devices in
+            if let match = devices.first(where: { $0.name == name }) {
+                device = match
+                resolved.fulfill()
+            }
+        }
+        defer { discovery.stopDiscovery(); subscription.cancel() }
+        discovery.startDiscovery()
+        wait(for: [resolved], timeout: 15)
+        XCTAssertEqual(device?.host, host)
+        XCTAssertEqual(device?.port, 5900)
+        XCTAssertNotEqual(device?.host, "\(name).local.")
+    }
     func testDiscoveredMacConversion() {
         let discovered = DiscoveredMac(
             name: "Chen's MacBook Pro",

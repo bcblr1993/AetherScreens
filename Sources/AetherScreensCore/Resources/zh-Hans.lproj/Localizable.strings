@@ -228,3 +228,9 @@
 "Up Arrow" = "上方向键";
 "Down Arrow" = "下方向键";
 "Keyboard Toolbar" = "键盘工具栏";
+
+"Enter your Mac account username and password" = "请输入 Mac 账户用户名和密码";
+
+"Mac Account Username" = "Mac 账户用户名";
+
+"Mac account username and password required" = "需要 Mac 账户用户名和密码";

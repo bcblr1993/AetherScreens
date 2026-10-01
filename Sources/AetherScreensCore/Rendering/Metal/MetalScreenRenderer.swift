@@ -18,6 +18,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     private let lock = NSLock()
     private var needsTextureRecreation: Bool = true
     private var isDirty: Bool = true
+    private var displayScheduled = false
 
     private static let shaderSource = """
     #include <metal_stdlib>
@@ -96,8 +97,17 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     public func notifyFrameUpdated() {
         lock.lock()
         isDirty = true
+        let schedule = !displayScheduled
+        displayScheduled = true
         lock.unlock()
-        if let view = attachedView { requestDisplay(view) }
+        guard schedule else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            self.displayScheduled = false
+            self.lock.unlock()
+            if let view = self.attachedView { self.requestDisplay(view) }
+        }
     }
 
     public func attach(to view: MTKView) {
@@ -112,13 +122,15 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     }
 
     private func requestDisplay(_ view: MTKView) {
-        DispatchQueue.main.async {
+        let invalidate = {
             #if os(macOS)
             view.needsDisplay = true
             #else
             view.setNeedsDisplay()
             #endif
         }
+        if Thread.isMainThread { invalidate() }
+        else { DispatchQueue.main.async(execute: invalidate) }
     }
 
     public func draw(in view: MTKView) {

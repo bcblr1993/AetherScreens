@@ -47,22 +47,17 @@ public final class TrackpadEngine: @unchecked Sendable {
     // MARK: - Trackpad Motion & Acceleration
 
     /// Update cursor with finger displacement delta (dx, dy)
-    public func handlePanDelta(dx: CGFloat, dy: CGFloat) {
+    public func handlePanDelta(dx: CGFloat, dy: CGFloat, coordinateScale: CGFloat = 1) {
         guard mode == .trackpad else { return }
 
         // Compute velocity / magnitude
         let distance = sqrt(dx * dx + dy * dy)
-        let accel: CGFloat
-        if distance > 15 {
-            accel = sensitivity * accelerationFactor
-        } else if distance > 5 {
-            accel = sensitivity * 1.3
-        } else {
-            accel = sensitivity * 1.0
-        }
+        let progress = min(1, max(0, (distance - 2) / 18))
+        let smooth = progress * progress * (3 - 2 * progress)
+        let accel = sensitivity * (1 + (accelerationFactor - 1) * smooth)
 
-        cursorX = min(max(0, cursorX + dx * accel), remoteWidth)
-        cursorY = min(max(0, cursorY + dy * accel), remoteHeight)
+        cursorX = min(max(0, cursorX + dx * accel * coordinateScale), remoteWidth)
+        cursorY = min(max(0, cursorY + dy * accel * coordinateScale), remoteHeight)
 
         emitPointerEvent()
     }
@@ -84,49 +79,48 @@ public final class TrackpadEngine: @unchecked Sendable {
 
     /// Single tap -> Left Click (press and release)
     public func handleTap() {
-        activeButtons.insert(.left)
-        emitPointerEvent()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self = self else { return }
-            self.activeButtons.remove(.left)
-            self.emitPointerEvent()
-        }
+        click(button: .left)
     }
 
     /// Two-finger tap -> Right Click
     public func handleSecondaryTap() {
-        activeButtons.insert(.right)
-        emitPointerEvent()
+        click(button: .right)
+    }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            guard let self = self else { return }
-            self.activeButtons.remove(.right)
-            self.emitPointerEvent()
-        }
+    public func click(button: RFBConstants.ButtonMask) {
+        onPointerEvent?(activeButtons.union(button), UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons, UInt16(cursorX), UInt16(cursorY))
     }
 
     /// Begin dragging (hold left button)
-    public func beginDrag() {
-        activeButtons.insert(.left)
+    public func beginDrag(button: RFBConstants.ButtonMask = .left) {
+        activeButtons.formUnion(button)
         emitPointerEvent()
     }
 
     /// End dragging (release left button)
-    public func endDrag() {
-        activeButtons.remove(.left)
+    public func endDrag(button: RFBConstants.ButtonMask = .left) {
+        activeButtons.subtract(button)
         emitPointerEvent()
     }
 
     /// Two-finger scroll delta (natural scrolling)
     public func handleScroll(deltaY: CGFloat) {
+        guard deltaY != 0 else { return }
         let mask: RFBConstants.ButtonMask = (deltaY > 0) ? .scrollUp : .scrollDown
         
         // Emit scroll wheel event
-        onPointerEvent?(mask, UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons.union(mask), UInt16(cursorX), UInt16(cursorY))
         
         // Immediately release wheel button mask
-        onPointerEvent?([], UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons, UInt16(cursorX), UInt16(cursorY))
+    }
+
+    public func handleHorizontalScroll(deltaX: CGFloat) {
+        guard deltaX != 0 else { return }
+        let mask: RFBConstants.ButtonMask = deltaX > 0 ? .scrollLeft : .scrollRight
+        onPointerEvent?(activeButtons.union(mask), UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons, UInt16(cursorX), UInt16(cursorY))
     }
 
     private func emitPointerEvent() {

@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import AetherScreensCore
 
 final class DeviceStoreTests: XCTestCase {
@@ -31,6 +32,82 @@ final class DeviceStoreTests: XCTestCase {
 
     private func makeStore(legacySources: [UserDefaults] = []) -> DeviceStore {
         DeviceStore(userDefaults: tempDefaults, legacySources: legacySources, keychain: keychain)
+    }
+
+    @MainActor
+    func testRepeatedFramesDoNotRepublishUnchangedCanvasAndDisplayState() throws {
+        let session = SessionViewModel(device: RemoteDevice(name: "Frame state QA", host: "qa.invalid"), password: nil, isTemporary: true, deviceStore: makeStore())
+        guard session.metalRenderer != nil else { throw XCTSkip("Requires a Metal device") }
+        session.client.framebuffer.resize(newWidth: 2, newHeight: 2)
+        var frameStateChanges = 0
+        var displayChanges = 0
+        let frameSubscription = session.$hasReceivedFirstFrame.dropFirst().sink { _ in frameStateChanges += 1 }
+        let displaySubscription = session.multiDisplayManager.$availableDisplays.dropFirst().sink { _ in displayChanges += 1 }
+        for _ in 0..<120 { session.client.onFrameUpdated?() }
+        let drained = expectation(description: "Main actor frame notifications drained")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+        XCTAssertTrue(session.hasReceivedFirstFrame)
+        XCTAssertEqual(frameStateChanges, 1, "Incoming frames must not repeatedly invalidate the whole SwiftUI canvas")
+        XCTAssertEqual(displayChanges, 1, "Unchanged display geometry must not be rebuilt for every frame")
+        frameSubscription.cancel()
+        displaySubscription.cancel()
+    }
+
+    @MainActor
+    func testInteractiveMacAccountPersistsOnlyForSavedDevice() {
+        for temporary in [false, true] {
+            let store = makeStore()
+            let device = RemoteDevice(name: "Account prompt QA", host: "qa.invalid")
+            if !temporary { store.addDevice(device) }
+            let session = SessionViewModel(device: device, password: nil, isTemporary: temporary, deviceStore: store)
+            let prompt = expectation(description: "Account prompt presented")
+            let submitted = expectation(description: "Entered account submitted")
+            let subscription = session.$isPromptingPassword.sink { if $0 { prompt.fulfill() } }
+            session.client.onRequestMacAccount? { account, password in
+                XCTAssertEqual(account, "qa-account")
+                XCTAssertEqual(password, "test-secret")
+                submitted.fulfill()
+            }
+            wait(for: [prompt], timeout: 2)
+            XCTAssertTrue(session.requiresMacAccountPrompt)
+            session.submitPassword("test-secret", rememberInKeychain: true, accountUsername: " ")
+            XCTAssertTrue(session.isPromptingPassword)
+            session.submitPassword("test-secret", rememberInKeychain: true, accountUsername: " qa-account ")
+            wait(for: [submitted], timeout: 2)
+            XCTAssertFalse(session.isPromptingPassword)
+            if temporary {
+                XCTAssertFalse(store.devices.contains { $0.id == device.id })
+                XCTAssertNil(store.getPassword(for: device))
+            } else {
+                XCTAssertEqual(store.devices.first { $0.id == device.id }?.username, "qa-account")
+                XCTAssertEqual(store.devices.first { $0.id == device.id }?.authMethod, .macAccount)
+                XCTAssertEqual(store.getPassword(for: device), "test-secret")
+                store.deleteDevice(device)
+            }
+            subscription.cancel()
+        }
+    }
+
+    func testBonjourRepairKeepsAccountAndCredentialAndPreservesManualHosts() {
+        let store = makeStore()
+        let old = RemoteDevice(name: "工作 Mac", host: "工作-Mac.local.", authMethod: .macAccount, username: "qa-account")
+        let manual = RemoteDevice(name: "工作 Mac", host: "192.0.2.20")
+        store.addDevice(old, password: "test-secret")
+        store.addDevice(manual)
+        let discovered = DiscoveredMac(name: old.name, host: "real-host-2.local.", port: 5990)
+        XCTAssertTrue(store.repairLegacyBonjourHosts(using: [discovered]))
+        let repaired = store.devices.first { $0.id == old.id }
+        XCTAssertEqual(repaired?.host, discovered.host)
+        XCTAssertEqual(repaired?.port, 5990)
+        XCTAssertEqual(repaired?.username, old.username)
+        XCTAssertEqual(repaired?.authMethod, .macAccount)
+        XCTAssertEqual(store.getPassword(for: old), "test-secret")
+        XCTAssertEqual(store.devices.first { $0.id == manual.id }?.host, manual.host)
+        XCTAssertFalse(store.repairLegacyBonjourHosts(using: [discovered]))
+        store.loadDevices()
+        XCTAssertEqual(store.devices.first { $0.id == old.id }?.host, discovered.host)
+        store.deleteDevice(old)
     }
 
     @MainActor

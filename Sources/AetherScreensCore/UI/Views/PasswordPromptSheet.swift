@@ -8,12 +8,15 @@ public struct PasswordPromptSheet: View {
     public let username: String?
     public let errorMessage: String?
     public let canRememberPassword: Bool
-    public let onSubmit: (String, Bool) -> Void
+    public let requiresMacAccount: Bool
+    public let onSubmit: (String, String?, Bool) -> Void
     public let onCancel: () -> Void
 
     @State private var password: String = ""
+    @State private var accountUsername: String = ""
     @State private var saveToKeychain: Bool = true
-    @FocusState private var isPasswordFocused: Bool
+    private enum Field { case username, password }
+    @FocusState private var focusedField: Field?
 
     public init(
         deviceName: String,
@@ -21,7 +24,8 @@ public struct PasswordPromptSheet: View {
         username: String? = nil,
         errorMessage: String? = nil,
         canRememberPassword: Bool = true,
-        onSubmit: @escaping (String, Bool) -> Void,
+        requiresMacAccount: Bool = false,
+        onSubmit: @escaping (String, String?, Bool) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.deviceName = deviceName
@@ -29,6 +33,7 @@ public struct PasswordPromptSheet: View {
         self.username = username
         self.errorMessage = errorMessage
         self.canRememberPassword = canRememberPassword
+        self.requiresMacAccount = requiresMacAccount
         self.onSubmit = onSubmit
         self.onCancel = onCancel
     }
@@ -49,7 +54,7 @@ public struct PasswordPromptSheet: View {
                 Text(AppLocalization.string("Authentication Required"))
                     .font(.system(size: 18, weight: .bold))
 
-                Text(username == nil ? AppLocalization.format("Enter the VNC password for %@", deviceName) : AppLocalization.format("Enter the Mac account password for %@", username!))
+                Text(requiresMacAccount ? AppLocalization.string("Enter your Mac account username and password") : (username == nil ? AppLocalization.format("Enter the VNC password for %@", deviceName) : AppLocalization.format("Enter the Mac account password for %@", username!)))
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -75,13 +80,22 @@ public struct PasswordPromptSheet: View {
 
             // Input Fields
             VStack(alignment: .leading, spacing: 12) {
-                SecureField(AppLocalization.string(username == nil ? "VNC Password" : "Mac Account Password"), text: $password)
+                if requiresMacAccount {
+                    TextField(AppLocalization.string("Mac Account Username"), text: $accountUsername)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .username)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        #endif
+                }
+                SecureField(AppLocalization.string(username == nil && !requiresMacAccount ? "VNC Password" : "Mac Account Password"), text: $password)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
-                    .focused($isPasswordFocused)
+                    .focused($focusedField, equals: .password)
                     .onSubmit {
-                        if !password.isEmpty {
-                            onSubmit(password, canRememberPassword && saveToKeychain)
+                        if canSubmit {
+                            onSubmit(password, requiresMacAccount ? accountUsername : nil, canRememberPassword && saveToKeychain)
                         }
                     }
 
@@ -105,10 +119,10 @@ public struct PasswordPromptSheet: View {
                 Spacer()
 
                 Button(AppLocalization.string("Connect")) {
-                    onSubmit(password, canRememberPassword && saveToKeychain)
+                    onSubmit(password, requiresMacAccount ? accountUsername : nil, canRememberPassword && saveToKeychain)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(password.isEmpty)
+                .disabled(!canSubmit)
                 .keyboardShortcut(.defaultAction)
             }
             .padding(.top, 8)
@@ -119,7 +133,11 @@ public struct PasswordPromptSheet: View {
         .frame(minWidth: 360)
         #endif
         .onAppear {
-            isPasswordFocused = true
+            focusedField = requiresMacAccount ? .username : .password
         }
+    }
+
+    private var canSubmit: Bool {
+        !password.isEmpty && (!requiresMacAccount || !accountUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 }
