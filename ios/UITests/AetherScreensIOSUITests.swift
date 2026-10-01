@@ -22,12 +22,13 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.launch()
         app.buttons[label("Quick Connect", "快速连接")].tap()
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
-        host.tap(); host.typeText("127.0.0.1")
+        host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
         let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
+        let normalOptionsY = app.buttons[label("Session Options", "会话选项")].frame.minY
         app.buttons[label("Show Keyboard", "显示键盘")].tap()
         XCTAssertTrue(app.buttons[label("Hide Keyboard", "隐藏键盘")].exists)
         try resetGestureFixture()
@@ -77,6 +78,14 @@ final class AetherScreensIOSUITests: XCTestCase {
         _ = try gestureFixtureData(path: "drop")
         XCTAssertTrue(app.buttons[label("Retry Connection", "重试连接")].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons[label("Session Options", "会话选项")].exists, "A failed fullscreen session must expose recovery and disconnect controls")
+        // iOS 27 does not expose the system status bar in this app's XCTest
+        // hierarchy. Verify recovery restores the normal safe-area placement,
+        // then retain its rendered screenshot for status-bar inspection.
+        let recoveryLayout = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            abs(app.buttons[label("Session Options", "会话选项")].frame.minY - normalOptionsY) <= 1
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [recoveryLayout], timeout: 3), .completed,
+                       "Recovery restores the same top-control position as normal mode")
         attachScreenshot(app, name: "Controlled Fullscreen Connection Lost " + language)
         app.buttons[label("Session Options", "会话选项")].tap()
         app.buttons[label("Reconnect", "重新连接")].tap()
@@ -96,9 +105,9 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.launch()
         app.buttons[label("Quick Connect", "快速连接")].tap()
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
-        host.tap(); host.typeText("127.0.0.1")
+        host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("6000")
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureDisplayFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
         app.buttons[label("Input Mode", "输入模式")].tap()
@@ -141,9 +150,9 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.launch()
         app.buttons[label("Quick Connect", "快速连接")].tap()
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
-        host.tap(); host.typeText("127.0.0.1")
+        host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
         let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
@@ -159,7 +168,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(pan.waitForExistence(timeout: 3), "Zoomed iOS sessions must expose local viewport navigation")
         guard pan.exists else { return }
         pan.tap()
-        XCTAssertTrue(app.staticTexts[label("Pan · 127.0.0.1", "移动视图 · 127.0.0.1")].exists)
+        XCTAssertTrue(app.staticTexts[label("Pan · " + gestureFixtureHost, "移动视图 · " + gestureFixtureHost)].exists)
         try resetGestureFixture()
         center.press(forDuration: 0.05, thenDragTo: input.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
         center.tap()
@@ -203,9 +212,9 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.launch()
         app.buttons[label("Quick Connect", "快速连接")].tap()
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
-        host.tap(); host.typeText("127.0.0.1")
+        host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
         try resetGestureFixture()
         app.buttons[label("Connect", "连接")].tap()
         let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
@@ -274,9 +283,9 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.buttons[label("Quick Connect", "快速连接")].tap()
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
         XCTAssertTrue(host.waitForExistence(timeout: 5))
-        host.tap(); host.typeText("127.0.0.1")
+        host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
         XCTAssertTrue(frame.waitForExistence(timeout: 10))
@@ -339,6 +348,22 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
     }
 
+    private var gestureFixtureHost: String {
+        ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_HOST"] ?? "127.0.0.1"
+    }
+
+    private var gestureFixturePort: String {
+        ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_RFB_PORT"] ?? "5999"
+    }
+
+    private var gestureDisplayFixturePort: String {
+        ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_DISPLAY_PORT"] ?? "6000"
+    }
+
+    private var gestureInspectionPort: String {
+        ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_HTTP_PORT"] ?? "8768"
+    }
+
     private func gesturePointers() throws -> [[String: Int]] {
         let value = try JSONSerialization.jsonObject(with: gestureFixtureData(path: "events"))
         return try XCTUnwrap(value as? [[String: Any]]).filter { $0["type"] as? String == "pointer" }.map {
@@ -353,7 +378,7 @@ final class AetherScreensIOSUITests: XCTestCase {
     private func gestureFixtureData(path: String) throws -> Data {
         let received = expectation(description: "Gesture fixture response")
         let response = GestureFixtureResponse()
-        let task = URLSession.shared.dataTask(with: URL(string: "http://127.0.0.1:8768/" + path)!) { data, http, error in
+        let task = URLSession.shared.dataTask(with: URL(string: "http://" + gestureFixtureHost + ":" + gestureInspectionPort + "/" + path)!) { data, http, error in
             if let error { response.set(.failure(error)) }
             else if let data, (http as? HTTPURLResponse)?.statusCode == 200 { response.set(.success(data)) }
             else { response.set(.failure(URLError(.badServerResponse))) }

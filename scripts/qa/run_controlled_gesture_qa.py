@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Run the ten controlled iOS display/gesture/recovery scenarios and reject omissions.
 
-Start gesture_rfb_fixture.py separately. This is a simulator sub-gate, not
-physical-device or complete-release acceptance. No credentials are used.
+Start gesture_rfb_fixture.py separately. This is a controlled
+simulator/physical-input sub-gate, not actual Apple-server or complete-release
+acceptance. No credentials are used.
 """
 import argparse
 from datetime import datetime, timezone
+import ipaddress
 import json
 from pathlib import Path
 import plistlib
@@ -34,14 +36,31 @@ def run(command, log):
         subprocess.run(command, cwd=REPO, stdout=output, stderr=subprocess.STDOUT, check=True)
 
 
+def tcp_port(value):
+    port = int(value)
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError('TCP port must be between 1 and 65535')
+    return port
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--simulator-id', required=True)
+    destination_group = parser.add_mutually_exclusive_group(required=True)
+    destination_group.add_argument('--simulator-id')
+    destination_group.add_argument('--device-id', help='USB-connected physical device UDID')
+    parser.add_argument('--development-team', help='Signing team required for a physical device')
+    parser.add_argument('--fixture-host', default='127.0.0.1', type=ipaddress.IPv4Address)
+    parser.add_argument('--rfb-port', default=5999, type=tcp_port)
+    parser.add_argument('--display-rfb-port', default=6000, type=tcp_port)
+    parser.add_argument('--http-port', default=8768, type=tcp_port)
     parser.add_argument('--derived-data', type=Path, default=REPO / 'build/controlled-ui-derived')
     parser.add_argument('--output', type=Path, help='New artifact directory; must not exist')
     args = parser.parse_args()
+    if args.device_id and (not args.development_team or args.fixture_host.is_loopback):
+        parser.error('Physical QA requires --development-team and the fixture LAN IPv4 address')
+    fixture_host = str(args.fixture_host)
     try:
-        with urllib.request.urlopen('http://127.0.0.1:8768/events', timeout=2) as response:
+        with urllib.request.urlopen('http://' + fixture_host + ':' + str(args.http_port) + '/events', timeout=2) as response:
             if not isinstance(json.load(response), list):
                 parser.error('Unexpected controlled fixture response')
     except (OSError, ValueError) as error:
@@ -51,21 +70,29 @@ def main():
     output = (args.output or REPO / f'build/controlled-gesture-{stamp}-{token[:8]}').resolve()
     output.mkdir(parents=True, exist_ok=False)
     derived = args.derived_data.resolve()
-    destination = 'platform=iOS Simulator,id=' + args.simulator_id
+    is_simulator = args.simulator_id is not None
+    destination = ('platform=iOS Simulator,id=' + args.simulator_id) if is_simulator else ('platform=iOS,arch=arm64,id=' + args.device_id)
     print('Artifacts: ' + str(output), flush=True)
-    subprocess.run(['xcrun', 'simctl', 'bootstatus', args.simulator_id, '-b'], check=True)
+    if is_simulator:
+        subprocess.run(['xcrun', 'simctl', 'bootstatus', args.simulator_id, '-b'], check=True)
+    signing = ['CODE_SIGNING_ALLOWED=NO'] if is_simulator else ['DEVELOPMENT_TEAM=' + args.development_team]
     run(['xcodebuild', 'build-for-testing', '-project', 'ios/AetherScreensIOS.xcodeproj',
          '-scheme', 'AetherScreensIOS', '-destination', destination,
-         '-derivedDataPath', str(derived), 'CODE_SIGNING_ALLOWED=NO'], output / 'build.log')
+         '-derivedDataPath', str(derived), *signing], output / 'build.log')
     products = derived / 'Build/Products'
-    candidates = list(products.glob('AetherScreensIOS_AetherScreensIOS_iphonesimulator*.xctestrun'))
+    platform = 'iphonesimulator' if is_simulator else 'iphoneos'
+    candidates = list(products.glob('AetherScreensIOS_AetherScreensIOS_' + platform + '*.xctestrun'))
     if not candidates:
-        raise RuntimeError('No freshly generated simulator test configuration')
+        raise RuntimeError('No freshly generated test configuration')
     current = max(candidates, key=lambda path: path.stat().st_mtime)
     configuration = plistlib.loads(current.read_bytes())
     for group in configuration['TestConfigurations']:
         for target in group['TestTargets']:
             target.setdefault('EnvironmentVariables', {})['AETHERSCREENS_GESTURE_QA'] = '1'
+            target['EnvironmentVariables']['AETHERSCREENS_GESTURE_HOST'] = fixture_host
+            target['EnvironmentVariables']['AETHERSCREENS_GESTURE_RFB_PORT'] = str(args.rfb_port)
+            target['EnvironmentVariables']['AETHERSCREENS_GESTURE_DISPLAY_PORT'] = str(args.display_rfb_port)
+            target['EnvironmentVariables']['AETHERSCREENS_GESTURE_HTTP_PORT'] = str(args.http_port)
     # Keep __TESTROOT__ valid, use a new path to avoid reusing discovery metadata,
     # and never replace the generated plan or any existing opt-in configuration.
     fresh = products / f'CONTROLLED_GESTURE_{token}.xctestrun'

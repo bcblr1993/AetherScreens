@@ -1,6 +1,8 @@
-"""Loopback-only RFB/HTTP fixture for received iOS gesture events.
+"""Controlled RFB/HTTP fixture for received iOS gesture events.
 
-No credentials or real desktop content. Run before the opt-in gesture UI test.
+No credentials or real desktop content. Defaults to loopback; an explicit local
+interface and separate ports support isolated physical-device test lanes.
+Run before the opt-in gesture UI test.
 """
 import argparse
 import json
@@ -176,15 +178,16 @@ class RFBServer(socketserver.ThreadingTCPServer):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--listen-host', default='127.0.0.1', help='Explicit local interface for physical-device QA; defaults to loopback')
     parser.add_argument('--rfb-port', type=int, default=5999)
     parser.add_argument('--http-port', type=int, default=8768)
     parser.add_argument('--display-rfb-port', type=int, default=6000)
     args = parser.parse_args()
-    with RFBServer(('127.0.0.1', args.rfb_port), Desktop) as desktop, RFBServer(('127.0.0.1', args.display_rfb_port), DualDisplayDesktop) as displays:
+    with RFBServer((args.listen_host, args.rfb_port), Desktop) as desktop, RFBServer((args.listen_host, args.display_rfb_port), DualDisplayDesktop) as displays:
         threading.Thread(target=desktop.serve_forever, daemon=True).start()
         threading.Thread(target=displays.serve_forever, daemon=True).start()
-        with ThreadingHTTPServer(('127.0.0.1', args.http_port), Inspection) as inspection:
-            print('Loopback gesture fixture ready', flush=True)
+        with ThreadingHTTPServer((args.listen_host, args.http_port), Inspection) as inspection:
+            print('Gesture fixture ready on ' + args.listen_host, flush=True)
             inspection.serve_forever()
 
 

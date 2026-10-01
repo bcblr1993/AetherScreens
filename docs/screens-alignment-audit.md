@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 141 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gesture integration passed final controlled UI and still needs CI and physical acceptance. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 141 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -372,8 +372,73 @@ failures or runtime warnings (`build/ios-navigation-state-controlled-qa`).
 The six exported fullscreen/restored/connection-loss screenshots in
 `/tmp/aetherscreens-navigation-state-attachments` were inspected in both
 languages: fullscreen hides controls, exit restores the keyboard, and failure
-reveals recovery controls. The English connection-loss screenshot still lacks
-the status-bar row seen in the Chinese screenshot; status-bar restoration and
-full physical error-layout consistency remain in the UI acceptance gate.
+reveals recovery controls. At this snapshot the English connection-loss screenshot lacked the status-bar
+row seen in the Chinese screenshot. The recovery-rendering follow-up below
+checks settled placement and renders both rows; full physical error-layout
+consistency remains in the UI acceptance gate.
 Two-phone live interaction, physical smoothness and the other open acceptance
 requirements above remain required before human review and release.
+
+
+## Recovery rendering and physical-test preparation
+
+Navigation gesture commit `698249b` passed CI run 36843762056. Its initial
+English failure screenshot omitted the system status row. A proposed XCTest
+`app.statusBars` assertion was rejected as an acceptance signal: both the
+normal and recovery layouts lacked that element in the iOS 27 test hierarchy
+(`/tmp/aetherscreens-statusbar-fresh.xcresult`, four assertion failures).
+A reused diagnostic test-plan path also executed the previous test body rather
+than the new assertions; it is not evidence for the new checks. Fresh test-plan
+paths are required.
+
+The replacement waits for recovery's Session Options button to return to the
+normal layout's vertical position, then captures the screen. Both languages
+passed (`/tmp/aetherscreens-recovery-geometry.xcresult`). The exported recovery
+screenshots show the system clock and connectivity row in both languages.
+Pixel comparison locates the toolbar at the same rows in English and Chinese.
+An experimental safe-area branch refactor passed two targeted tests but did
+not improve that measured placement, so it was removed. No speculative product
+layout change remains. Physical error-state layout acceptance remains required.
+
+The controlled fixture defaults to loopback and can explicitly bind a local
+LAN interface. The runner now supports either a simulator or a signed USB
+physical-device destination and injects the fixture host plus independently
+configurable RFB, dual-display RFB and HTTP inspection ports. Separate fixture
+processes/port sets keep simultaneous phone runs from sharing event resets or
+socket interruption commands. Defaults remain 5999/6000/8768. A loopback address
+or missing signing team is rejected for physical runs before build/execution.
+
+The LAN-address controlled simulator suite passed all ten requested cases with
+zero skips, failures and runtime warnings
+(`build/ios-lan-controlled-native-qa`). This validates network routing to the
+received-event service, not Apple Screen Sharing or physical hand feel.
+Two simultaneous real TCP handshakes then demonstrated event isolation:
+resetting/dropping the 5999/8768 lane preserved the 6999/8868 lane's existing
+key record and delivery of a subsequent key
+(`/tmp/aetherscreens-fixture-isolation-smoke.log`). Alternate-port UI validation
+passed exactly the Chinese display-selection and English fullscreen/recovery
+cases, with no skips, failures or runtime warnings
+(`/tmp/aetherscreens-isolated-ports.xcresult`). Execution logs confirm entry
+of ports 7000 and 6999; the inspection service ran on 8868. Python syntax,
+missing physical signing/LAN arguments and out-of-range TCP ports were also
+checked. These port-plumbing checks do not replace the separate physical gate.
+
+The iPhone 12 Pro reconnected over USB and reported unlocked; developer mode
+was enabled and its development disk image reported compatible/usable.
+A signed physical UI test build succeeded, but preflight discovery's runner
+failed to initialize with `Timed out while enabling automation mode`
+(`build/ios-12-controlled-native-qa`). The guard rejected the run even though
+xcodebuild printed test success. A separate one-case direct execution repeated
+the same initialization timeout (`/tmp/aetherscreens-native-12-direct.xcresult`)
+without executing a functional case. The human has been asked to confirm any
+phone-side UI Automation/password prompt and its developer setting. No device
+password is collected by the test. The 16 Pro Max remains unavailable. Neither
+physical run nor the whole original goal is accepted by these controlled results.
+
+For parallel physical QA, start one fixture per phone on separate ports and
+use different derived-data/output directories. For example, lane A uses
+5999/6000/8768 and lane B uses 6999/7000/8868; pass the same local LAN address
+through `--listen-host` on each fixture and `--fixture-host` on each runner.
+Use `--device-id`, `--development-team`, `--rfb-port`, `--display-rfb-port` and
+`--http-port` explicitly. These are test fixtures containing no real desktop
+content or credentials; stop each owned process when its run ends.
