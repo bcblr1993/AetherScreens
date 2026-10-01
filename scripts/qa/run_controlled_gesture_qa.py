@@ -18,6 +18,8 @@ from uuid import uuid4
 
 REPO = Path(__file__).resolve().parents[2]
 CASES = (
+    'testControlledMobileSessionSelection',
+    'testChineseControlledMobileSessionSelection',
     'testControlledFullscreenGestures',
     'testChineseControlledFullscreenGestures',
     'testControlledDisplaySelection',

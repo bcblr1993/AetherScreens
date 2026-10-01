@@ -18,7 +18,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Adaptive image quality | Raw, Zlib, ZRLE and CopyRect decoding; Metal rendering; native presented-frame FPS and measured TCP RTT diagnostics | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
 | Observe / control modes | Explicit Observe Only mode; real Mac frames continue while text, clicks, wheel and clipboard writes are blocked; held modifiers released and control restored. iOS retains local zoom/pan while Observe suppresses received pointer input; English/Chinese controlled viewport flows pass. Pan separately blocks pointer input, cancels queued wheels and preserves keys; actual TCP tests cover nested Observe transitions and responsive scrolling afterward | Physical iPhone toggle and input suppression acceptance |
 | Reconnect / session recovery | In-session reconnect clears input and restores remote typing. English/Chinese simulator socket-interruption tests pass with a new TCP connection, fresh frame, retained zoom/touch mode and received fresh modifier/key events. Core tests reject ended-session callbacks and old VNC/ARD password replies | Physical iPhone and Apple server recovery; real phone network interruption |
-| Quick connect / session selection | Temporary account/VNC requests and optional saving; installed Mac account connection and received typing passed; iPhone simulator validation, save toggle and error/disconnect flow passed | Physical iPhone quick connection; explicit active/background session choice |
+| Quick connect / session selection | Temporary account/VNC requests and optional saving; installed Mac account connection and received typing passed; iPhone simulator validation, save toggle and error/disconnect flow passed. In-app retained session selection now preserves sockets/viewports, gates hidden input and rejects hidden clipboard callbacks; English/Chinese received-packet UI flows pass | Physical iPhone quick connection and session switching; OS background execution remains unverified |
 | Secure connections / SSH keys | External Tailscale transport, device import client and Keychain | Real Tailnet route/import acceptance; integrated SSH tunnel/key handling |
 | File transfers | No transfer implementation | Bidirectional transfer and received-file verification |
 | Data / credential synchronization | Local persistence and Keychain migration | Cross-device synchronization and conflict handling |
@@ -26,12 +26,12 @@ The release remains a draft until the user has reviewed the completed acceptance
 | On-disconnect actions | Disconnect only | Per-connection Mac hot-corner, lock and logout actions before disconnect; proof on an isolated acceptance desktop |
 | URL schemes / automation | Mac/iOS bundles register aetherscreens and alternate vnc handlers. Saved identifier/name/address and temporary account/VNC links support explicit Observe selection. Core validation and iOS system URL delivery preserve a Quick Connect draft, open the queued Observe session after dismissal, disable keyboard control and avoid saving the temporary computer. | Installed Mac and physical iPhone routing/copy-link acceptance; SSH/SSH-key and guest semantics with real server/tunnel handling; applicable shortcuts/widgets |
 | AirPlay / external display / Pencil | Not implemented | iOS display routing and peripheral acceptance |
-| Mac multi-window sessions | Independent native windows; real Mac concurrent account sessions, minimizing/restoring, saved-session reuse, Observe isolation and closing one window while continuing remote input in the other passed. Numbered window/menu titles distinguish the same computer. | iOS active/background session selection remains in its separate requirement |
+| Mac multi-window sessions | Independent native windows; real Mac concurrent account sessions, minimizing/restoring, saved-session reuse, Observe isolation and closing one window while continuing remote input in the other passed. Numbered window/menu titles distinguish the same computer. | iOS in-app session selection passes controlled UI; physical switching and OS background behavior remain in their separate requirement |
 | Wake-on-LAN | Packet construction tests and send-success notice | Real wake verification on an appropriately configured sleeping Mac |
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 167 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 169 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gestures 698249b passed CI and controlled UI; physical acceptance remains required. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -644,3 +644,40 @@ UI evidence, nor prove physical-device fluidity. Current read-only device
 inspection still finds the 12 Pro connected and the 16 Pro Max paired rather
 than connected (`/tmp/aetherscreens-current-devices-oct1.json`). Full physical
 acceptance and user review remain open; nothing has been publicly released.
+
+## Retained iOS sessions and VM automation policy (2026-10-01)
+
+Returning to the computer library keeps the connection and viewport alive. The
+Open Sessions menu selects the existing session without another handshake.
+Selection releases hidden buttons/modifiers, disables hidden input, and rejects
+queued or newly received hidden clipboard callbacks. Observe survives selection;
+closing one session leaves the other connected.
+
+The final controlled English/Chinese iPhone 13 mini simulator suite executed
+12 tests with zero failures, zero skips and no runtime warnings. Packet assertions
+verify two connections, selected-session clicks, Observe suppression and closing
+one connection while using the other. Core suite: 169 tests, 5 explicit live-environment
+skips, no failures. Mac Release and signed iOS device Release builds and strict
+signature verification pass. Screenshots reviewed in both languages confirm the
+375-point library title remains readable after adding Open Sessions.
+Evidence: `build/ios-mobile-sessions-layout-controlled-qa/result.xcresult` and
+its `summary.json`. Earlier runs failed because numeric-keyboard clearing and
+offscreen Esc automation were incorrect, and one pointer assertion included a
+legitimate zero-button cursor event. Those failures were retained, the automation
+was corrected, and the complete suite rerun; none were counted as acceptance.
+
+The user requires future UI automation to execute inside the existing `macos27`
+VM. The host simulator suite above had already started when that instruction
+arrived and was allowed to finish. Future UI runs use the VM; physical iPhone
+acceptance remains separate. The VM has macOS 27.0 and an isolated Xcode 27.0
+copy; recognizing the tools is not itself UI acceptance. A dedicated Mac XCTest
+project at `macos/UITests/AetherScreensMacUITests.xcodeproj` targets a separately
+identified QA app via `AETHERSCREENS_MAC_QA_APP_PATH`. Its initial two-language
+cases cover Quick Connect, valid/invalid port gating and cancellation. This is
+initial VM coverage, not full Screens parity or release approval.
+
+The initial VM `build-for-testing` completed successfully. Actual
+`test-without-building` launched the runner, then showed the system
+“XCTest / Enable UI Automation” authentication dialog. Human authentication is
+pending; no Mac VM functional case is counted as passed yet. The existing VM
+and other projects were not reset. Passwords are neither scripted nor recorded.

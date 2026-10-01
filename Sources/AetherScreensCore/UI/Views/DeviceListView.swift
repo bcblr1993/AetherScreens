@@ -33,9 +33,7 @@ public struct DeviceListView: View {
     @State private var editingDevice: RemoteDevice?
     @State private var showingLogs = false
     @State private var pendingConnectionLinks: [ConnectionLink.Resolved] = []
-    #if os(macOS)
     @ObservedObject private var sessionRegistry = SessionRegistry.shared
-    #endif
 
     private let columns = [
         GridItem(.adaptive(minimum: 230, maximum: 320), spacing: 16)
@@ -74,8 +72,22 @@ public struct DeviceListView: View {
             mainGridView
                 .navigationTitle(AppLocalization.string("AetherScreens"))
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Text("AetherScreens")
+                            .font(.headline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                            .accessibilityIdentifier("library-title")
+                    }
+                }
                 .fullScreenCover(item: $activeSessionVM, onDismiss: { viewModel.reload(); openPendingConnectionLink() }) { sessionVM in
-                    RemoteDesktopView(viewModel: sessionVM)
+                    RemoteDesktopView(viewModel: sessionVM, managesSessionLifecycle: false,
+                                      onDisconnect: { closeMobileSession(sessionVM) },
+                                      onReturnToLibrary: {
+                                          sessionRegistry.returnToLibrary()
+                                          activeSessionVM = nil
+                                      })
                 }
                 .sheet(item: $editingDevice, onDismiss: openPendingConnectionLink) { dev in
                     EditDeviceSheet(device: dev, viewModel: viewModel)
@@ -283,6 +295,18 @@ public struct DeviceListView: View {
                 }
                 .accessibilityLabel(AppLocalization.string("Open Sessions"))
                 .help(AppLocalization.string("Open Sessions"))
+                .disabled(sessionRegistry.sessions.isEmpty)
+                #else
+                Menu {
+                    ForEach(sessionRegistry.sessions) { entry in
+                        Button(entry.title) { activeSessionVM = sessionRegistry.activate(entry.id) }
+                            .accessibilityIdentifier("open-session-\(entry.number)")
+                    }
+                } label: {
+                    Label(AppLocalization.string("Open Sessions"), systemImage: "display.2")
+                }
+                .accessibilityLabel(AppLocalization.string("Open Sessions"))
+                .accessibilityIdentifier("open-sessions")
                 .disabled(sessionRegistry.sessions.isEmpty)
                 #endif
 
@@ -507,17 +531,28 @@ public struct DeviceListView: View {
         SessionWindowManager.shared.open(session, reuseExisting: !resolved.requiresIndependentSession)
         openPendingConnectionLink()
         #else
-        activeSessionVM = session
+        presentSession(session, reuseExisting: !resolved.requiresIndependentSession)
         #endif
     }
 
-    private func presentSession(_ session: SessionViewModel) {
+    private func presentSession(_ session: SessionViewModel, reuseExisting: Bool = true) {
         #if os(macOS)
         SessionWindowManager.shared.open(session)
         #else
-        activeSessionVM = session
+        let id = sessionRegistry.register(session, reuseExisting: reuseExisting)
+        activeSessionVM = sessionRegistry.activate(id)
+        if activeSessionVM === session { session.startSession() }
         #endif
     }
+
+    #if !os(macOS)
+    private func closeMobileSession(_ session: SessionViewModel) {
+        if let entry = sessionRegistry.sessions.first(where: { $0.viewModel === session }) {
+            sessionRegistry.close(entry.id)
+        }
+        activeSessionVM = nil
+    }
+    #endif
 
     private var emptyStateView: some View {
         VStack(spacing: 20) {

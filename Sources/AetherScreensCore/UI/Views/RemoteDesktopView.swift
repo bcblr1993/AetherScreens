@@ -13,12 +13,15 @@ public struct RemoteDesktopView: View {
     @State private var showingKeyboardCustomization = false
     private let managesSessionLifecycle: Bool
     private let onDisconnect: (() -> Void)?
+    private let onReturnToLibrary: (() -> Void)?
 
-    public init(viewModel: SessionViewModel, managesSessionLifecycle: Bool = true, onDisconnect: (() -> Void)? = nil) {
+    public init(viewModel: SessionViewModel, managesSessionLifecycle: Bool = true, onDisconnect: (() -> Void)? = nil,
+                onReturnToLibrary: (() -> Void)? = nil) {
         self.viewModel = viewModel
         self.displayManager = viewModel.multiDisplayManager
         self.managesSessionLifecycle = managesSessionLifecycle
         self.onDisconnect = onDisconnect
+        self.onReturnToLibrary = onReturnToLibrary
     }
 
     // Connection failures must reveal controls even when the session prefers fullscreen.
@@ -388,6 +391,13 @@ public struct RemoteDesktopView: View {
 
             // Keep secondary controls inside a menu on narrow screens.
             Menu {
+                if let onReturnToLibrary {
+                    Button(action: onReturnToLibrary) {
+                        Label(AppLocalization.string("Return to Computers"), systemImage: "rectangle.grid.2x2")
+                    }
+                    .accessibilityIdentifier("session-return-to-library")
+                    Divider()
+                }
                 Toggle(AppLocalization.string("Observe Only"), isOn: $viewModel.isObserveOnly)
                 Button { showingKeyboardCustomization = true } label: {
                     Label(AppLocalization.string("Customize Keyboard Toolbar"), systemImage: "slider.horizontal.3")

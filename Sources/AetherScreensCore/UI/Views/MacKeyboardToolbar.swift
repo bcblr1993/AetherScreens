@@ -97,6 +97,7 @@ public struct MacKeyboardToolbar: View {
                 .padding(.vertical, 8)
             }
             .background(.bar)
+            .accessibilityIdentifier("keyboard-toolbar-scroll")
         }
         .background(.regularMaterial)
         .environment(\.keyboardButtonHeight, buttonHeight)

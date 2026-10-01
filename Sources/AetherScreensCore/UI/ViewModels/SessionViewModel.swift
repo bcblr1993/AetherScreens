@@ -34,7 +34,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             releaseAllModifiers()
             trackpadEngine.releaseAllButtons()
             if isObserveOnly { isKeyboardVisible = false }
-            client.setInputEnabled(!isObserveOnly)
+            client.setInputEnabled(!isObserveOnly && isForegroundSession)
             inputGeneration = UUID()
         }
     }
@@ -101,6 +101,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public var canRememberPassword: Bool { !isTemporary }
     private let deviceStore: DeviceStore
     private nonisolated let callbackGeneration = SessionCallbackGeneration()
+    private nonisolated let foregroundGeneration = SessionCallbackGeneration()
+    @Published public private(set) var isForegroundSession = true
 
     public init(device: RemoteDevice, password: String?, isTemporary: Bool = false,
                 deviceStore: DeviceStore = .shared, keyboardStore: KeyboardToolbarStore = .shared,
@@ -299,8 +301,10 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         client.onClipboardReceived = { [weak self] text in
             guard let self else { return }
             let generation = self.callbackGeneration.capture()
+            let foreground = self.foregroundGeneration.capture()
             Task { @MainActor [weak self] in
                 guard let self, self.callbackGeneration.matches(generation),
+                      self.foregroundGeneration.matches(foreground), self.isForegroundSession,
                       self.client.state == .connected else { return }
                 self.clipboardWriter(text)
             }
@@ -327,6 +331,21 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         viewOffset = .zero
         isPanningViewport = false
         if client.state == .connected { trackpadEngine.resetCursor() }
+    }
+
+    /// Keep the connection and viewport, but only the selected session may control input or clipboard.
+    public func setForegroundSession(_ foreground: Bool) {
+        guard foreground != isForegroundSession else { return }
+        releaseAllModifiers()
+        trackpadEngine.releaseAllButtons()
+        foregroundGeneration.advance()
+        inputGeneration = UUID()
+        isForegroundSession = foreground
+        if !foreground {
+            isKeyboardVisible = false
+            isTextInputBarVisible = false
+        }
+        client.setInputEnabled(foreground && !isObserveOnly)
     }
 
     /// Submit entered password to active RFB handshake

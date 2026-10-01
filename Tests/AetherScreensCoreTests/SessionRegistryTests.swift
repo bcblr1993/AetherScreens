@@ -3,6 +3,43 @@ import XCTest
 
 @MainActor
 final class SessionRegistryTests: XCTestCase {
+    func testMobileSelectionPreservesViewportsAndReleasesHiddenInput() {
+        let registry = SessionRegistry()
+        let first = SessionViewModel(device: RemoteDevice(name: "First", host: "127.0.0.1"), password: nil, isTemporary: true)
+        let second = SessionViewModel(device: RemoteDevice(name: "Second", host: "127.0.0.1"), password: nil, isTemporary: true)
+        let firstID = registry.register(first), secondID = registry.register(second)
+        first.zoomScale = 2.5
+        first.viewOffset = CGSize(width: 30, height: 20)
+        XCTAssertTrue(registry.activate(firstID) === first)
+        first.cycleCmd()
+        first.trackpadEngine.beginDrag()
+        first.isKeyboardVisible = true
+        first.isTextInputBarVisible = true
+        let oldInput = first.inputGeneration
+        XCTAssertTrue(registry.activate(secondID) === second)
+        XCTAssertFalse(first.isForegroundSession)
+        XCTAssertTrue(second.isForegroundSession)
+        XCTAssertFalse(first.isCmdActive)
+        XCTAssertTrue(first.trackpadEngine.activeButtons.isEmpty)
+        XCTAssertFalse(first.isKeyboardVisible)
+        XCTAssertFalse(first.isTextInputBarVisible)
+        XCTAssertNotEqual(first.inputGeneration, oldInput)
+        XCTAssertEqual(first.zoomScale, 2.5)
+        XCTAssertEqual(first.viewOffset, CGSize(width: 30, height: 20))
+        registry.returnToLibrary()
+        XCTAssertNil(registry.activeSessionID)
+        XCTAssertFalse(second.isForegroundSession)
+        XCTAssertTrue(registry.activate(firstID) === first)
+        XCTAssertTrue(first.isForegroundSession)
+        XCTAssertEqual(first.client.state, .disconnected, "Selection must not reconnect sockets")
+        registry.close(secondID)
+        XCTAssertTrue(registry.session(for: firstID) === first)
+        XCTAssertNil(registry.session(for: secondID))
+        XCTAssertEqual(registry.activeSessionID, firstID)
+        XCTAssertNil(registry.activate(UUID()))
+        XCTAssertEqual(registry.activeSessionID, firstID)
+    }
+
     func testOpeningSavedConnectionAgainPreservesLiveSessionState() {
         let registry = SessionRegistry()
         let device = RemoteDevice(name: "QA", host: "127.0.0.1")

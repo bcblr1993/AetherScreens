@@ -255,6 +255,48 @@ final class PointerTransportTests: XCTestCase {
 
 @MainActor
 final class ClipboardSessionTests: XCTestCase {
+    func testHiddenSessionRejectsInputAndClipboardUntilSelectedAgain() throws {
+        let ready = expectation(description: "Hidden session listener ready")
+        let connected = expectation(description: "Hidden session connected")
+        let resumed = expectation(description: "Foreground clipboard delivered")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let inbox = ClipboardInbox()
+        let session = SessionViewModel(device: RemoteDevice(name: "Background QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true, clipboardWriter: {
+            inbox.texts.append($0)
+            if $0 == "foreground" { resumed.fulfill() }
+        })
+        defer { session.endSession() }
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        wait(for: [connected], timeout: 3)
+        session.client.onClipboardReceived?("queued before hiding")
+        session.setForegroundSession(false)
+        session.isObserveOnly = false
+        XCTAssertFalse(session.client.sendCutText("hidden upload"))
+        session.client.sendKeyEvent(down: true, keySym: 97)
+        session.client.sendPointerEvent(buttonMask: .left, x: 10, y: 10)
+        server.sendClipboard("hidden server text")
+        drainCallbacks()
+        XCTAssertTrue(inbox.texts.isEmpty)
+        XCTAssertTrue(server.keys.isEmpty)
+        XCTAssertTrue(server.pointers.isEmpty)
+        session.client.onClipboardReceived?("queued while hidden")
+        session.setForegroundSession(true)
+        drainCallbacks()
+        XCTAssertTrue(inbox.texts.isEmpty, "Reactivation must reject clipboard work queued by the hidden session")
+        server.sendClipboard("foreground")
+        wait(for: [resumed], timeout: 2)
+        XCTAssertEqual(inbox.texts, ["foreground"])
+        XCTAssertTrue(session.client.sendCutText("foreground upload"))
+        session.isObserveOnly = true
+        session.setForegroundSession(false)
+        session.setForegroundSession(true)
+        XCTAssertFalse(session.client.sendCutText("Observe upload"))
+        XCTAssertEqual(session.client.state, .connected, "Hiding and selecting must preserve the socket")
+    }
+
     func testEndedSessionRejectsQueuedAndLaterClipboardDelivery() throws {
         let ready = expectation(description: "Clipboard listener ready")
         let connected = expectation(description: "Clipboard session connected")

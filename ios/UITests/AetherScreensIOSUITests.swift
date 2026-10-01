@@ -1,6 +1,76 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testControlledMobileSessionSelection() throws { try verifyMobileSessionSelection(language: "en") }
+    func testChineseControlledMobileSessionSelection() throws { try verifyMobileSessionSelection(language: "zh-Hans") }
+
+    private func verifyMobileSessionSelection(language: String) throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
+        func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        try resetGestureFixture()
+        func connect() {
+            app.buttons[label("Quick Connect", "快速连接")].tap()
+            let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+            host.tap(); host.typeText(gestureFixtureHost)
+            let port = app.textFields[label("Port", "端口")]
+            replacePort(port, with: gestureFixturePort)
+            app.buttons[label("Connect", "连接")].tap()
+            XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
+        }
+        func library() {
+            app.buttons[label("Session Options", "会话选项")].tap()
+            app.buttons["session-return-to-library"].tap()
+            XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+        }
+        func select(_ number: Int) {
+            app.buttons["open-sessions"].tap()
+            attachScreenshot(app, name: "Open Sessions \(number) " + language)
+            app.buttons["open-session-\(number)"].tap()
+            XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 5))
+        }
+        func events() throws -> [[String: Any]] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: gestureFixtureData(path: "events")) as? [[String: Any]])
+        }
+        connect()
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Observe Only", "仅观看")].tap()
+        library()
+        connect()
+        let ready = try events().filter { $0["type"] as? String == "ready" }
+        XCTAssertEqual(ready.count, 2)
+        let firstID = try XCTUnwrap(ready.first?["connection"] as? Int)
+        let secondID = try XCTUnwrap(ready.last?["connection"] as? Int)
+        app.descendants(matching: .any)["remote-desktop-input"].firstMatch.tap()
+        _ = try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }
+        XCTAssertTrue(try events().filter { $0["type"] as? String == "pointer" && $0["mask"] as? Int == 1 }
+            .allSatisfy { $0["connection"] as? Int == secondID })
+        library()
+        select(1)
+        let previousPointers = try gesturePointers().count
+        app.descendants(matching: .any)["remote-desktop-input"].firstMatch.tap()
+        XCTAssertEqual(try gesturePointers().count, previousPointers, "Restored Observe session must still suppress control")
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Observe Only", "仅观看")].tap()
+        app.descendants(matching: .any)["remote-desktop-input"].firstMatch.tap()
+        _ = try waitForGesturePointers { $0.count > previousPointers }
+        XCTAssertEqual(try events().last(where: { $0["type"] as? String == "pointer" })?["connection"] as? Int, firstID)
+        XCTAssertEqual(try events().filter { $0["type"] as? String == "ready" }.count, 2, "Switching must reuse both live sockets")
+        XCTAssertTrue(try events().filter { $0["type"] as? String == "disconnected" }.isEmpty)
+        attachScreenshot(app, name: "Restored Mobile Session " + language)
+        app.buttons[label("Disconnect", "断开连接")].tap()
+        XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+        select(2)
+        app.descendants(matching: .any)["remote-desktop-input"].firstMatch.tap()
+        _ = try waitForGesturePointers { $0.count > previousPointers + 2 }
+        XCTAssertEqual(try events().last(where: { $0["type"] as? String == "pointer" })?["connection"] as? Int, secondID)
+        app.buttons[label("Disconnect", "断开连接")].tap()
+        XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["open-sessions"].isEnabled)
+        attachScreenshot(app, name: "Closed Mobile Sessions " + language)
+    }
+
     func testReceivedNativeGesturesOnControlledDesktop() throws { try verifyReceivedNativeGestures(language: "en") }
     func testReceivedChineseNativeGesturesOnControlledDesktop() throws { try verifyReceivedNativeGestures(language: "zh-Hans") }
     func testControlledConnectionRecovery() throws { try verifyControlledConnectionRecovery(language: "en") }
@@ -24,7 +94,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
         host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
+        replacePort(port, with: gestureFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
         let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
@@ -107,7 +177,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
         host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureDisplayFixturePort)
+        replacePort(port, with: gestureDisplayFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
         app.buttons[label("Input Mode", "输入模式")].tap()
@@ -152,7 +222,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
         host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
+        replacePort(port, with: gestureFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
         let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
@@ -214,7 +284,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
         host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
+        replacePort(port, with: gestureFixturePort)
         try resetGestureFixture()
         app.buttons[label("Connect", "连接")].tap()
         let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
@@ -242,7 +312,21 @@ final class AetherScreensIOSUITests: XCTestCase {
         let click = try XCTUnwrap(events.first { $0["type"] as? String == "pointer" && $0["connection"] as? Int == newConnection && $0["mask"] as? Int == 1 })
         XCTAssertEqual(Double(try XCTUnwrap(click["x"] as? Int)), 384, accuracy: 5, "Recovery must preserve zoom and touch mode")
         shift.tap()
-        app.buttons["esc"].tap()
+        let escape = app.buttons["esc"]
+        let keyboardScroll = app.scrollViews["keyboard-toolbar-scroll"]
+        for _ in 0..<3 {
+            let bounds = keyboardScroll.frame
+            let center = CGPoint(x: escape.frame.midX, y: escape.frame.midY)
+            if bounds.contains(center) { break }
+            let direction: CGFloat = center.x > bounds.maxX ? -1 : 1
+            let distance = min(bounds.width * 0.4, max(40, abs(center.x - bounds.midX)))
+            let startX: CGFloat = direction < 0 ? 0.8 : 0.2
+            let start = keyboardScroll.coordinate(withNormalizedOffset: CGVector(dx: startX, dy: 0.5))
+            let end = keyboardScroll.coordinate(withNormalizedOffset: CGVector(dx: startX + direction * distance / bounds.width, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
+        }
+        XCTAssertTrue(keyboardScroll.frame.contains(CGPoint(x: escape.frame.midX, y: escape.frame.midY)))
+        escape.tap()
         _ = try waitForFixtureEvents { events in
             let fresh = events.filter { $0["connection"] as? Int == newConnection && $0["type"] as? String == "key" }
             return fresh.contains { $0["key"] as? Int == 65505 && $0["down"] as? Int == 1 } && fresh.contains { $0["key"] as? Int == 65505 && $0["down"] as? Int == 0 }
@@ -285,7 +369,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(host.waitForExistence(timeout: 5))
         host.tap(); host.typeText(gestureFixtureHost)
         let port = app.textFields[label("Port", "端口")]
-        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText(gestureFixturePort)
+        replacePort(port, with: gestureFixturePort)
         app.buttons[label("Connect", "连接")].tap()
         let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
         XCTAssertTrue(frame.waitForExistence(timeout: 10))
@@ -346,6 +430,16 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertFalse(app.buttons[label("Show Keyboard", "显示键盘")].isEnabled)
         app.buttons[label("Disconnect", "断开连接")].tap()
         XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+    }
+
+    private func replacePort(_ field: XCUIElement, with value: String) {
+        // Numeric fields may ignore Command+A. Tap at the trailing caret and
+        // delete the existing digits as a person using the number pad would.
+        let current = field.value as? String ?? ""
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        field.typeText(value)
+        XCTAssertEqual(field.value as? String, value, "The validated fixture port must be entered before connecting")
     }
 
     private var gestureFixtureHost: String {

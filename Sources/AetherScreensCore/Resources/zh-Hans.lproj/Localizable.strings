@@ -266,3 +266,4 @@
 "Invalid Zlib rectangle size" = "远端压缩画面尺寸无效";
 "Invalid Zlib compressed length" = "远端压缩画面数据长度无效";
 "Invalid Zlib pixel data" = "远端压缩画面数据无效";
+"Return to Computers" = "返回电脑列表";
