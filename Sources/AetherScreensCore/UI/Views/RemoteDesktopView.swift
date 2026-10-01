@@ -105,6 +105,7 @@ public struct RemoteDesktopView: View {
 
             #if canImport(AppKit)
             // macOS Native Pointer and Keyboard Capture (M-chip Mac)
+            if !viewModel.isObserveOnly || viewModel.isPanningViewport {
             MacNativeInputRepresentable(
                 remoteWidth: imageWidth > 0 ? imageWidth : 1920,
                 remoteHeight: imageHeight > 0 ? imageHeight : 1080,
@@ -126,11 +127,12 @@ public struct RemoteDesktopView: View {
             .id(viewModel.inputGeneration)
             .frame(width: canvasWidth, height: canvasHeight)
             .position(x: originX + canvasWidth / 2, y: originY + canvasHeight / 2)
+            }
             #endif
 
             // Virtual Cursor Overlay (in Trackpad mode on iOS)
             #if canImport(UIKit)
-            if viewModel.inputMode == .trackpad && imageWidth > 0 && imageHeight > 0 {
+            if !viewModel.isObserveOnly && viewModel.inputMode == .trackpad && imageWidth > 0 && imageHeight > 0 {
                 let cursorScreenX = originX + viewModel.trackpadEngine.cursorX * canvasWidth / imageWidth
                 let cursorScreenY = originY + viewModel.trackpadEngine.cursorY * canvasHeight / imageHeight
 
@@ -394,7 +396,7 @@ public struct RemoteDesktopView: View {
                 Circle()
                     .fill(viewModel.sessionState == .connected ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
-                Text(viewModel.device.name)
+                Text(viewModel.isObserveOnly ? "Observe · " + viewModel.device.name : viewModel.device.name)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
@@ -420,6 +422,8 @@ public struct RemoteDesktopView: View {
 
             // Keep secondary controls inside a menu on narrow screens.
             Menu {
+                Toggle("Observe Only", isOn: $viewModel.isObserveOnly)
+                Divider()
                 #if canImport(UIKit)
                 Button { showingLogs = true } label: {
                     Label("Diagnostic Logs", systemImage: "list.bullet.rectangle")
@@ -466,6 +470,7 @@ public struct RemoteDesktopView: View {
                 } label: {
                     Label(viewModel.curtainManager.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac", systemImage: "lock")
                 }
+                .disabled(viewModel.isObserveOnly && !viewModel.curtainManager.isCurtainActive)
                 Button { viewModel.reconnectSession() } label: {
                     Label("Reconnect", systemImage: "arrow.clockwise")
                 }
@@ -499,6 +504,7 @@ public struct RemoteDesktopView: View {
                 controlIcon("keyboard")
             }
             .accessibilityLabel(viewModel.isKeyboardVisible ? "Hide Keyboard" : "Show Keyboard")
+            .disabled(viewModel.isObserveOnly)
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 12)

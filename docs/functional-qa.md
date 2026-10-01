@@ -12,6 +12,7 @@ Set these environment variables in your shell without storing secrets in files:
 - `AETHERSCREENS_QA_SSH_USER` for an existing SSH key-authenticated account
 - `AETHERSCREENS_QA_CLICK_X`, `AETHERSCREENS_QA_CLICK_Y`: framebuffer coordinates of Click test
 - `AETHERSCREENS_QA_SCROLL_X`, `AETHERSCREENS_QA_SCROLL_Y`: optional scrollbar panel position
+- `AETHERSCREENS_QA_OBSERVE=1`: verify live frames, suppressed input, held-key release and restored control
 
 Run `swift test --filter LiveFunctionalTests`.
 The test asserts new remote click and scroll events. Wrong coordinates, a locked
@@ -33,6 +34,12 @@ end-to-end latency. Record observable events and response behavior separately.
   spacing wheel press/release events.
 - Actual Size, Pan View and Fit to Window were exercised in the installed GUI.
 - F8 was recorded as the correct remote key after reconnecting.
+- Observe Only kept receiving live frames while remote event counts stayed unchanged
+  for clicks, text, wheel and clipboard attempts. The installed Mac GUI independently
+  passed click, text and wheel suppression; keyboard and remote lock controls were
+  disabled. Returning to control delivered `control restored` exactly. The live
+  transport test also held Shift before switching modes and received lowercase
+  `observe resumed` after control resumed, confirming modifier release.
 - A 60-second authenticated 3840x2160 live session remained connected.
 - Ten click-specific full-background changes returned successfully: debug-build
   input-to-decoded-frame median 175 ms, maximum 225 ms. This excludes display

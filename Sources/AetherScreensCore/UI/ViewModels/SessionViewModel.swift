@@ -28,6 +28,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             trackpadEngine.mode = inputMode
         }
     }
+    @Published public var isObserveOnly = false {
+        didSet {
+            releaseAllModifiers()
+            if isObserveOnly { isKeyboardVisible = false }
+            client.setInputEnabled(!isObserveOnly)
+            inputGeneration = UUID()
+        }
+    }
     @Published public var isKeyboardVisible: Bool = false
     @Published public var showShortcutsMenu: Bool = false
     @Published public var showDisplaysMenu: Bool = false
@@ -269,6 +277,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     // MARK: - Modifiers & Sticky Keys (Screens 3-State Logic)
 
     public func cycleCmd() {
+        guard !isObserveOnly else { return }
         switch cmdState {
         case .inactive:
             cmdState = .activeOnce
@@ -283,6 +292,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     }
 
     public func cycleOption() {
+        guard !isObserveOnly else { return }
         switch optState {
         case .inactive:
             optState = .activeOnce
@@ -296,6 +306,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     }
 
     public func cycleControl() {
+        guard !isObserveOnly else { return }
         switch ctrlState {
         case .inactive:
             ctrlState = .activeOnce
@@ -309,6 +320,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     }
 
     public func cycleShift() {
+        guard !isObserveOnly else { return }
         switch shiftState {
         case .inactive:
             shiftState = .activeOnce
@@ -369,9 +381,11 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Send a single key tap (down + up)
     public func sendKeyTap(_ keySym: UInt32) {
         client.sendKeyEvent(down: true, keySym: keySym)
+        let generation = inputGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.client.sendKeyEvent(down: false, keySym: keySym)
-            self?.releaseActiveOnceModifiers()
+            guard let self, self.inputGeneration == generation else { return }
+            self.client.sendKeyEvent(down: false, keySym: keySym)
+            self.releaseActiveOnceModifiers()
         }
     }
 
@@ -413,6 +427,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Insert local clipboard text into the focused remote field. Apple Screen Sharing
     /// does not accept legacy ClientCutText in the tested account session.
     public func syncClipboardToMac() {
+        guard !isObserveOnly else { return }
         #if canImport(UIKit)
         if let string = UIPasteboard.general.string {
             sendTextString(string)

@@ -39,6 +39,12 @@ public final class RFBClient: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.aethernative.aetherscreens.rfbclient", qos: .userInteractive)
     private var readBuffer = Data()
     private let zlibDecompressor = ZlibDecompressor()
+    private let inputLock = NSRecursiveLock()
+    private var inputEnabled = true
+    private var inputGeneration = UUID()
+    private var heldKeys = Set<UInt32>()
+    private var pointerPosition: (UInt16, UInt16) = (0, 0)
+    private var heldPointer = false
     private var nextWheelDeadline = DispatchTime.now()
     private var extendedClipboard = false
     private var pendingClipboard: String?
@@ -115,6 +121,10 @@ public final class RFBClient: @unchecked Sendable {
 
     /// Disconnect current session.
     public func disconnect() {
+        inputLock.lock()
+        heldKeys.removeAll()
+        heldPointer = false
+        inputLock.unlock()
         AppLogger.shared.info("Disconnecting session with \(host)", category: "Network")
         connection?.cancel()
         connection = nil
@@ -538,6 +548,9 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     private func sendExtendedClipboard(flags: UInt32, payload: Data = Data()) {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        guard flags & 0xFF000000 != 0x10000000 || inputEnabled else { return }
         var body = Data()
         body.append(contentsOf: withUnsafeBytes(of: flags.bigEndian) { Array($0) })
         body.append(payload)
@@ -549,6 +562,8 @@ public final class RFBClient: @unchecked Sendable {
     }
 
     func handleExtendedClipboard(_ payload: Data) {
+        inputLock.lock()
+        defer { inputLock.unlock() }
         guard payload.count >= 4 else { return }
         let flags = payload.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
         let action = flags & 0xFF000000
@@ -604,32 +619,68 @@ public final class RFBClient: @unchecked Sendable {
         sendData(req)
     }
 
+    /// Observe mode blocks input at the transport boundary, including delayed wheel pulses.
+    public func setInputEnabled(_ enabled: Bool) {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        if inputEnabled != enabled { inputGeneration = UUID() }
+        if !enabled && inputEnabled {
+            for key in heldKeys { sendData(RFBEncoder.encodeKeyEvent(down: false, keySym: key)) }
+            heldKeys.removeAll()
+            if heldPointer {
+                sendData(RFBEncoder.encodePointerEvent(buttonMask: [], x: pointerPosition.0, y: pointerPosition.1))
+            }
+            heldPointer = false
+            pendingClipboard = nil
+        }
+        inputEnabled = enabled
+    }
+
+    @discardableResult
+    private func sendPointerPacket(_ mask: RFBConstants.ButtonMask, x: UInt16, y: UInt16, generation: UUID? = nil) -> Bool {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        guard inputEnabled else { return false }
+        if let generation, generation != inputGeneration { return false }
+        pointerPosition = (x, y)
+        heldPointer = mask.rawValue & 7 != 0
+        sendData(RFBEncoder.encodePointerEvent(buttonMask: mask, x: x, y: y))
+        return true
+    }
+
     /// Send mouse movement or button press.
     public func sendPointerEvent(buttonMask: RFBConstants.ButtonMask, x: UInt16, y: UInt16) {
-        let data = RFBEncoder.encodePointerEvent(buttonMask: buttonMask, x: x, y: y)
         guard buttonMask.rawValue & 0x78 != 0 else {
-            sendData(data)
+            sendPointerPacket(buttonMask, x: x, y: y)
             return
         }
         // Apple's server applies wheel ticks at its current cursor position.
         // Establish that position before sending spaced press/release pulses.
+        inputLock.lock()
+        let generation = inputGeneration
+        let enabled = inputEnabled
+        inputLock.unlock()
+        guard enabled else { return }
         queue.async { [weak self] in
             guard let self = self, let connection = self.connection else { return }
-            let move = RFBEncoder.encodePointerEvent(buttonMask: [], x: x, y: y)
-            self.sendData(move)
+            guard self.sendPointerPacket([], x: x, y: y, generation: generation) else { return }
             let earliest = DispatchTime.now() + .milliseconds(25)
             let deadline = self.nextWheelDeadline > earliest ? self.nextWheelDeadline : earliest
             self.nextWheelDeadline = deadline + .milliseconds(16)
             self.queue.asyncAfter(deadline: deadline) { [weak self, weak connection] in
                 guard let self = self, let connection = connection, self.connection === connection else { return }
-                self.sendData(data)
-                self.sendData(move)
+                self.sendPointerPacket(buttonMask, x: x, y: y, generation: generation)
+                self.sendPointerPacket([], x: x, y: y, generation: generation)
             }
         }
     }
 
     /// Send a key press or release.
     public func sendKeyEvent(down: Bool, keySym: UInt32) {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        guard inputEnabled else { return }
+        if down { heldKeys.insert(keySym) } else { heldKeys.remove(keySym) }
         let data = RFBEncoder.encodeKeyEvent(down: down, keySym: keySym)
         sendData(data)
     }
@@ -653,6 +704,9 @@ public final class RFBClient: @unchecked Sendable {
 
     /// Send clipboard text to remote Mac.
     public func sendCutText(_ text: String) {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        guard inputEnabled else { return }
         guard text.utf8.count <= 1_048_000 else { return }
         if extendedClipboard {
             pendingClipboard = text

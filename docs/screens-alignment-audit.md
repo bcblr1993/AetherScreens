@@ -16,7 +16,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Curtain privacy mode | System lock shortcut and password restoration passed | Actual remote display blackout while remaining unlocked; lock is not parity |
 | Display selection | Framebuffer-derived regions and crop selection | Actual server monitor enumeration and per-display acceptance |
 | Adaptive image quality | Raw, Zlib and CopyRect decoding; Metal rendering | Network-dependent quality/compression selection and measured responsiveness |
-| Observe / control modes | Control only | Explicit observe mode that suppresses every input path |
+| Observe / control modes | Explicit Observe Only mode; real Mac frames continue while text, clicks, wheel and clipboard writes are blocked; held modifiers released and control restored | Physical iPhone toggle and input suppression acceptance |
 | Reconnect / session recovery | In-session reconnect clears input and restores remote typing | Physical iPhone recovery; network interruption regression |
 | Quick connect / session selection | Saved devices and Mac account authentication | Ad-hoc quick connection; explicit active/background session choice |
 | Secure connections / SSH keys | External Tailscale transport, device import client and Keychain | Real Tailnet route/import acceptance; integrated SSH tunnel/key handling |
@@ -30,7 +30,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Wake-on-LAN | Packet construction tests and send-success notice | Real wake verification on an appropriately configured sleeping Mac |
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
-| Release readiness | 74 latest-source tests (3 environment skips); the earlier 73-test candidate passed CI, notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
+| Release readiness | 75 latest-source tests (3 environment skips); the earlier 73-test candidate passed CI, notarization, mounted DMG and installed input | Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and

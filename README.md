@@ -12,6 +12,7 @@ A native remote desktop client for Apple silicon Mac, iPhone and iPad, using mac
 - Keyboard toolbar, sticky modifiers, common Mac shortcuts and insertion of local clipboard text into remote fields.
 - Bonjour discovery, Tailscale device import, saved computers and Keychain passwords.
 - Fit / actual-size zoom, desktop thumbnails and diagnostic logs.
+- Observe Only mode keeps the live view updating while blocking remote input; switching back restores control.
 
 Bidirectional clipboard synchronization and supplementary-plane emoji input are not supported by the tested Mac server.
 

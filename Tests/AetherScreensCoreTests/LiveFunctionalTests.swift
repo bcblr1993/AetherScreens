@@ -37,6 +37,48 @@ final class LiveFunctionalTests: XCTestCase {
         XCTAssertGreaterThan(after.filter { $0["type"] as? String == "click" }.count,
                              before.filter { $0["type"] as? String == "click" }.count,
                              "The controlled remote page must observe the actual click")
+        if env["AETHERSCREENS_QA_OBSERVE"] == "1" {
+            client.sendKeyEvent(down: true, keySym: MacKeyMap.shiftLeft)
+            client.setInputEnabled(false)
+            let baseline = try fixtureEvents(host: host, account: account)
+            let observingFrames = expectation(description: "Observe mode continues receiving frames")
+            observingFrames.assertForOverFulfill = false
+            client.onFrameUpdated = { observingFrames.fulfill() }
+            client.sendText("must not arrive")
+            client.sendCutText("must not arrive")
+            client.sendKeyEvent(down: true, keySym: MacKeyMap.commandLeft)
+            client.sendPointerEvent(buttonMask: .left, x: x, y: y)
+            client.sendPointerEvent(buttonMask: [], x: x, y: y)
+            client.sendPointerEvent(buttonMask: .scrollDown, x: x, y: y)
+            wait(for: [observingFrames], timeout: 5)
+            let suppressed = expectation(description: "Delayed input remains suppressed")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { suppressed.fulfill() }
+            wait(for: [suppressed], timeout: 2)
+            let observed = try fixtureEvents(host: host, account: account)
+            XCTAssertEqual(observed.count, baseline.count, "Observe mode must produce no remote fixture input")
+            client.setInputEnabled(true)
+            if let scrollX = env["AETHERSCREENS_QA_SCROLL_X"].flatMap(UInt16.init),
+               let scrollY = env["AETHERSCREENS_QA_SCROLL_Y"].flatMap(UInt16.init) {
+                client.sendPointerEvent(buttonMask: .scrollUp, x: scrollX, y: scrollY)
+                client.sendPointerEvent(buttonMask: .scrollDown, x: scrollX, y: scrollY)
+                client.setInputEnabled(false)
+                client.setInputEnabled(true)
+                let staleWheel = expectation(description: "Old wheel tasks stay cancelled after control resumes")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { staleWheel.fulfill() }
+                wait(for: [staleWheel], timeout: 2)
+                let cancelled = try fixtureEvents(host: host, account: account)
+                XCTAssertEqual(cancelled.filter { $0["type"] as? String == "scroll" }.count,
+                               observed.filter { $0["type"] as? String == "scroll" }.count)
+            }
+            client.sendPointerEvent(buttonMask: .left, x: x, y: y)
+            client.sendPointerEvent(buttonMask: [], x: x, y: y)
+            let resumed = expectation(description: "Control resumes")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { resumed.fulfill() }
+            wait(for: [resumed], timeout: 2)
+            let resumedEvents = try fixtureEvents(host: host, account: account)
+            XCTAssertGreaterThan(resumedEvents.filter { $0["type"] as? String == "click" }.count,
+                                 observed.filter { $0["type"] as? String == "click" }.count)
+        }
         if env["AETHERSCREENS_QA_LATENCY"] == "1" {
             // A fixture click changes the otherwise static background. Moving animation
             // elsewhere cannot satisfy this specific input-to-frame response check.
