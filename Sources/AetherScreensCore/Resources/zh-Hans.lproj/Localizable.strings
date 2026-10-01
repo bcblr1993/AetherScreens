@@ -251,3 +251,9 @@
 "Pan · %@" = "移动视图 · %@";
 
 "Invalid remote display layout" = "远端显示器布局无效";
+"Full Screen" = "全屏";
+"Enter Full Screen" = "进入全屏";
+"Exit Full Screen" = "退出全屏";
+"App Windows (⌃↓)" = "应用窗口（⌃↓）";
+"Previous Space (⌃←)" = "上一个空间（⌃←）";
+"Next Space (⌃→)" = "下一个空间（⌃→）";

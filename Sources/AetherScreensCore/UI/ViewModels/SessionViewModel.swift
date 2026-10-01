@@ -63,6 +63,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public var isShiftActive: Bool { shiftState != .inactive }
 
     // Zoom and pan
+    @Published public var isFullscreen = false
     @Published public var zoomScale: CGFloat = 1.0
     @Published public var viewOffset: CGSize = .zero
 
@@ -540,6 +541,25 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             client.sendKeyEvent(down: item.down, keySym: item.key)
         }
         releaseActiveOnceModifiers()
+    }
+
+    /// Local fullscreen controls remain available in Observe mode.
+    public func toggleFullscreen() {
+        trackpadEngine.releaseAllButtons()
+        // Publish the layout before rebuilding native input. SwiftUI can rebuild
+        // synchronously when its identity changes, so it must see the new value.
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isFullscreen.toggle()
+            inputGeneration = UUID()
+        }
+    }
+
+    public func handleThreeFingerSwipe(_ direction: MacKeyMap.ThreeFingerSwipe) {
+        guard !isObserveOnly, client.state == .connected else { return }
+        trackpadEngine.releaseAllButtons()
+        // Sticky modifiers must not turn a standard Control-arrow into another shortcut.
+        releaseAllModifiers()
+        executeShortcut(direction.shortcut)
     }
 
     /// Double-tap toggles fit and one remote pixel per local display pixel.

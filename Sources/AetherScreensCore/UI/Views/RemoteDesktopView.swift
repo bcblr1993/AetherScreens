@@ -21,6 +21,9 @@ public struct RemoteDesktopView: View {
         self.onDisconnect = onDisconnect
     }
 
+    // Connection failures must reveal controls even when the session prefers fullscreen.
+    private var usesFullscreenLayout: Bool { viewModel.isFullscreen && viewModel.sessionState == .connected }
+
     public var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -41,23 +44,29 @@ public struct RemoteDesktopView: View {
                 }
 
                 // Floating Top Controls Bar & Diagnostic HUD
-                VStack {
-                    floatingTopBar
-                        .padding(.top, 12)
-                    if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .top {
-                        MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
-                            .transition(.move(edge: .top))
-                    }
-                    Spacer()
+                if !usesFullscreenLayout {
+                    VStack {
+                        floatingTopBar
+                            .padding(.top, 12)
+                        if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .top {
+                            MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
+                                .transition(.move(edge: .top))
+                        }
+                        Spacer()
 
-                    // Bottom Mac Keyboard Toolbar (if toggled)
-                    if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .bottom {
-                        MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
-                            .transition(.move(edge: .bottom))
+                        // Bottom Mac Keyboard Toolbar (if toggled)
+                        if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .bottom {
+                            MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
+                                .transition(.move(edge: .bottom))
+                        }
                     }
                 }
             }
         }
+        #if canImport(UIKit)
+        .ignoresSafeArea(usesFullscreenLayout ? .all : [])
+        .statusBarHidden(usesFullscreenLayout)
+        #endif
         .onAppear {
             if managesSessionLifecycle { viewModel.startSession() }
         }
@@ -154,6 +163,9 @@ public struct RemoteDesktopView: View {
                 zoom: viewModel.zoomScale,
                 isPanning: viewModel.isPanningViewport,
                 isObserveOnly: viewModel.isObserveOnly,
+                isFullscreen: usesFullscreenLayout,
+                onToggleFullscreen: { viewModel.toggleFullscreen() },
+                onThreeFingerSwipe: { viewModel.handleThreeFingerSwipe($0) },
                 onPan: { dx, dy in
                     viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
                 },

@@ -10,6 +10,9 @@ struct IOSRemoteInputView: UIViewRepresentable {
     let zoom: CGFloat
     let isPanning: Bool
     let isObserveOnly: Bool
+    let isFullscreen: Bool
+    let onToggleFullscreen: () -> Void
+    let onThreeFingerSwipe: (MacKeyMap.ThreeFingerSwipe) -> Void
     let onPan: (CGFloat, CGFloat) -> Void
     let onZoom: (CGFloat) -> Void
 
@@ -17,6 +20,10 @@ struct IOSRemoteInputView: UIViewRepresentable {
     func updateUIView(_ view: RemoteTouchView, context: Context) {
         if isPanning || isObserveOnly { view.releaseDrag() }
         view.isLocalNavigation = isPanning || isObserveOnly
+        view.blocksRemoteShortcuts = isObserveOnly
+        view.isFullscreen = isFullscreen
+        view.onToggleFullscreen = onToggleFullscreen
+        view.onThreeFingerSwipe = onThreeFingerSwipe
         view.onPan = onPan
         view.engine = engine
         view.canvas = canvas
@@ -35,6 +42,10 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
     var onZoom: ((CGFloat) -> Void)?
     var onPan: ((CGFloat, CGFloat) -> Void)?
     var isLocalNavigation = false
+    var blocksRemoteShortcuts = false
+    var isFullscreen = false
+    var onToggleFullscreen: (() -> Void)?
+    var onThreeFingerSwipe: ((MacKeyMap.ThreeFingerSwipe) -> Void)?
     private let cursor = CAShapeLayer()
     private var dragButton: RFBConstants.ButtonMask = []
     private var initialZoom: CGFloat = 1
@@ -52,15 +63,30 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         cursor.strokeColor = UIColor.black.cgColor
         cursor.lineWidth = 1.5
         layer.addSublayer(cursor)
+        let fullscreen = UITapGestureRecognizer(target: self, action: #selector(fullscreenTapped(_:)))
+        fullscreen.numberOfTouchesRequired = 2
+        fullscreen.numberOfTapsRequired = 2
+        fullscreen.delegate = self
+        addGestureRecognizer(fullscreen)
+        var threeFingerHold: UILongPressGestureRecognizer?
         for fingers in 1...3 {
             let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
             tap.numberOfTouchesRequired = fingers
+            if fingers == 2 { tap.require(toFail: fullscreen) }
             addGestureRecognizer(tap)
             let hold = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
             hold.numberOfTouchesRequired = fingers
             hold.minimumPressDuration = 0.28
             hold.delegate = self
             addGestureRecognizer(hold)
+            if fingers == 3 { threeFingerHold = hold }
+        }
+        for direction in [UISwipeGestureRecognizer.Direction.up, .down, .left, .right] {
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(threeFingerSwiped(_:)))
+            swipe.numberOfTouchesRequired = 3
+            swipe.direction = direction
+            if let threeFingerHold { swipe.require(toFail: threeFingerHold) }
+            addGestureRecognizer(swipe)
         }
         let pointer = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
         pointer.minimumNumberOfTouches = 1
@@ -71,8 +97,10 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         scroll.minimumNumberOfTouches = 2
         scroll.maximumNumberOfTouches = 2
         scroll.delegate = self
+        scroll.require(toFail: fullscreen)
         addGestureRecognizer(scroll)
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
+        pinch.require(toFail: fullscreen)
         addGestureRecognizer(pinch)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
@@ -95,6 +123,31 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         guard let engine, canvas.width > 0 else { return }
         // Finger translation is measured in screen points, not remote pixels.
         engine.handlePanDelta(dx: dx, dy: dy, coordinateScale: engine.remoteWidth / canvas.width)
+    }
+
+    @objc private func fullscreenTapped(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        releaseDrag()
+        onToggleFullscreen?()
+    }
+
+    @objc private func toggleFullscreenAccessibility() -> Bool {
+        releaseDrag()
+        onToggleFullscreen?()
+        return true
+    }
+
+    @objc private func threeFingerSwiped(_ gesture: UISwipeGestureRecognizer) {
+        guard gesture.state == .ended, !blocksRemoteShortcuts, dragButton.isEmpty else { return }
+        let direction: MacKeyMap.ThreeFingerSwipe
+        switch gesture.direction {
+        case .up: direction = .up
+        case .down: direction = .down
+        case .left: direction = .left
+        case .right: direction = .right
+        default: return
+        }
+        onThreeFingerSwipe?(direction)
     }
 
     @objc private func tapped(_ gesture: UITapGestureRecognizer) {
@@ -138,6 +191,7 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
     func releaseDrag() {
         if !dragButton.isEmpty { engine?.endDrag(button: dragButton); dragButton = [] }
         lastHoldLocation = nil
+        updateCursor()
     }
 
     @objc private func scrolled(_ gesture: UIPanGestureRecognizer) {
@@ -180,10 +234,13 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         guard let engine else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        cursor.isHidden = isLocalNavigation || engine.mode != .trackpad
+        cursor.isHidden = isLocalNavigation || (engine.mode != .trackpad && dragButton.isEmpty)
         cursor.position = CGPoint(x: canvas.minX + engine.cursorX * canvas.width / max(1, engine.remoteWidth),
                                   y: canvas.minY + engine.cursorY * canvas.height / max(1, engine.remoteHeight))
-        cursor.fillColor = dragButton.isEmpty ? UIColor.white.cgColor : UIColor.systemBlue.cgColor
+        let color: UIColor = dragButton.contains(.right) ? .systemRed : dragButton.contains(.middle) ? .systemGreen : dragButton.isEmpty ? .white : .systemBlue
+        cursor.fillColor = color.cgColor
+        accessibilityValue = isFullscreen ? AppLocalization.string("Full Screen") : nil
+        accessibilityCustomActions = [UIAccessibilityCustomAction(name: AppLocalization.string(isFullscreen ? "Exit Full Screen" : "Enter Full Screen"), target: self, selector: #selector(toggleFullscreenAccessibility))]
         CATransaction.commit()
     }
 }

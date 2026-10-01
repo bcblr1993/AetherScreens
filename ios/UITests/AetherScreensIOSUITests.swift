@@ -12,6 +12,83 @@ final class AetherScreensIOSUITests: XCTestCase {
     func testControlledDisplaySelection() throws { try verifyControlledDisplaySelection(language: "en") }
     func testChineseControlledDisplaySelection() throws { try verifyControlledDisplaySelection(language: "zh-Hans") }
 
+    func testControlledFullscreenGestures() throws { try verifyControlledFullscreenGestures(language: "en") }
+    func testChineseControlledFullscreenGestures() throws { try verifyControlledFullscreenGestures(language: "zh-Hans") }
+
+    private func verifyControlledFullscreenGestures(language: String) throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
+        func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        app.buttons[label("Quick Connect", "快速连接")].tap()
+        let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+        host.tap(); host.typeText("127.0.0.1")
+        let port = app.textFields[label("Port", "端口")]
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        app.buttons[label("Connect", "连接")].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
+        let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
+        app.buttons[label("Show Keyboard", "显示键盘")].tap()
+        XCTAssertTrue(app.buttons[label("Hide Keyboard", "隐藏键盘")].exists)
+        try resetGestureFixture()
+        input.tap(withNumberOfTaps: 2, numberOfTouches: 2)
+        let fullscreenReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            input.value as? String == label("Full Screen", "全屏")
+        }, object: nil)
+        guard XCTWaiter.wait(for: [fullscreenReady], timeout: 3) == .completed else {
+            XCTFail("One two-finger double-tap must enter fullscreen")
+            return
+        }
+        XCTAssertEqual(input.value as? String, label("Full Screen", "全屏"))
+        XCTAssertFalse(app.buttons[label("Session Options", "会话选项")].exists)
+        XCTAssertFalse(app.buttons[label("Hide Keyboard", "隐藏键盘")].exists)
+        XCTAssertTrue(try gesturePointers().isEmpty, "Fullscreen must not deliver a right click")
+        attachScreenshot(app, name: "Controlled Fullscreen " + language)
+        input.tap(withNumberOfTaps: 2, numberOfTouches: 2)
+        XCTAssertTrue(app.buttons[label("Session Options", "会话选项")].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons[label("Hide Keyboard", "隐藏键盘")].exists)
+        XCTAssertTrue(try gesturePointers().isEmpty)
+        attachScreenshot(app, name: "Controlled Fullscreen Restored " + language)
+        // Repeated native gestures catch layout publication races; each gesture
+        // must succeed once, without corrective taps or remote pointer packets.
+        for _ in 0..<3 {
+            input.tap(withNumberOfTaps: 2, numberOfTouches: 2)
+            let entered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                input.value as? String == label("Full Screen", "全屏")
+            }, object: nil)
+            guard XCTWaiter.wait(for: [entered], timeout: 3) == .completed else {
+                XCTFail("Repeated fullscreen entry must succeed on one gesture")
+                return
+            }
+            XCTAssertFalse(app.buttons[label("Session Options", "会话选项")].exists)
+            input.tap(withNumberOfTaps: 2, numberOfTouches: 2)
+            XCTAssertTrue(app.buttons[label("Session Options", "会话选项")].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.buttons[label("Hide Keyboard", "隐藏键盘")].exists)
+            XCTAssertTrue(try gesturePointers().isEmpty)
+        }
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Observe Only", "仅观看")].tap()
+        try resetGestureFixture()
+        input.tap(withNumberOfTaps: 2, numberOfTouches: 2)
+        let observeFullscreenReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            input.value as? String == label("Full Screen", "全屏")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [observeFullscreenReady], timeout: 3), .completed)
+        _ = try gestureFixtureData(path: "drop")
+        XCTAssertTrue(app.buttons[label("Retry Connection", "重试连接")].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons[label("Session Options", "会话选项")].exists, "A failed fullscreen session must expose recovery and disconnect controls")
+        attachScreenshot(app, name: "Controlled Fullscreen Connection Lost " + language)
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Reconnect", "重新连接")].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(input.value as? String, label("Full Screen", "全屏"), "Reconnect preserves the fullscreen preference")
+        try resetGestureFixture()
+        input.tap(withNumberOfTaps: 2, numberOfTouches: 2)
+        XCTAssertTrue(app.buttons[label("Session Options", "会话选项")].waitForExistence(timeout: 3))
+        XCTAssertTrue(try gesturePointers().isEmpty, "Observe fullscreen remains a local action")
+        app.buttons[label("Disconnect", "断开连接")].tap()
+    }
+
     private func verifyControlledDisplaySelection(language: String) throws {
         guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
         func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }

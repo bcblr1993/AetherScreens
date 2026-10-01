@@ -251,3 +251,9 @@
 "Pan · %@" = "Pan · %@";
 
 "Invalid remote display layout" = "Invalid remote display layout";
+"Full Screen" = "Full Screen";
+"Enter Full Screen" = "Enter Full Screen";
+"Exit Full Screen" = "Exit Full Screen";
+"App Windows (⌃↓)" = "App Windows (⌃↓)";
+"Previous Space (⌃←)" = "Previous Space (⌃←)";
+"Next Space (⌃→)" = "Next Space (⌃→)";

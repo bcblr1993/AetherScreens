@@ -56,11 +56,27 @@ public enum MacKeyMap {
         return val >= 0x100 ? 0x01000000 | val : nil
     }
 
+    /// Finger direction follows the desktop's natural Space navigation.
+    public enum ThreeFingerSwipe: CaseIterable, Sendable {
+        case up, down, left, right
+        public var shortcut: MacShortcut {
+            switch self {
+            case .up: return .missionControl
+            case .down: return .appExpose
+            case .left: return .nextSpace
+            case .right: return .previousSpace
+            }
+        }
+    }
+
     /// Predefined Mac Shortcuts (combination of modifier keys and target key)
     public enum MacShortcut: String, CaseIterable, Identifiable, Sendable {
         case spotlight = "Spotlight (⌘Space)"
         case appSwitcher = "App Switcher (⌘Tab)"
         case missionControl = "Mission Control (⌃↑)"
+        case appExpose = "App Windows (⌃↓)"
+        case previousSpace = "Previous Space (⌃←)"
+        case nextSpace = "Next Space (⌃→)"
         case lockScreen = "Lock Screen (⌃⌘Q)"
         case showDesktop = "Show Desktop (⌘F3)"
         case forceQuit = "Force Quit (⌥⌘Esc)"
@@ -72,6 +88,9 @@ public enum MacKeyMap {
             case .spotlight: return "magnifyingglass"
             case .appSwitcher: return "square.on.square"
             case .missionControl: return "rectangle.3.group"
+            case .appExpose: return "rectangle.on.rectangle"
+            case .previousSpace: return "arrow.left.square"
+            case .nextSpace: return "arrow.right.square"
             case .lockScreen: return "lock.fill"
             case .showDesktop: return "menubar.rectangle"
             case .forceQuit: return "exclamationmark.octagon.fill"
@@ -95,6 +114,9 @@ public enum MacKeyMap {
                     (controlLeft, true), (arrowUp, true),
                     (arrowUp, false), (controlLeft, false)
                 ]
+            case .appExpose, .previousSpace, .nextSpace:
+                let arrow: UInt32 = self == .appExpose ? arrowDown : self == .previousSpace ? arrowLeft : arrowRight
+                return [(controlLeft, true), (arrow, true), (arrow, false), (controlLeft, false)]
             case .lockScreen:
                 return [
                     (controlLeft, true), (commandLeft, true), (UInt32(Character("q").asciiValue!), true),

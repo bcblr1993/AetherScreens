@@ -9,7 +9,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | --- | --- | --- |
 | Mac account / VNC connections | ARD type 30 and VNC implemented; real Mac authentication, frame and 60-second session passed. iPhone 12 Pro received the requested target Mac's desktop; user confirmed connection. | iPhone 16 Pro Max target session; sustained physical-device interaction |
 | Interactive shortcut toolbar | Sticky modifiers, common shortcuts, F1-F12; Mac F8 observed remotely | Physical iPhone modifier/shortcut delivery and narrow layouts |
-| Touch / trackpad gestures | Native iOS recognizers now wire immediate clicks, secondary/middle clicks, held-button dragging, two-axis scrolling and pinch zoom. Cursor movement uses remote-pixel scaling, smooth acceleration and an immediate UIKit layer. Core tests cover click release, scaling and engine drag state. English/Chinese iOS simulator flows additionally inspect packets received for single/double/right/middle click, held-button drag, direct touch, pinch coordinate changes and Observe suppression; both flows pass without runtime warnings. Actual loopback TCP tests additionally verify scrolling preserves held buttons, delayed wheels use the latest released-button state/coordinates, and Observe cancels old work without delaying resumed control behind the cancelled backlog. | Physical tap, secondary click, drag, pinch, scroll and mode changes; Apple server combined scroll/drag acceptance; perceived responsiveness; native two-axis scroll, secondary/middle drag indicators, three-finger shortcuts, two-finger fullscreen toggle and edge/hot-corner gestures |
+| Touch / trackpad gestures | Native iOS recognizers now wire immediate clicks, secondary/middle clicks, held-button dragging, two-axis scrolling and pinch zoom. Cursor movement uses remote-pixel scaling, smooth acceleration and an immediate UIKit layer. Core tests cover click release, scaling and engine drag state. English/Chinese iOS simulator flows additionally inspect packets received for single/double/right/middle click, held-button drag, direct touch, pinch coordinate changes and Observe suppression; both flows pass without runtime warnings. Three-finger desktop shortcuts, local two-finger fullscreen and held-button colors are now implemented; their acceptance details appear below. Actual loopback TCP tests additionally verify scrolling preserves held buttons, delayed wheels use the latest released-button state/coordinates, and Observe cancels old work without delaying resumed control behind the cancelled backlog. | Physical tap, secondary click, drag, pinch, scroll and mode changes; Apple server combined scroll/drag acceptance; perceived responsiveness; native two-axis scroll and secondary/middle drag indicators; physical three-finger shortcuts and fullscreen; edge/hot-corner gestures |
 | Hardware pointing devices | Mac native mouse, drag, context menu and wheel passed | iPad pointer and hardware keyboard acceptance |
 | International keyboards / dictation | UTF-8 text drawer and Chinese keysyms passed; NSTextInputClient composition tests | Real IME; supplementary-plane characters; dictation workflow |
 | Clipboard transfers | Local clipboard insertion passed; traditional Latin-1 and negotiated compressed UTF-8 double-direction loopback TCP text, malformed message rejection and ended/reconnected session guards tested | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 140 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; current extended-clipboard validation still needs CI and physical acceptance. Complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 141 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8, incremental GPU rendering 913eb8c and display-switch input eb78dcb passed CI; clipboard lifecycle/text encoding a411187 passed CI; extended-clipboard validation 5485f1b passed CI; native navigation gesture integration passed final controlled UI and still needs CI and physical acceptance. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -321,3 +321,59 @@ The first new test compilation hit a Swift type-inference diagnostic; explicit
 closure types and UInt32 length assertions fixed the fixture before reproducing
 the product failures. None of these tests read or overwrite the user's system
 clipboard. Apple-server, physical-phone and rich-content acceptance remain open.
+
+
+## Native navigation gestures and fullscreen recovery
+
+Following the [Screens gesture reference](https://help.edovia.com/en/screens-5/features/cursor-control-modes-and-other-gestures),
+iOS now recognizes three-finger up/down/left/right swipes and sends Control-Up,
+Control-Down, Control-Right and Control-Left respectively. The shortcut menu
+also exposes App Windows and previous/next Space in English and Chinese.
+Session dispatch releases sticky modifiers first and blocks these remote
+shortcuts in Observe mode. A real loopback TCP test verifies every key packet,
+including sticky Command release and the absence of remote keys in Observe.
+Actual three-finger contact recognition and customized Mac shortcut mappings
+still require physical acceptance.
+
+Two-finger double-tap toggles local fullscreen in normal and Observe modes.
+Toolbar/keyboard visibility returns on exit, while a failed fullscreen session
+reveals recovery and disconnect controls. Reconnect preserves its fullscreen
+preference. The local cursor now gives blue/red/green feedback for held
+left/right/middle buttons. Physical secondary/middle dragging, edge navigation
+and hot corners remain open; these changes are not complete Screens parity.
+
+The first full ten-case UI run retained a genuine fullscreen failure in
+`build/ios-navigation-fresh-controlled-qa`; the subsequent run in
+`build/ios-navigation-final-controlled-qa` still failed Chinese first entry.
+Temporary DEBUG-only touch diagnostics then proved the tap recognizer reached
+its ended action and the model reported `full=true state=connected`, while
+native view updates retained `full=false`. The input identity was published
+before the fullscreen layout value, allowing a synchronous rebuild with stale
+layout. Fullscreen is now changed before input identity, inside the same
+animation. Both language-specific fullscreen/recovery tests passed in
+`/tmp/aetherscreens-navigation-order.xcresult`. The diagnostic instrumentation
+was removed; final tests add three additional enter/exit cycles per language,
+each requiring one gesture and no remote pointer packets.
+
+The controlled runner now enumerates all ten requested cases before execution
+and rejects discovery omissions. An earlier incremental build executed only
+eight old cases despite reporting test success; its guarded run was rejected
+and preserved in `build/ios-navigation-gestures-controlled-qa`. A fresh derived
+data directory restored discovery. No skipped or missing case counts as a pass.
+
+Current core validation passed 141 tests with five environment skips and no
+failures (`/tmp/aetherscreens-navigation-state-core.log`); unchanged CopyRect
+threshold measured 0.677 ms/frame. Mac and signed iOS Release builds passed
+(`/tmp/aetherscreens-navigation-state-mac.log`,
+`/tmp/aetherscreens-navigation-state-ios.log`), and deep/strict iOS signature
+verification passed (`/tmp/aetherscreens-navigation-state-signature.log`).
+Final guarded acceptance passed all ten requested cases with no skips,
+failures or runtime warnings (`build/ios-navigation-state-controlled-qa`).
+The six exported fullscreen/restored/connection-loss screenshots in
+`/tmp/aetherscreens-navigation-state-attachments` were inspected in both
+languages: fullscreen hides controls, exit restores the keyboard, and failure
+reveals recovery controls. The English connection-loss screenshot still lacks
+the status-bar row seen in the Chinese screenshot; status-bar restoration and
+full physical error-layout consistency remain in the UI acceptance gate.
+Two-phone live interaction, physical smoothness and the other open acceptance
+requirements above remain required before human review and release.

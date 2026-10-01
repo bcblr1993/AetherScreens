@@ -174,6 +174,48 @@ final class PointerTransportTests: XCTestCase {
         server.onPointer = nil
     }
 
+    @MainActor
+    func testThreeFingerNavigationSendsCompleteShortcutsAndObserveKeepsFullscreenLocal() throws {
+        let ready = expectation(description: "Three-finger shortcut listener ready")
+        let connected = expectation(description: "Three-finger shortcut connection ready")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let session = SessionViewModel(device: RemoteDevice(name: "Three-finger QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true)
+        defer { session.endSession() }
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        wait(for: [connected], timeout: 3)
+        session.cycleCmd()
+        session.handleThreeFingerSwipe(.up)
+        waitUntil { server.keys.count >= 6 }
+        XCTAssertEqual(server.keys.map { $0.key }, [0xFFEB, 0xFFEB, 0xFFE3, 0xFF52, 0xFF52, 0xFFE3])
+        XCTAssertEqual(server.keys.map { $0.down }, [true, false, true, true, false, false])
+        XCTAssertEqual(session.cmdState, .inactive)
+        for (direction, arrow) in [(MacKeyMap.ThreeFingerSwipe.down, UInt32(0xFF54)), (.right, 0xFF51), (.left, 0xFF53)] {
+            let start = server.keys.count
+            session.handleThreeFingerSwipe(direction)
+            waitUntil { server.keys.count >= start + 4 }
+            XCTAssertEqual(server.keys.dropFirst(start).map { $0.key }, [0xFFE3, arrow, arrow, 0xFFE3])
+            XCTAssertEqual(server.keys.dropFirst(start).map { $0.down }, [true, true, false, false])
+        }
+        session.isObserveOnly = true
+        let unwanted = expectation(description: "Observe receives gesture shortcut")
+        unwanted.isInverted = true
+        server.onKey = { _ in unwanted.fulfill() }
+        for direction in MacKeyMap.ThreeFingerSwipe.allCases { session.handleThreeFingerSwipe(direction) }
+        session.zoomScale = 2
+        session.viewOffset = CGSize(width: 8, height: 9)
+        session.toggleFullscreen()
+        XCTAssertTrue(session.isFullscreen)
+        session.toggleFullscreen()
+        XCTAssertFalse(session.isFullscreen)
+        XCTAssertEqual(session.zoomScale, 2)
+        XCTAssertEqual(session.viewOffset, CGSize(width: 8, height: 9))
+        wait(for: [unwanted], timeout: 0.2)
+        server.onKey = nil
+    }
+
     private func connectedPair() throws -> (PointerWireServer, RFBClient) {
         let ready = expectation(description: "Loopback listener ready")
         let connected = expectation(description: "RFB handshake completed")
@@ -405,6 +447,7 @@ private final class PointerWireServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "aetherscreens.pointer-wire-qa")
     private let lock = NSLock()
     private var received: [Pointer] = []
+    private var receivedKeys: [Key] = []
     private var connection: NWConnection?
     private var pointerHandler: ((Pointer) -> Void)?
     var onPointer: ((Pointer) -> Void)? {
@@ -426,6 +469,7 @@ private final class PointerWireServer: @unchecked Sendable {
         get { lock.lock(); defer { lock.unlock() }; return extendedClipboardHandler }
         set { lock.lock(); extendedClipboardHandler = newValue; lock.unlock() }
     }
+    var keys: [Key] { lock.lock(); defer { lock.unlock() }; return receivedKeys }
     var pointers: [Pointer] { lock.lock(); defer { lock.unlock() }; return received }
 
     init(ready: @escaping () -> Void) throws {
@@ -494,6 +538,7 @@ private final class PointerWireServer: @unchecked Sendable {
             case 4:
                 self.read(7) { body in
                     let key = Key(down: body[0] != 0, key: UInt32(body[3]) << 24 | UInt32(body[4]) << 16 | UInt32(body[5]) << 8 | UInt32(body[6]))
+                    self.lock.lock(); self.receivedKeys.append(key); self.lock.unlock()
                     self.onKey?(key)
                     self.readMessage()
                 }

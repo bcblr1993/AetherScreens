@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the eight controlled iOS display/gesture/recovery scenarios and reject omissions.
+"""Run the ten controlled iOS display/gesture/recovery scenarios and reject omissions.
 
 Start gesture_rfb_fixture.py separately. This is a simulator sub-gate, not
 physical-device or complete-release acceptance. No credentials are used.
@@ -16,6 +16,8 @@ from uuid import uuid4
 
 REPO = Path(__file__).resolve().parents[2]
 CASES = (
+    'testControlledFullscreenGestures',
+    'testChineseControlledFullscreenGestures',
     'testControlledDisplaySelection',
     'testChineseControlledDisplaySelection',
     'testControlledViewportNavigation',
@@ -70,11 +72,20 @@ def main():
     with fresh.open('xb') as plan:
         plistlib.dump(configuration, plan)
     result = output / 'result.xcresult'
+    command = ['xcodebuild', 'test-without-building', '-xctestrun', str(fresh),
+               '-destination', destination, '-parallel-testing-enabled', 'NO',
+               *['-only-testing:AetherScreensIOSUITests/AetherScreensIOSUITests/' + case for case in CASES]]
     try:
-        run(['xcodebuild', 'test-without-building', '-xctestrun', str(fresh),
-             '-destination', destination, '-parallel-testing-enabled', 'NO',
-             *['-only-testing:AetherScreensIOSUITests/AetherScreensIOSUITests/' + case for case in CASES],
-             '-resultBundlePath', str(result)], output / 'tests.log')
+        enumeration = output / 'enumeration.json'
+        run([*command, '-enumerate-tests', '-test-enumeration-style', 'flat',
+             '-test-enumeration-format', 'json', '-test-enumeration-output-path', str(enumeration)], output / 'enumeration.log')
+        discovered = json.loads(enumeration.read_text())
+        enabled = {test['identifier'] for group in discovered.get('values', [])
+                   for test in group.get('enabledTests', [])}
+        expected_discovery = {'AetherScreensIOSUITests/AetherScreensIOSUITests/' + case + '()' for case in CASES}
+        if discovered.get('errors') or enabled != expected_discovery:
+            raise RuntimeError(f'Controlled test discovery incomplete: missing={sorted(expected_discovery - enabled)}, unexpected={sorted(enabled - expected_discovery)}; inspect {output}')
+        run([*command, '-resultBundlePath', str(result)], output / 'tests.log')
     finally:
         fresh.unlink()
     reports = {}
