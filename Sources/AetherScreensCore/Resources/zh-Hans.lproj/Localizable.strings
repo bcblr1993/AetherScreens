@@ -234,3 +234,15 @@
 "Mac Account Username" = "Mac 账户用户名";
 
 "Mac account username and password required" = "需要 Mac 账户用户名和密码";
+
+"Copy Connection Link" = "复制连接链接";
+
+"Connection link copied" = "连接链接已复制";
+
+"This connection link is invalid." = "此连接链接无效。";
+
+"This connection link uses an unsupported option." = "此连接链接包含尚未支持的选项。";
+
+"The computer in this link is not in your library." = "此链接中的电脑不在你的列表中。";
+
+"Several computers match this link. Use a link copied from the computer's menu." = "多台电脑与此链接匹配，请使用电脑菜单中复制的链接。";

@@ -22,6 +22,14 @@ targets:
         CFBundleDisplayName: AetherScreens
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, zh-Hans]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.aethernative.aetherscreens.connection
+            CFBundleURLSchemes: [aetherscreens]
+            CFBundleTypeRole: Viewer
+          - CFBundleURLName: com.aethernative.aetherscreens.vnc
+            CFBundleURLSchemes: [vnc]
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

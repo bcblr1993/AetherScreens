@@ -35,6 +35,10 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleIdentifier</key><string>com.aethernative.aetherscreens</string>
 <key>CFBundleName</key><string>AetherScreens</string>
+<key>CFBundleURLTypes</key><array>
+<dict><key>CFBundleURLName</key><string>com.aethernative.aetherscreens.connection</string><key>CFBundleURLSchemes</key><array><string>aetherscreens</string></array><key>CFBundleTypeRole</key><string>Viewer</string></dict>
+<dict><key>CFBundleURLName</key><string>com.aethernative.aetherscreens.vnc</string><key>CFBundleURLSchemes</key><array><string>vnc</string></array><key>CFBundleTypeRole</key><string>Viewer</string><key>LSHandlerRank</key><string>Alternate</string></dict>
+</array>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>

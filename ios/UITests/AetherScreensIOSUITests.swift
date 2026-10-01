@@ -1,6 +1,43 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testConnectionLinkPreservesQuickConnectDraft() throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_URL_ROUTING_QA"] == "1" else {
+            throw XCTSkip("Requires an external simulator URL delivery")
+        }
+        let app = makeApp()
+        app.launch()
+        app.buttons["Quick Connect"].tap()
+        let host = app.textFields["Tailscale IP / Host (e.g. 100.80.1.25)"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        host.typeText("draft-qa.invalid")
+        print("AETHERSCREENS_URL_QA_READY")
+        // The driver delivers a system URL while this form remains open.
+        let deliveryWindow = expectation(description: "System URL delivery window")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { deliveryWindow.fulfill() }
+        wait(for: [deliveryWindow], timeout: 20)
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let confirmation = springboard.alerts.firstMatch
+        if confirmation.exists {
+            XCTAssertTrue(confirmation.label.contains("AetherScreens"))
+            let open = confirmation.buttons["Open"].exists ? confirmation.buttons["Open"] : confirmation.buttons["打开"]
+            XCTAssertTrue(open.exists)
+            open.tap()
+        }
+        XCTAssertTrue(app.navigationBars["Quick Connect"].exists)
+        XCTAssertEqual(host.value as? String, "draft-qa.invalid")
+        attachScreenshot(app, name: "Connection Link Preserves Draft")
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Observe · Link QA"].exists)
+        XCTAssertFalse(app.buttons["Show Keyboard"].isEnabled)
+        attachScreenshot(app, name: "Connection Link Observe Session")
+        app.buttons["Disconnect"].tap()
+        XCTAssertTrue(app.buttons["Quick Connect"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Connect to Link QA"].exists)
+    }
+
     func testEnglishMacAccountPrompt() throws { try verifyMacAccountPrompt(language: "en") }
     func testChineseMacAccountPrompt() throws { try verifyMacAccountPrompt(language: "zh-Hans") }
 

@@ -32,6 +32,7 @@ public struct DeviceListView: View {
     @State private var activeSessionVM: SessionViewModel?
     @State private var editingDevice: RemoteDevice?
     @State private var showingLogs = false
+    @State private var pendingConnectionLinks: [ConnectionLink.Resolved] = []
     #if os(macOS)
     @ObservedObject private var sessionRegistry = SessionRegistry.shared
     #endif
@@ -53,19 +54,19 @@ public struct DeviceListView: View {
                 .navigationTitle(AppLocalization.string(selectedCategory.rawValue))
         }
         .onChange(of: sessionRegistry.sessions.count) { _, _ in viewModel.reload() }
-        .sheet(item: $editingDevice) { dev in
+        .sheet(item: $editingDevice, onDismiss: openPendingConnectionLink) { dev in
             EditDeviceSheet(device: dev, viewModel: viewModel)
         }
-        .sheet(isPresented: $showingLogs) {
+        .sheet(isPresented: $showingLogs, onDismiss: openPendingConnectionLink) {
             DiagnosticLogView()
         }
-        .sheet(isPresented: $showingAddSheet) {
+        .sheet(isPresented: $showingAddSheet, onDismiss: openPendingConnectionLink) {
             AddDeviceSheet(viewModel: viewModel)
         }
         .sheet(isPresented: $showingQuickConnectSheet, onDismiss: openPendingQuickSession) {
             quickConnectSheet
         }
-        .sheet(isPresented: $showingSettingsSheet) {
+        .sheet(isPresented: $showingSettingsSheet, onDismiss: openPendingConnectionLink) {
             TailscaleSettingsSheet(viewModel: viewModel)
         }
         #else
@@ -73,28 +74,29 @@ public struct DeviceListView: View {
             mainGridView
                 .navigationTitle(AppLocalization.string("AetherScreens"))
                 .navigationBarTitleDisplayMode(.inline)
-                .fullScreenCover(item: $activeSessionVM, onDismiss: { viewModel.reload() }) { sessionVM in
+                .fullScreenCover(item: $activeSessionVM, onDismiss: { viewModel.reload(); openPendingConnectionLink() }) { sessionVM in
                     RemoteDesktopView(viewModel: sessionVM)
                 }
-                .sheet(item: $editingDevice) { dev in
+                .sheet(item: $editingDevice, onDismiss: openPendingConnectionLink) { dev in
                     EditDeviceSheet(device: dev, viewModel: viewModel)
                 }
-                .sheet(isPresented: $showingLogs) {
+                .sheet(isPresented: $showingLogs, onDismiss: openPendingConnectionLink) {
                     DiagnosticLogView()
                 }
-                .sheet(isPresented: $showingAddSheet) {
+                .sheet(isPresented: $showingAddSheet, onDismiss: openPendingConnectionLink) {
                     AddDeviceSheet(viewModel: viewModel)
                 }
                 .sheet(isPresented: $showingQuickConnectSheet, onDismiss: openPendingQuickSession) {
                     quickConnectSheet
                 }
-                .sheet(isPresented: $showingSettingsSheet) {
+                .sheet(isPresented: $showingSettingsSheet, onDismiss: openPendingConnectionLink) {
                     TailscaleSettingsSheet(viewModel: viewModel)
                 }
         }
         #endif
         }
         .environment(\.locale, languageSettings.locale)
+        .onOpenURL(perform: receiveConnectionLink)
     }
 
     // MARK: - Sidebar (macOS)
@@ -220,6 +222,19 @@ public struct DeviceListView: View {
                                         editingDevice = device
                                     } label: {
                                         Label(AppLocalization.string("Edit Computer..."), systemImage: "pencil")
+                                    }
+
+                                    Button {
+                                        let link = ConnectionLink.savedURL(for: device.id).absoluteString
+                                        #if canImport(UIKit)
+                                        UIPasteboard.general.string = link
+                                        #elseif canImport(AppKit)
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(link, forType: .string)
+                                        #endif
+                                        viewModel.statusNotice = "Connection link copied"
+                                    } label: {
+                                        Label(AppLocalization.string("Copy Connection Link"), systemImage: "link")
                                     }
 
                                     if let mac = device.macAddress, !mac.isEmpty {
@@ -457,9 +472,43 @@ public struct DeviceListView: View {
     }
 
     private func openPendingQuickSession() {
-        guard let session = pendingQuickSession else { return }
-        pendingQuickSession = nil
-        presentSession(session)
+        if let session = pendingQuickSession {
+            pendingQuickSession = nil
+            presentSession(session)
+        }
+        openPendingConnectionLink()
+    }
+
+    private func receiveConnectionLink(_ url: URL) {
+        do {
+            let link = try ConnectionLink(url: url)
+            viewModel.reload()
+            let resolved = try link.resolve(devices: viewModel.devices) { DeviceStore.shared.getPassword(for: $0) }
+            pendingConnectionLinks.append(resolved)
+            openPendingConnectionLink()
+        } catch let error as ConnectionLink.Failure {
+            viewModel.errorMessage = error.messageKey
+        } catch {
+            viewModel.errorMessage = ConnectionLink.Failure.invalid.messageKey
+        }
+    }
+
+    private func openPendingConnectionLink() {
+        guard !showingAddSheet, !showingQuickConnectSheet, !showingSettingsSheet,
+              !showingLogs, editingDevice == nil, pendingQuickSession == nil,
+              !pendingConnectionLinks.isEmpty else { return }
+        #if !os(macOS)
+        guard activeSessionVM == nil else { return }
+        #endif
+        let resolved = pendingConnectionLinks.removeFirst()
+        let session = SessionViewModel(device: resolved.device, password: resolved.password, isTemporary: resolved.isTemporary)
+        if let observe = resolved.observeOnly { session.isObserveOnly = observe }
+        #if os(macOS)
+        SessionWindowManager.shared.open(session, reuseExisting: !resolved.requiresIndependentSession)
+        openPendingConnectionLink()
+        #else
+        activeSessionVM = session
+        #endif
     }
 
     private func presentSession(_ session: SessionViewModel) {

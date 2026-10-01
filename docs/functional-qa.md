@@ -1,5 +1,31 @@
 # Controlled remote input acceptance
 
+## Connection link routing acceptance (2026-10-01)
+
+The core suite passed 109 tests with five environment skips and no failures.
+Connection-link regressions cover saved selectors, ambiguous names, temporary
+credentials, account isolation, exactly-once percent decoding and invalid or
+unsupported options. Copied saved links contain only the local computer UUID.
+
+The iPhone 17 simulator system-routing test passed (one test, no runtime warnings):
+`build/ios-url-routing-draft-retry.xcresult`. It received
+`aetherscreens://connect?host=link-qa.invalid&name=Link%20QA&observe=true`
+through `simctl openurl` while Quick Connect contained a draft. After explicitly
+accepting the system Open confirmation, the draft remained intact; cancelling
+the form opened an Observe session with keyboard control disabled. Disconnect
+returned to the library without saving Link QA. Both screenshots were inspected.
+The first run was cancelled by XCTest's default system-alert handler; the test
+now explicitly accepts only the AetherScreens Open confirmation.
+
+To repeat, build for testing, set `AETHERSCREENS_URL_ROUTING_QA=1` in the UI
+test target's xctestrun EnvironmentVariables, and select
+`testConnectionLinkPreservesQuickConnectDraft`. Deliver the URL above using
+`xcrun simctl openurl <simulator-UUID> <URL>` after the log marker
+`AETHERSCREENS_URL_QA_READY`, within the 15-second delivery window.
+The invalid host deliberately avoids real credentials and network acceptance.
+Installed Mac/physical iPhone routing and saved-link copying remain acceptance
+gates, along with unsupported SSH/SSH-key, guest and shortcut/widget workflows.
+
 This fixture checks received browser events, not only successful network sends.
 Run `scripts/qa/remote_fixture.py` on the test Mac and open
 `http://127.0.0.1:8766/` in its browser. The server binds only to loopback.
