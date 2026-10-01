@@ -96,3 +96,16 @@ satisfy the response check. The test prints all ten response samples.
   have English and Simplified Chinese resources. OS-owned menus/dialogs follow
   the system's application language; remote names and server diagnostics remain
   original data. Physical iPhone localization acceptance remains pending unlock.
+
+### Localization resource build compatibility
+
+CI for `22f5fe6` failed Chinese resource loading despite local Swift Build
+acceptance. Reproduced with the native SwiftPM build: it emits `zh-hans.lproj`
+while Xcode/Swift Build emits `zh-Hans.lproj`; Foundation's localized directory
+lookup did not resolve the former. Resolve actual bundled resource directories
+case-insensitively before loading the selected catalog. Both full suites now
+pass: `swift test` and `swift test --build-system native --skip-update
+--scratch-path build/native-localization` (87 tests, four external skips).
+Evidence: `/tmp/aetherscreens-native-localization-before-fix.log`,
+`/tmp/aetherscreens-native-localization-fixed.log`, and
+`/tmp/aetherscreens-localization-build-fixed.log`. Remote CI must pass again.

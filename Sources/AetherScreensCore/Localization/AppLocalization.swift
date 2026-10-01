@@ -46,8 +46,8 @@ public enum AppLocalization {
 
     public static func string(_ key: String, language: AppLanguage? = nil) -> String {
         let code = identifier(for: language ?? self.language)
-        guard let path = Bundle.module.path(forResource: code, ofType: "lproj"),
-              let bundle = Bundle(path: path) else { return key }
+        guard let directory = localizationDirectory(for: code),
+              let bundle = Bundle(url: directory) else { return key }
         return bundle.localizedString(forKey: key, value: key, table: "Localizable")
     }
 
@@ -75,6 +75,22 @@ public enum AppLocalization {
         return original
     }
 
+    // SwiftPM's native build lowercases language directories; Xcode preserves
+    // BCP-47 casing. Resource lookup must support both independently of the OS
+    // preferred language and Foundation's localized path search.
+    static func localizationDirectory(for language: String) -> URL? {
+        localizationDirectories[language.lowercased()]
+    }
+
+    private static let localizationDirectories: [String: URL] = {
+        guard let root = Bundle.module.resourceURL,
+              let entries = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return [:] }
+        return entries.reduce(into: [:]) { result, url in
+            guard url.pathExtension.lowercased() == "lproj" else { return }
+            result[url.deletingPathExtension().lastPathComponent.lowercased()] = url
+        }
+    }()
+
     private struct MessageTemplate {
         let key: String
         let regex: NSRegularExpression
@@ -82,8 +98,8 @@ public enum AppLocalization {
     }
 
     private static let messageTemplates: [MessageTemplate] = {
-        guard let path = Bundle.module.path(forResource: "en", ofType: "lproj"),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: path).appendingPathComponent("Localizable.strings")),
+        guard let directory = localizationDirectory(for: "en"),
+              let data = try? Data(contentsOf: directory.appendingPathComponent("Localizable.strings")),
               let entries = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String],
               let tokens = try? NSRegularExpression(pattern: "%(@|d|\\.\\df)") else { return [] }
         return entries.keys.sorted { $0.count > $1.count }.compactMap { key in

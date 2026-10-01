@@ -18,8 +18,8 @@ final class LocalizationTests: XCTestCase {
 
     func testCatalogKeysAndFormatArgumentsMatch() throws {
         func catalog(_ language: String) throws -> [String: String] {
-            let path = try XCTUnwrap(Bundle.module.path(forResource: language, ofType: "lproj"))
-            let data = try Data(contentsOf: URL(fileURLWithPath: path).appendingPathComponent("Localizable.strings"))
+            let directory = try XCTUnwrap(AppLocalization.localizationDirectory(for: language))
+            let data = try Data(contentsOf: directory.appendingPathComponent("Localizable.strings"))
             return try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String])
         }
         let english = try catalog("en"), chinese = try catalog("zh-Hans")
