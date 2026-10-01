@@ -27,6 +27,7 @@ public struct RemoteDesktopView: View {
                 // Remote Screen View (Metal accelerated if available)
                 if viewModel.sessionState == .connected || viewModel.currentImage != nil {
                     remoteCanvas(geometry: geometry)
+                        .accessibilityElement(children: .contain)
                         .accessibilityIdentifier(viewModel.hasReceivedFirstFrame ? "remote-desktop-frame" : "remote-desktop-loading")
                 } else {
                     connectingStateView
@@ -443,6 +444,7 @@ public struct RemoteDesktopView: View {
             } label: {
                 controlIcon(viewModel.inputMode == .trackpad ? "hand.point.up.left.fill" : "hand.tap.fill")
             }
+            .accessibilityLabel(AppLocalization.string("Input Mode"))
             #endif
 
             // Keyboard Toolbar Toggle

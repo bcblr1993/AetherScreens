@@ -37,6 +37,8 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         super.init(frame: .zero)
         backgroundColor = .clear
         accessibilityIdentifier = "remote-desktop-input"
+        isAccessibilityElement = true
+        accessibilityLabel = AppLocalization.string("Remote desktop canvas")
         cursor.path = UIBezierPath(ovalIn: CGRect(x: -7, y: -7, width: 14, height: 14)).cgPath
         cursor.fillColor = UIColor.white.cgColor
         cursor.strokeColor = UIColor.black.cgColor
@@ -66,6 +68,11 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         addGestureRecognizer(pinch)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
+
+    override var accessibilityFrame: CGRect {
+        get { UIAccessibility.convertToScreenCoordinates(canvas.intersection(bounds), in: self) }
+        set { super.accessibilityFrame = newValue }
+    }
 
     private func button(for fingers: Int) -> RFBConstants.ButtonMask {
         fingers == 2 ? .right : fingers == 3 ? .middle : .left

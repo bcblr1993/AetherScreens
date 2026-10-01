@@ -69,6 +69,7 @@
 "Hide Keyboard" = "隐藏键盘";
 "Initializing…" = "正在初始化…";
 "Input Mode" = "输入模式";
+"Remote desktop canvas" = "远程桌面画布";
 "Insert local clipboard text into the focused remote field" = "将本机剪贴板文本输入到远端当前字段";
 "Language" = "语言";
 "Level" = "级别";

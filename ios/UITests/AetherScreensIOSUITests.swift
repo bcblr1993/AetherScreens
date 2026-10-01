@@ -1,6 +1,127 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testReceivedNativeGesturesOnControlledDesktop() throws { try verifyReceivedNativeGestures(language: "en") }
+    func testReceivedChineseNativeGesturesOnControlledDesktop() throws { try verifyReceivedNativeGestures(language: "zh-Hans") }
+
+    private func verifyReceivedNativeGestures(language: String) throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else {
+            throw XCTSkip("Requires the loopback gesture RFB fixture")
+        }
+        func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+        let app = makeApp(language: language)
+        app.launch()
+        app.buttons[label("Quick Connect", "快速连接")].tap()
+        let host = app.textFields[label("Tailscale IP / Host (e.g. 100.80.1.25)", "IP 地址 / 主机名（如 100.80.1.25）")]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap(); host.typeText("127.0.0.1")
+        let port = app.textFields[label("Port", "端口")]
+        port.tap(); port.typeKey("a", modifierFlags: .command); port.typeText("5999")
+        app.buttons[label("Connect", "连接")].tap()
+        let frame = app.descendants(matching: .any)["remote-desktop-frame"].firstMatch
+        XCTAssertTrue(frame.waitForExistence(timeout: 10))
+        let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        XCTAssertEqual(input.label, label("Remote desktop canvas", "远程桌面画布"))
+        let center = input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        try resetGestureFixture()
+        center.tap()
+        var events = try waitForGesturePointers { $0.contains { $0["mask"] == 1 } && $0.last?["mask"] == 0 }
+        XCTAssertEqual(events.filter { $0["mask"] == 1 }.count, 1)
+        try attachGesturePackets(events, name: "Received Single Click")
+        try resetGestureFixture()
+        center.doubleTap()
+        events = try waitForGesturePointers { $0.filter { $0["mask"] == 1 }.count >= 2 && $0.last?["mask"] == 0 }
+        XCTAssertEqual(events.filter { $0["mask"] == 1 }.count, 2, "Double tap must deliver two clicks without triggering zoom")
+        try attachGesturePackets(events, name: "Received Double Click")
+        try resetGestureFixture()
+        input.tap(withNumberOfTaps: 1, numberOfTouches: 2)
+        events = try waitForGesturePointers { $0.contains { $0["mask"] == 4 } && $0.last?["mask"] == 0 }
+        XCTAssertEqual(events.filter { $0["mask"] == 4 }.count, 1)
+        try attachGesturePackets(events, name: "Received Two Finger Right Click")
+        try resetGestureFixture()
+        input.tap(withNumberOfTaps: 1, numberOfTouches: 3)
+        events = try waitForGesturePointers { $0.contains { $0["mask"] == 2 } && $0.last?["mask"] == 0 }
+        XCTAssertEqual(events.filter { $0["mask"] == 2 }.count, 1)
+        try attachGesturePackets(events, name: "Received Three Finger Middle Click")
+        try resetGestureFixture()
+        let end = input.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5))
+        center.press(forDuration: 0.4, thenDragTo: end)
+        events = try waitForGesturePointers { $0.filter { $0["mask"] == 1 }.count > 1 && $0.last?["mask"] == 0 }
+        XCTAssertGreaterThan(Set(events.filter { $0["mask"] == 1 }.compactMap { $0["x"] }).count, 1, "The server must receive movement while the button remains held")
+        try attachGesturePackets(events, name: "Received Held Button Drag")
+
+        app.buttons[label("Input Mode", "输入模式")].tap()
+        app.buttons[label("Touch", "触控")].tap()
+        let point = input.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.5))
+        try resetGestureFixture()
+        point.tap()
+        events = try waitForGesturePointers { $0.contains { $0["mask"] == 1 } && $0.last?["mask"] == 0 }
+        let beforeZoom = try XCTUnwrap(events.first { $0["mask"] == 1 }?["x"])
+        XCTAssertEqual(Double(beforeZoom), 416, accuracy: 4)
+        try attachGesturePackets(events, name: "Received Direct Touch Before Zoom")
+        input.pinch(withScale: 1.5, velocity: 1)
+        try resetGestureFixture()
+        point.tap()
+        events = try waitForGesturePointers { $0.contains { $0["mask"] == 1 } && $0.last?["mask"] == 0 }
+        let afterZoom = try XCTUnwrap(events.first { $0["mask"] == 1 }?["x"])
+        XCTAssertLessThan(afterZoom, beforeZoom - 10, "Pinch must change direct-touch mapping to the enlarged canvas")
+        try attachGesturePackets(events, name: "Received Direct Touch After Zoom")
+        attachScreenshot(app, name: "Received Gesture Desktop After Pinch")
+
+        app.buttons[label("Session Options", "会话选项")].tap()
+        app.buttons[label("Observe Only", "仅观看")].tap()
+        try resetGestureFixture()
+        frame.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(try gesturePointers().isEmpty, "Observe must suppress actual received input")
+        XCTAssertFalse(app.buttons[label("Show Keyboard", "显示键盘")].isEnabled)
+        app.buttons[label("Disconnect", "断开连接")].tap()
+        XCTAssertTrue(app.buttons[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+    }
+
+    private func gesturePointers() throws -> [[String: Int]] {
+        let value = try JSONSerialization.jsonObject(with: gestureFixtureData(path: "events"))
+        return try XCTUnwrap(value as? [[String: Any]]).filter { $0["type"] as? String == "pointer" }.map {
+            ["mask": $0["mask"] as? Int ?? -1, "x": $0["x"] as? Int ?? -1, "y": $0["y"] as? Int ?? -1]
+        }
+    }
+
+    private func resetGestureFixture() throws {
+        _ = try gestureFixtureData(path: "reset")
+    }
+
+    private func gestureFixtureData(path: String) throws -> Data {
+        let received = expectation(description: "Gesture fixture response")
+        let response = GestureFixtureResponse()
+        let task = URLSession.shared.dataTask(with: URL(string: "http://127.0.0.1:8768/" + path)!) { data, http, error in
+            if let error { response.set(.failure(error)) }
+            else if let data, (http as? HTTPURLResponse)?.statusCode == 200 { response.set(.success(data)) }
+            else { response.set(.failure(URLError(.badServerResponse))) }
+            received.fulfill()
+        }
+        task.resume()
+        wait(for: [received], timeout: 3)
+        return try XCTUnwrap(response.get()).get()
+    }
+
+    private func attachGesturePackets(_ packets: [[String: Int]], name: String) throws {
+        let attachment = XCTAttachment(data: try JSONSerialization.data(withJSONObject: packets, options: [.sortedKeys]), uniformTypeIdentifier: "public.json")
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func waitForGesturePointers(_ predicate: ([[String: Int]]) -> Bool) throws -> [[String: Int]] {
+        let deadline = Date().addingTimeInterval(3)
+        var events = try gesturePointers()
+        while !predicate(events), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.025)
+            events = try gesturePointers()
+        }
+        XCTAssertTrue(predicate(events), "Expected gesture packets must reach the fixture")
+        return events
+    }
+
     func testConnectionLinkPreservesQuickConnectDraft() throws {
         guard ProcessInfo.processInfo.environment["AETHERSCREENS_URL_ROUTING_QA"] == "1" else {
             throw XCTSkip("Requires an external simulator URL delivery")
@@ -458,4 +579,11 @@ final class AetherScreensIOSUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+}
+
+private final class GestureFixtureResponse: @unchecked Sendable {
+    private let lock = NSLock()
+    private var result: Result<Data, Error>?
+    func set(_ value: Result<Data, Error>) { lock.lock(); result = value; lock.unlock() }
+    func get() -> Result<Data, Error>? { lock.lock(); defer { lock.unlock() }; return result }
 }

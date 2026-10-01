@@ -1,5 +1,38 @@
 # Controlled remote input acceptance
 
+## Native iOS gesture delivery (2026-10-01)
+
+The English and Chinese simulator flows both passed (two tests, no skips,
+failures or runtime warnings): `build/ios-native-gesture-bilingual-final.xcresult`.
+The application connected to a credential-free loopback RFB fixture,
+decoded a 640x360 fixture frame, then sent native UIKit gestures over TCP. Each
+language report retains seven received-packet JSON attachments and an inspected
+screenshot. They prove one click, two clicks for a double tap, right click for
+two fingers, middle click for three fingers, coordinate changes while the left
+button remains held during drag, direct touch, pinch-modified coordinates, and
+Observe blocking subsequent pointer input and disabling the keyboard button.
+For the same 65%-width touch, received x changed from 416 before pinch to 384
+after pinch. Right and middle button masks are 4 and 2 respectively.
+
+Earlier failures were fixture-driver issues: the inherited canvas identifier
+caused overlapping accessibility targets, window-wide multi-touch gestures
+landed on screen-edge controls, and the test initially reversed right/middle
+button bits. The final assertions retain the protocol masks and inspect received
+events. The input canvas now has a localized accessibility label and its visible
+canvas frame; the parent is a distinct accessibility group. Input Mode also has
+a localized accessibility label. This does not establish complete VoiceOver
+support or physical-device responsiveness.
+
+To repeat, run `python3 scripts/qa/gesture_rfb_fixture.py` (TCP 5999 / HTTP 8768,
+both loopback-only). Build for testing and set `AETHERSCREENS_GESTURE_QA=1` in
+the UI test target's xctestrun EnvironmentVariables. Run sequentially with
+`-parallel-testing-enabled NO` and select
+`testReceivedNativeGesturesOnControlledDesktop` and
+`testReceivedChineseNativeGesturesOnControlledDesktop`. Stop the fixture after
+the reports finish. No real credentials or desktop data are used.
+Native two-finger scrolling, recovery and the two physical iPhones' interaction
+and perceived smoothness remain separate acceptance gates.
+
 ## Pointer transport regression (2026-10-01)
 
 A loopback RFB server captures actual TCP pointer messages after the handshake.
