@@ -153,10 +153,13 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         // Selection and server layout callbacks share the session generation guard.
         multiDisplayManager.onDisplaySelected = { [weak self] _ in
             guard let self else { return }
+            // Release at the transport's last global position and invalidate queued
+            // wheels before the UI task clears local drag state in the new crop.
+            self.client.setPointerInputEnabled(false)
             let generation = self.callbackGeneration.capture()
             Task { @MainActor [weak self] in
                 guard let self, self.callbackGeneration.matches(generation) else { return }
-                self.applyDisplaySelection()
+                self.applyDisplaySelection(resetInput: true)
             }
         }
         client.onDisplayLayoutReceived = { [weak self] layout in
@@ -285,14 +288,19 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
     }
 
-    private func applyDisplaySelection() {
+    private func applyDisplaySelection(resetInput: Bool = false) {
         let display = multiDisplayManager.currentDisplay
         let crop = display.flatMap { $0.id > 0 ? $0.bounds : nil }
         let width = crop?.width ?? CGFloat(client.framebuffer.width)
         let height = crop?.height ?? CGFloat(client.framebuffer.height)
-        guard crop != activeCropRect || width != trackpadEngine.remoteWidth || height != trackpadEngine.remoteHeight else { return }
+        let geometryChanged = crop != activeCropRect || width != trackpadEngine.remoteWidth || height != trackpadEngine.remoteHeight
+        guard geometryChanged || resetInput else { return }
+        // Release before local coordinates can be translated into a new display.
+        client.setPointerInputEnabled(false)
+        defer { client.setPointerInputEnabled(!isPanningViewport) }
         trackpadEngine.releaseAllButtons()
         inputGeneration = UUID()
+        guard geometryChanged else { return }
         activeCropRect = crop
         trackpadEngine.remoteWidth = width
         trackpadEngine.remoteHeight = height

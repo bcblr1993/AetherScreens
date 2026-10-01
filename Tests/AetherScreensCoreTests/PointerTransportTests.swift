@@ -111,6 +111,68 @@ final class PointerTransportTests: XCTestCase {
         wait(for: [fresh], timeout: 0.5)
     }
 
+    @MainActor
+    func testDisplaySwitchReleasesAtOriginalPositionAndCancelsScrollBacklog() throws {
+        let ready = expectation(description: "Display-switch listener ready")
+        let connected = expectation(description: "Display-switch connection ready")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let session = SessionViewModel(device: RemoteDevice(name: "Display switch QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true)
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        defer { session.endSession() }
+        wait(for: [connected], timeout: 3)
+        let layout = RFBDisplayLayout(width: 16, height: 16, screens: [
+            .init(id: 0, x: 0, y: 0, width: 8, height: 16, flags: 0),
+            .init(id: 1, x: 8, y: 0, width: 8, height: 16, flags: 0)
+        ])
+        session.multiDisplayManager.updateFromLayout(layout)
+        session.multiDisplayManager.selectDisplay(id: 2)
+        waitUntil { session.activeCropRect?.minX == 8 }
+        session.trackpadEngine.beginDrag()
+        waitUntil { server.pointers.last?.mask == 1 }
+        let held = try XCTUnwrap(server.pointers.last)
+        XCTAssertGreaterThanOrEqual(held.x, 8)
+        for _ in 0..<300 { session.client.sendPointerEvent(buttonMask: [.left, .scrollDown], x: held.x, y: held.y) }
+        waitUntil { server.pointers.filter { $0.mask == 1 }.count >= 301 }
+        let beforeSwitch = server.pointers.count
+        session.multiDisplayManager.selectDisplay(id: 1)
+        waitUntil { session.activeCropRect?.minX == 0 }
+        let barrier = expectation(description: "Keyboard barrier after display switch")
+        server.onKey = { if $0.down && $0.key == 97 { server.onKey = nil; barrier.fulfill() } }
+        session.client.sendKeyEvent(down: true, keySym: 97)
+        session.client.sendKeyEvent(down: false, keySym: 97)
+        wait(for: [barrier], timeout: 1)
+        let released = try XCTUnwrap(server.pointers.dropFirst(beforeSwitch).first { $0.mask == 0 })
+        XCTAssertEqual(released.x, held.x, "Release must use the last transmitted global position, before translating into the next display")
+        XCTAssertEqual(released.y, held.y)
+        let stale = expectation(description: "Old wheel reaches newly selected display")
+        stale.isInverted = true
+        let fresh = expectation(description: "New display scroll bypasses cancelled backlog")
+        server.onPointer = { pointer in
+            if pointer.mask & RFBConstants.ButtonMask.scrollDown.rawValue != 0 { stale.fulfill() }
+            if pointer.mask == RFBConstants.ButtonMask.scrollUp.rawValue {
+                XCTAssertLessThan(pointer.x, 8)
+                fresh.fulfill()
+            }
+        }
+        session.sendNativePointer(buttonMask: .scrollUp, x: 3, y: 4)
+        wait(for: [fresh, stale], timeout: 0.5)
+        // A duplicate layout callback must not cancel an ongoing gesture.
+        server.onPointer = nil
+        session.trackpadEngine.beginDrag()
+        waitUntil { server.pointers.last?.mask == 1 }
+        let unchangedGeneration = session.inputGeneration
+        let unexpectedRelease = expectation(description: "Duplicate layout releases mouse")
+        unexpectedRelease.isInverted = true
+        server.onPointer = { if $0.mask == 0 { unexpectedRelease.fulfill() } }
+        session.client.onDisplayLayoutReceived?(layout)
+        wait(for: [unexpectedRelease], timeout: 0.2)
+        XCTAssertEqual(session.inputGeneration, unchangedGeneration)
+        server.onPointer = nil
+    }
+
     private func connectedPair() throws -> (PointerWireServer, RFBClient) {
         let ready = expectation(description: "Loopback listener ready")
         let connected = expectation(description: "RFB handshake completed")

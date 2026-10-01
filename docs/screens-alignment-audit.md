@@ -31,7 +31,7 @@ The release remains a draft until the user has reviewed the completed acceptance
 | Discovery / device library / diagnostics | Bonjour discovery visible; add/edit and diagnostics UI covered | Saved devices now use a neutral Saved badge; Tailnet status is distinguished from screen-sharing reachability. Remote API error/recovery acceptance remains. |
 | UI consistency / branding | App icon assets on Mac/iOS/site, grouped account forms and readable input bar | Full narrow / empty / loading / error / modal audit on physical devices |
 | English / Simplified Chinese | Implemented; core/catalog tests, Mac switch, simulator persistence/narrow layouts and both physical iPhones' language switch/persistence passed. Account prompt passed both simulator languages. | Remaining whole-flow physical-device layout audit |
-| Release readiness | Latest core suite: 125 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Current server-display-layout integration CI and physical acceptance; complete functional gates and user review; no public release yet |
+| Release readiness | Latest core suite: 133 tests, 5 environment skips, no failures. Current Mac Release and signed iOS device Release builds pass; prior iOS simulator test builds pass; iOS system URL flow passes with no runtime warnings. URL integration cbfe9db, pointer transport 3178a3a and native gesture/UI integration 7b93500, session recovery d286a69 and streaming progress 951e0c3 and viewport navigation d30c4f8 and Pan pointer gate 4b6629e passed CI, as did prior input/resize commits; the earlier 73-test candidate passed notarization, mounted DMG and installed input | Display-layout integration 3be37e8 and incremental GPU rendering 913eb8c passed CI; current display-switch input integration still needs CI and physical acceptance. Complete functional gates and user review; no public release yet |
 
 Vision Pro, Windows/Linux server support and Screens Connect infrastructure are
 listed by the reference product but were not in the requested iPhone/iPad and
@@ -204,3 +204,41 @@ or runtime warnings (`build/ios-incremental-render-controlled-qa/`). Exported
 selected-monitor and live-layout screenshots were inspected to confirm the new
 private-texture rendering path actually presents the expected crop and pixels.
 This is synthetic simulator coverage, not a two-phone acceptance result.
+
+The incremental-render commit `913eb8c` passed CI run 36836749844 on its second
+attempt. The first attempt failed the existing streaming-progress reconnect
+case (five-second wait, no decoded frames), while all GPU tests passed. Its log
+is retained at `/tmp/aetherscreens-incremental-ci-failed.log`. The same streaming
+case passed locally, then ten consecutive repetitions without changing the
+source or timeout. This does not establish the first timeout's cause.
+
+## Display selection during held input
+
+A real loopback TCP regression reproduced an incorrect mouse release at x=4
+after switching from the right monitor, where the last transmitted held position
+was x=12. It also received old wheel pulses after switching
+(`/tmp/aetherscreens-display-input-before.log`). Selection now closes the
+transport pointer gate before scheduling UI work: it releases the mouse at the
+last transmitted global position and invalidates queued wheel work. Local held
+state is cleared while the gate remains closed, then pointer input is restored
+according to viewport Pan state. Observe still retains its global input gate.
+Geometry changes reset navigation; switching identical geometry clears input
+without resetting navigation. Duplicate unchanged layout callbacks preserve
+ongoing input.
+
+The TCP regression checks the original release coordinates, cancellation of a
+300-tick backlog after a keyboard receipt barrier, fresh scroll on the next
+monitor within 0.5 seconds, and a duplicate layout preserving the held drag and
+input generation. The earlier six-case pointer transport suite passed, including
+Pan, Observe and resumed scrolling (`/tmp/aetherscreens-display-input-after.log`).
+Mac Release and signed iOS Release builds pass; the iOS candidate passes deep,
+strict signature verification (`/tmp/aetherscreens-display-input-signature.log`).
+The initial iOS invocation omitted the existing development team and failed;
+the accepted invocation supplies it without modifying project signing settings.
+This synthetic two-display regression does not replace physical Apple-server
+or two-iPhone acceptance.
+
+The final complete core rerun passed 133 tests with five environment skips and
+zero failures (`/tmp/aetherscreens-display-input-core-accepted.log`), including
+the added duplicate-layout assertion. CopyRect measured 0.751 ms/frame against
+the unchanged threshold.
