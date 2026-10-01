@@ -114,6 +114,34 @@ final class DeviceStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testStreamingProgressDoesNotInvalidateVisibleDesktop() {
+        let session = SessionViewModel(device: RemoteDevice(name: "Streaming QA", host: "qa.invalid"), password: nil, isTemporary: true, deviceStore: makeStore())
+        session.client.framebuffer.resize(newWidth: 2, newHeight: 2)
+        session.client.onDownloadProgress?(1, 4)
+        let loading = expectation(description: "Initial progress delivered")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { loading.fulfill() }
+        wait(for: [loading], timeout: 2)
+        XCTAssertEqual(session.downloadProgress?.current, 1)
+        session.client.onFrameUpdated?()
+        let firstFrame = expectation(description: "First frame delivered")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { firstFrame.fulfill() }
+        wait(for: [firstFrame], timeout: 2)
+        XCTAssertTrue(session.hasReceivedFirstFrame)
+        var progressChanges = 0
+        let subscription = session.$downloadProgress.dropFirst().sink { _ in progressChanges += 1 }
+        for _ in 0..<120 {
+            session.client.onDownloadProgress?(2, 4)
+            session.client.onFrameUpdated?()
+        }
+        let streaming = expectation(description: "Streaming callbacks drained")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { streaming.fulfill() }
+        wait(for: [streaming], timeout: 2)
+        XCTAssertNil(session.downloadProgress)
+        XCTAssertEqual(progressChanges, 0, "Loading progress must not rebuild the visible desktop during streaming")
+        subscription.cancel()
+    }
+
+    @MainActor
     func testInteractiveMacAccountPersistsOnlyForSavedDevice() {
         for temporary in [false, true] {
             let store = makeStore()

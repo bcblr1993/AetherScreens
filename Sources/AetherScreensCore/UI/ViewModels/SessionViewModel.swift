@@ -220,6 +220,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             let generation = self.callbackGeneration.capture()
             Task { @MainActor [weak self] in
                 guard let self, self.callbackGeneration.matches(generation) else { return }
+                guard !self.hasReceivedFirstFrame else { return }
                 self.downloadProgress = (current, total)
             }
         }

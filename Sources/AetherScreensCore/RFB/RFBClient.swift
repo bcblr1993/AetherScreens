@@ -39,6 +39,7 @@ public final class RFBClient: @unchecked Sendable {
     private var connection: NWConnection?
     private let queue = DispatchQueue(label: "com.aethernative.aetherscreens.rfbclient", qos: .userInteractive)
     private var readBuffer = Data()
+    private var hasCompletedFramebufferUpdate = false
     private let zlibDecompressor = ZlibDecompressor()
     private let inputLock = NSRecursiveLock()
     private var inputEnabled = true
@@ -75,6 +76,7 @@ public final class RFBClient: @unchecked Sendable {
         }
 
         readBuffer.removeAll()
+        hasCompletedFramebufferUpdate = false
         zlibDecompressor.reset()
         extendedClipboard = false
         pendingClipboard = nil
@@ -455,6 +457,8 @@ public final class RFBClient: @unchecked Sendable {
 
     private func readRectangles(count: Int) {
         guard count > 0 else {
+            // Loading progress is only useful until the first desktop is visible.
+            hasCompletedFramebufferUpdate = true
             // All rectangles processed, notify UI and request next update
             onFrameUpdated?()
             requestUpdate(incremental: true)
@@ -816,12 +820,10 @@ public final class RFBClient: @unchecked Sendable {
                 self.onBytesReceived?(receivedBytes)
             }
 
-            if count > 100000 && self.readBuffer.count % 2097152 < receivedBytes {
+            if !self.hasCompletedFramebufferUpdate && count > 100000 && self.readBuffer.count % 2097152 < receivedBytes {
                 let mb = Double(self.readBuffer.count) / (1024.0 * 1024.0)
                 let totalMb = Double(count) / (1024.0 * 1024.0)
-                DispatchQueue.main.async { [weak self] in
-                    self?.onDownloadProgress?(mb, totalMb)
-                }
+                self.onDownloadProgress?(mb, totalMb)
             }
 
             if let error = error {

@@ -33,6 +33,35 @@ the reports finish. No real credentials or desktop data are used.
 Native two-finger scrolling and the two physical iPhones' interaction
 and perceived smoothness remain separate acceptance gates.
 
+## Streaming progress publication (2026-10-01)
+
+Two regressions reproduced unnecessary loading work after the first desktop was
+visible. A view-model scenario with 120 progress/frame updates published 240
+progress changes. A real TCP server sent two 4 MiB raw frames in each of two
+connections; the second frame still emitted two progress callbacks each time.
+The client now stops progress callbacks after its first completed framebuffer
+update, resets that state when connecting, and invokes progress on the network
+queue like other RFB callbacks. The view model also ignores late progress after
+its first frame. This avoids the extra main-queue hop and whole-view progress
+publications during ongoing streaming while preserving initial loading progress.
+
+Both regressions now pass, including progress restarting on a new connection.
+The full core suite passes 120 tests, five environment skips, no failures. Mac
+Release and unsigned iOS device Release builds pass. This measures callback and
+publication behavior, not phone input-to-display latency or Screens-equivalent
+hand feel. Physical testing remains required.
+
+The current-source simulator report
+`build/ios-stream-progress-regression.xcresult` passes all four English/Chinese
+native-gesture and socket-recovery scenarios with no failures, skips or runtime
+warnings.
+
+The signed Release candidate built and passed strict codesign verification. It
+was installed on both iPhone 12 Pro and iPhone 16 Pro Max; normal launch succeeded
+on the 12 Pro. The 16 Pro Max reports passcodeRequired=true, so its runtime and
+interaction acceptance are pending. Installation and launch do not establish
+connection success or improved physical hand feel.
+
 ## Session recovery and stale callbacks (2026-10-01)
 
 Before repair, queued frame/progress/connected callbacks restored ended-session
