@@ -244,30 +244,17 @@ public struct DeviceListView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                // Diagnostic Logs Button
-                Button {
-                    showingLogs = true
+                #if canImport(UIKit)
+                Menu {
+                    libraryUtilityActions
                 } label: {
-                    Image(systemName: "list.bullet.rectangle")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .help(AppLocalization.string("View Diagnostic Logs"))
-                .accessibilityLabel(AppLocalization.string("Diagnostic Logs"))
-
-                // Sync Tailscale Button
-                Button {
-                    Task {
-                        await viewModel.syncTailscale()
-                    }
-                } label: {
-                    if viewModel.isSyncingTailscale {
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                    }
-                }
-                .help(AppLocalization.string("Sync Tailscale Online Nodes"))
-                .accessibilityLabel(AppLocalization.string("Sync Tailscale Devices"))
+                .accessibilityLabel(AppLocalization.string("More Actions"))
+                #else
+                libraryUtilityActions
+                    .labelStyle(.iconOnly)
+                #endif
 
                 // Temporary or optionally saved connection
                 Button {
@@ -299,6 +286,26 @@ public struct DeviceListView: View {
             }
             #endif
         }
+    }
+
+    @ViewBuilder
+    private var libraryUtilityActions: some View {
+        Button {
+            showingLogs = true
+        } label: {
+            Label(AppLocalization.string("Diagnostic Logs"), systemImage: "list.bullet.rectangle")
+        }
+        .help(AppLocalization.string("View Diagnostic Logs"))
+        .accessibilityLabel(AppLocalization.string("Diagnostic Logs"))
+
+        Button {
+            Task { await viewModel.syncTailscale() }
+        } label: {
+            Label(AppLocalization.string(viewModel.isSyncingTailscale ? "Syncing…" : "Sync Tailscale Devices"), systemImage: "arrow.triangle.2.circlepath")
+        }
+        .disabled(viewModel.isSyncingTailscale)
+        .help(AppLocalization.string("Sync Tailscale Online Nodes"))
+        .accessibilityLabel(AppLocalization.string("Sync Tailscale Devices"))
     }
 
     // MARK: - Nearby Bonjour Macs Section

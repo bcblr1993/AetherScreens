@@ -86,8 +86,9 @@ satisfy the response check. The test prints all ten response samples.
   English persisted after terminating and relaunching the app. Evidence:
   `build/ios-localization.xcresult` and exported screenshots.
 - Reviewed Chinese dashboard/Quick Connect and English settings screenshots.
-  The existing compact iPhone navigation title truncates beside four actions;
-  retain this as a UI issue to resolve before final acceptance.
+  The compact navigation title initially truncated beside four actions;
+  diagnostics and sync now live in More Actions, keeping Quick Connect and Add
+  directly available. Reviewed the corrected iPhone 17 screenshot: full title.
 - Installed standalone Mac candidate loads the package resource bundle and
   follows the Chinese system preference. Switching to English updates the open
   settings sheet and main dashboard without rebuilding session state; English
@@ -109,3 +110,17 @@ pass: `swift test` and `swift test --build-system native --skip-update
 Evidence: `/tmp/aetherscreens-native-localization-before-fix.log`,
 `/tmp/aetherscreens-native-localization-fixed.log`, and
 `/tmp/aetherscreens-localization-build-fixed.log`. Remote CI must pass again.
+
+### Compact dashboard and Chinese error recovery
+
+After the resource fix, the Chinese/English switch and persistence workflow,
+primary add/edit/settings/diagnostics workflow, and Chinese temporary connection
+error/retry/disconnect workflow all passed on iPhone 17 simulator. The latter
+confirms account-specific Chinese password labels and no saved device after a
+temporary failure. Evidence: `build/ios-localization-fixed.xcresult`; earlier
+error screenshot: `build/ios-chinese-error-screenshots`.
+
+Both language menus expose diagnostics and Tailscale sync under More Actions.
+The sync action disables while running to prevent duplicate requests. CI
+`36812376187` passed for resource fix `32dbfd1`. Signed physical iPhone and
+iPhone mini layout tests are running; these are not yet acceptance results.

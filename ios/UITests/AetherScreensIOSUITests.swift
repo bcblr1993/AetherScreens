@@ -6,7 +6,13 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["快速连接"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["添加电脑"].exists)
+        XCTAssertTrue(app.navigationBars["AetherScreens"].staticTexts["AetherScreens"].exists)
         attachScreenshot(app, name: "Chinese Dashboard")
+        app.buttons["更多操作"].tap()
+        XCTAssertTrue(app.buttons["同步 Tailscale 设备"].exists)
+        app.buttons["诊断日志"].tap()
+        XCTAssertTrue(app.navigationBars["诊断日志"].waitForExistence(timeout: 5))
+        app.buttons["关闭"].tap()
         app.buttons["快速连接"].tap()
         XCTAssertTrue(app.navigationBars["快速连接"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.textFields["用户名（Mac 账户，可选）"].exists)
@@ -30,6 +36,31 @@ final class AetherScreensIOSUITests: XCTestCase {
         app.launchArguments = []
         app.launch()
         XCTAssertTrue(app.buttons["Quick Connect"].waitForExistence(timeout: 10), "Manual selection must survive relaunch")
+    }
+
+    func testChineseTemporaryConnectionErrorAndRecovery() {
+        let app = makeApp(language: "zh-Hans")
+        app.launch()
+        XCTAssertTrue(app.buttons["快速连接"].waitForExistence(timeout: 10))
+        app.buttons["快速连接"].tap()
+        let host = app.textFields["IP 地址 / 主机名（如 100.80.1.25）"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap()
+        host.typeText("localized-qa.invalid")
+        let account = app.textFields["用户名（Mac 账户，可选）"]
+        account.tap()
+        account.typeText("qa-user")
+        XCTAssertTrue(app.secureTextFields["Mac 账户密码"].exists)
+        app.buttons["连接"].tap()
+        XCTAssertTrue(app.buttons["断开连接"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["重试连接"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.staticTexts["连接失败"].exists)
+        attachScreenshot(app, name: "Chinese Temporary Connection Error")
+        app.buttons["重试连接"].tap()
+        XCTAssertTrue(app.buttons["重试连接"].waitForExistence(timeout: 30))
+        app.buttons["断开连接"].tap()
+        XCTAssertTrue(app.buttons["快速连接"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["连接到 localized-qa.invalid"].exists)
     }
 
     func testQuickConnectValidationAndTemporarySession() {
@@ -103,6 +134,8 @@ final class AetherScreensIOSUITests: XCTestCase {
         attachScreenshot(app, name: "Settings")
         app.buttons["Done"].tap()
 
+        app.buttons["More Actions"].tap()
+        XCTAssertTrue(app.buttons["Sync Tailscale Devices"].exists)
         app.buttons["Diagnostic Logs"].tap()
         XCTAssertTrue(app.navigationBars["Diagnostic Logs"].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "Diagnostic Logs")

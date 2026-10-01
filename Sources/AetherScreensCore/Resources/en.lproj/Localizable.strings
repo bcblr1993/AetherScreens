@@ -204,3 +204,5 @@
 "LAN / Host" = "LAN / Host";
 "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in Settings > Privacy & Security > Local Network." = "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in Settings > Privacy & Security > Local Network.";
 "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network." = "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network.";
+"More Actions" = "More Actions";
+"Syncing…" = "Syncing…";
