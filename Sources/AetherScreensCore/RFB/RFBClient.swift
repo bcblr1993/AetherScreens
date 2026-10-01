@@ -115,7 +115,12 @@ public final class RFBClient: @unchecked Sendable {
             case .connecting, .negotiatingVersion, .authenticating, .initializing: break
             default: return
             }
-            self.handleFailure("Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network.")
+            #if os(macOS)
+            let settings = "System Settings"
+            #else
+            let settings = "Settings"
+            #endif
+            self.handleFailure("Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in \(settings) > Privacy & Security > Local Network.")
         }
     }
 

@@ -34,6 +34,55 @@ final class DeviceStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testTemporarySessionDoesNotCacheDesktopThumbnail() {
+        let device = RemoteDevice(name: "Temporary thumbnail QA", host: "qa.invalid")
+        let session = SessionViewModel(device: device, password: nil, isTemporary: true, deviceStore: makeStore())
+        session.client.framebuffer.resize(newWidth: 2, newHeight: 2)
+        for _ in 0..<61 { session.client.onFrameUpdated?() }
+        let drained = expectation(description: "Allow any asynchronous thumbnail write to finish")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+        XCTAssertTrue(session.hasReceivedFirstFrame, "Incoming frame callbacks must have run")
+        session.endSession()
+        XCTAssertNil(ThumbnailStore.shared.getThumbnail(for: device.id), "A temporary desktop must not become a persistent preview")
+    }
+
+    @MainActor
+    func testTemporarySessionDoesNotPersistDeviceOrRetriedPassword() throws {
+        let store = makeStore()
+        let discovery = BonjourDiscoveryService()
+        defer { discovery.stopDiscovery() }
+        let vm = DeviceListViewModel(store: store, bonjourService: discovery)
+        let request = try XCTUnwrap(ConnectionRequest(host: "qa.invalid", password: "temporary-only"))
+        let session = vm.prepareQuickSession(request, saveComputer: false)
+        XCTAssertTrue(session.isTemporary)
+        XCTAssertFalse(session.canRememberPassword)
+        session.submitPassword("retry-only", rememberInKeychain: true)
+        XCTAssertEqual(session.client.password, "retry-only", "Retry must update the active client, not only Keychain")
+        XCTAssertTrue(store.devices.isEmpty)
+        XCTAssertNil(tempDefaults.data(forKey: DeviceStore.storageKey))
+        XCTAssertNil(store.getPassword(for: request.device), "Temporary retry must not create an orphan credential")
+    }
+
+    @MainActor
+    func testSavedQuickSessionPersistsDeviceAndAllowsPasswordRetry() throws {
+        let store = makeStore()
+        let discovery = BonjourDiscoveryService()
+        defer { discovery.stopDiscovery() }
+        let vm = DeviceListViewModel(store: store, bonjourService: discovery)
+        let request = try XCTUnwrap(ConnectionRequest(host: "qa.invalid", username: "qa-user", password: "initial-only"))
+        defer { store.deleteDevice(request.device) }
+        let session = vm.prepareQuickSession(request, saveComputer: true)
+        XCTAssertTrue(session.canRememberPassword)
+        XCTAssertFalse(session.isTemporary)
+        XCTAssertEqual(store.devices.first?.id, request.device.id)
+        XCTAssertNil(store.devices.first?.lastConnected)
+        XCTAssertEqual(store.getPassword(for: request.device), "initial-only")
+        session.submitPassword("retry-only", rememberInKeychain: true)
+        XCTAssertEqual(store.getPassword(for: request.device), "retry-only")
+    }
+
+    @MainActor
     func testConnectionAttemptDoesNotRecordSuccess() {
         let store = makeStore()
         let device = RemoteDevice(name: "Unverified Mac", host: "invalid.example")

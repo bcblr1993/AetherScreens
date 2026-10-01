@@ -1,6 +1,55 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testQuickConnectValidationAndTemporarySession() {
+        let app = XCUIApplication()
+        app.launch()
+        let quick = app.buttons["Quick Connect"]
+        XCTAssertTrue(quick.waitForExistence(timeout: 10))
+        quick.tap()
+        XCTAssertTrue(app.navigationBars["Quick Connect"].waitForExistence(timeout: 5))
+        let connect = app.buttons["Connect"]
+        XCTAssertFalse(connect.isEnabled)
+        let name = app.textFields["Name (e.g. Studio Mac)"]
+        XCTAssertFalse(name.exists)
+        let address = app.textFields["Tailscale IP / Host (e.g. 100.80.1.25)"]
+        address.tap()
+        address.typeText("quick-qa.invalid")
+        let port = app.textFields["Port"]
+        port.tap()
+        port.typeKey("a", modifierFlags: .command)
+        port.typeText("0")
+        XCTAssertEqual(port.value as? String, "0")
+        XCTAssertFalse(connect.isEnabled)
+        port.typeKey("a", modifierFlags: .command)
+        port.typeText("5900")
+        XCTAssertEqual(port.value as? String, "5900")
+        XCTAssertTrue(connect.isEnabled)
+        let account = app.textFields["Username (Mac account, optional)"]
+        account.tap()
+        account.typeText("qa-user")
+        XCTAssertTrue(app.secureTextFields["Mac Account Password"].exists)
+        app.swipeUp()
+        let save = app.switches["Save Computer"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertEqual(save.value as? String, "0")
+        save.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertEqual(save.value as? String, "1")
+        app.swipeDown()
+        XCTAssertTrue(name.exists)
+        app.swipeUp()
+        save.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        XCTAssertFalse(name.exists)
+        attachScreenshot(app, name: "Quick Connect")
+        connect.tap()
+        XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Retry Connection"].waitForExistence(timeout: 30))
+        attachScreenshot(app, name: "Temporary Connection Error")
+        app.buttons["Disconnect"].tap()
+        XCTAssertTrue(quick.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["Connect to quick-qa.invalid"].exists)
+    }
+
     func testPrimaryScreensOnIPhone() {
         let app = XCUIApplication()
         app.launch()
@@ -96,7 +145,7 @@ final class AetherScreensIOSUITests: XCTestCase {
         computer.tap()
         XCTAssertTrue(app.buttons["Disconnect"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 60))
-        XCTAssertFalse(app.buttons["Retry"].exists)
+        XCTAssertFalse(app.buttons["Retry Connection"].exists)
         attachScreenshot(app, name: "Live Mac First Frame")
         XCUIDevice.shared.orientation = .landscapeLeft
         Thread.sleep(forTimeInterval: 2)

@@ -77,8 +77,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public private(set) var inputGeneration = UUID()
     private var frameCountSinceLastSnapshot: Int = 0
 
-    public init(device: RemoteDevice, password: String?) {
+    public let isTemporary: Bool
+    public var canRememberPassword: Bool { !isTemporary }
+    private let deviceStore: DeviceStore
+
+    public init(device: RemoteDevice, password: String?, isTemporary: Bool = false,
+                deviceStore: DeviceStore = .shared) {
         self.device = device
+        self.isTemporary = isTemporary
+        self.deviceStore = deviceStore
         let rfb = RFBClient(
             host: device.host,
             port: device.port,
@@ -147,8 +154,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         client.onStateChanged = { [weak self] state in
             Task { @MainActor in
                 self?.sessionState = state
-                if state == .connected, let device = self?.device {
-                    DeviceStore.shared.recordConnection(for: device)
+                if state == .connected, let self, !self.isTemporary {
+                    self.deviceStore.recordConnection(for: self.device)
                 }
             }
         }
@@ -197,7 +204,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
                 // Periodically save thumbnail for device list view
                 self.frameCountSinceLastSnapshot += 1
-                if self.frameCountSinceLastSnapshot == 5 || self.frameCountSinceLastSnapshot % 60 == 0 {
+                if !self.isTemporary && (self.frameCountSinceLastSnapshot == 5 || self.frameCountSinceLastSnapshot % 60 == 0) {
                     let framebuffer = self.client.framebuffer
                     let deviceId = self.device.id
                     DispatchQueue.global(qos: .utility).async {
@@ -226,13 +233,18 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Submit entered password to active RFB handshake
     public func submitPassword(_ pwd: String, rememberInKeychain: Bool) {
-        if rememberInKeychain {
-            DeviceStore.shared.updatePassword(pwd, for: device)
+        client.password = pwd
+        if rememberInKeychain && canRememberPassword {
+            deviceStore.updatePassword(pwd, for: device)
         }
         isPromptingPassword = false
         let cont = passwordContinuation
         passwordContinuation = nil
-        cont?(pwd)
+        if let cont {
+            cont(pwd)
+        } else if case .failed = client.state {
+            reconnectSession()
+        }
     }
 
     /// Cancel interactive password prompt
@@ -264,9 +276,11 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public func endSession() {
         let framebuffer = client.framebuffer
         let deviceId = device.id
-        DispatchQueue.global(qos: .utility).async {
-            if let image = framebuffer.makeCGImage() {
-                ThumbnailStore.shared.saveThumbnail(image, for: deviceId)
+        if !isTemporary {
+            DispatchQueue.global(qos: .utility).async {
+                if let image = framebuffer.makeCGImage() {
+                    ThumbnailStore.shared.saveThumbnail(image, for: deviceId)
+                }
             }
         }
         hasReceivedFirstFrame = false

@@ -138,6 +138,16 @@ public final class DeviceListViewModel: ObservableObject {
         isSyncingTailscale = false
     }
 
+    /// Prepare a temporary session, persisting only when explicitly requested.
+    public func prepareQuickSession(_ request: ConnectionRequest, saveComputer: Bool) -> SessionViewModel {
+        if saveComputer {
+            store.addDevice(request.device, password: request.password)
+            reload()
+        }
+        return SessionViewModel(device: request.device, password: request.password,
+                                isTemporary: !saveComputer, deviceStore: store)
+    }
+
     /// Start a remote desktop session with the given device
     public func connect(to device: RemoteDevice) {
         activeSessionDevice = device

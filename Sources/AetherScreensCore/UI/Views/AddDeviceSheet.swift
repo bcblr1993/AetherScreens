@@ -12,24 +12,45 @@ public struct AddDeviceSheet: View {
     @State private var password: String = ""
     @State private var username: String = ""
     @State private var macAddress: String = ""
+    @State private var saveComputer = false
+    private let onQuickConnect: ((ConnectionRequest, Bool) -> Void)?
 
     public init(viewModel: DeviceListViewModel) {
         self.viewModel = viewModel
+        self.onQuickConnect = nil
+    }
+
+    public init(viewModel: DeviceListViewModel, onQuickConnect: @escaping (ConnectionRequest, Bool) -> Void) {
+        self.viewModel = viewModel
+        self.onQuickConnect = onQuickConnect
+    }
+
+    private var isQuickConnect: Bool { onQuickConnect != nil }
+    private var includesSavedDetails: Bool { !isQuickConnect || saveComputer }
+    private var request: ConnectionRequest? {
+        ConnectionRequest(host: host, port: portString, name: includesSavedDetails ? name : "",
+                          username: username, password: password, type: deviceType,
+                          macAddress: includesSavedDetails ? macAddress : "")
     }
 
     public var body: some View {
         NavigationStack {
             Form {
                 Section(header: Text("Device Information")) {
-                    TextField("Name (e.g. Studio Mac)", text: $name)
+                    if includesSavedDetails {
+                        TextField("Name (e.g. Studio Mac)", text: $name)
+                    }
                     TextField("Tailscale IP / Host (e.g. 100.80.1.25)", text: $host)
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
                         #endif
                     LabeledContent("Port") {
                         TextField("Port", text: $portString)
+                            .labelsHidden()
                             .accessibilityLabel("Port")
+                            .frame(minWidth: 80)
                             .multilineTextAlignment(.trailing)
                             #if canImport(UIKit)
                             .keyboardType(.numberPad)
@@ -37,10 +58,12 @@ public struct AddDeviceSheet: View {
                     }
                 }
 
-                Section(header: Text("Operating System")) {
-                    Picker("Device Type", selection: $deviceType) {
-                        ForEach(RemoteDevice.DeviceType.allCases, id: \.self) { type in
-                            Label(type.rawValue, systemImage: type.systemIcon).tag(type)
+                if includesSavedDetails {
+                    Section(header: Text("Operating System")) {
+                        Picker("Device Type", selection: $deviceType) {
+                            ForEach(RemoteDevice.DeviceType.allCases, id: \.self) { type in
+                                Label(type.rawValue, systemImage: type.systemIcon).tag(type)
+                            }
                         }
                     }
                 }
@@ -57,16 +80,27 @@ public struct AddDeviceSheet: View {
                     SecureField(username.isEmpty ? "VNC Password (Optional)" : "Mac Account Password", text: $password)
                 }
 
-                Section(
-                    header: Text("Wake-on-LAN (Optional)"),
-                    footer: Text("Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping.")
-                ) {
-                    TextField("MAC Address (Optional)", text: $macAddress)
-                        .autocorrectionDisabled()
+                if isQuickConnect {
+                    Section(footer: Text("Save this computer and its password for future connections. Leave off for a temporary session.")) {
+                        Toggle("Save Computer", isOn: $saveComputer)
+                    }
+                }
+
+                if includesSavedDetails {
+                    Section(
+                        header: Text("Wake-on-LAN (Optional)"),
+                        footer: Text("Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping.")
+                    ) {
+                        TextField("MAC Address (Optional)", text: $macAddress)
+                            .autocorrectionDisabled()
+                    }
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Add Computer")
+            #if canImport(UIKit)
+            .scrollDismissesKeyboard(.interactively)
+            #endif
+            .navigationTitle(isQuickConnect ? "Quick Connect" : "Add Computer")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -78,26 +112,24 @@ public struct AddDeviceSheet: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        guard let port = UInt16(portString), port > 0 else { return }
-                        let finalName = name.isEmpty ? host : name
-                        viewModel.addDevice(
-                            name: finalName,
-                            host: host.trimmingCharacters(in: .whitespacesAndNewlines),
-                            port: port,
-                            type: deviceType,
-                            password: password.isEmpty ? nil : password,
-                            macAddress: macAddress.isEmpty ? nil : macAddress,
-                            username: username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : username.trimmingCharacters(in: .whitespacesAndNewlines)
-                        )
+                    Button(isQuickConnect ? "Connect" : "Save") {
+                        guard let request else { return }
+                        if let onQuickConnect {
+                            onQuickConnect(request, saveComputer)
+                        } else {
+                            viewModel.addDevice(name: request.device.name, host: request.device.host,
+                                                port: request.device.port, type: request.device.deviceType,
+                                                password: request.password, macAddress: request.device.macAddress,
+                                                username: request.device.username)
+                        }
                         dismiss()
                     }
-                    .disabled(host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || UInt16(portString) == nil || UInt16(portString) == 0)
+                    .disabled(request == nil)
                 }
             }
         }
         #if os(macOS)
-        .frame(width: 540, height: 660)
+        .frame(width: 540, height: includesSavedDetails ? 660 : 480)
         #endif
     }
 }

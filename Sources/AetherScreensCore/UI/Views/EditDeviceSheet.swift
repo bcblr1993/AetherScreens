@@ -29,10 +29,13 @@ public struct EditDeviceSheet: View {
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
                         #endif
                     LabeledContent("Port") {
                         TextField("Port", text: $portString)
+                            .labelsHidden()
                             .accessibilityLabel("Port")
+                            .frame(minWidth: 80)
                             .multilineTextAlignment(.trailing)
                             #if canImport(UIKit)
                             .keyboardType(.numberPad)
@@ -72,6 +75,9 @@ public struct EditDeviceSheet: View {
                 }
             }
             .formStyle(.grouped)
+            #if canImport(UIKit)
+            .scrollDismissesKeyboard(.interactively)
+            #endif
             .navigationTitle("Edit Computer")
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)

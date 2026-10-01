@@ -34,6 +34,20 @@ end-to-end latency. Record observable events and response behavior separately.
   spacing wheel press/release events.
 - Actual Size, Pan View and Fit to Window were exercised in the installed GUI.
 - F8 was recorded as the correct remote key after reconnecting.
+- Installed Quick Connect authenticated to the Mac account and delivered
+  `temporary connection passed` exactly. Disconnect left the existing three
+  saved computers unchanged. Unit coverage verifies no temporary credentials,
+  device records or thumbnails are persisted. Simulator coverage verifies port
+  validation, account fields, optional saving and the failure/disconnect flow.
+  The installed thumbnail check exposed a second save path on incoming frames.
+  Both periodic and disconnect saves now exclude temporary sessions. The strengthened
+  regression triggers 61 frame callbacks with a synthetic framebuffer. The corrected installed candidate
+  delivered `frame cache fixed passed`; thumbnail files stayed unchanged during
+  the live session and after disconnect, and the library retained its three computers.
+- One deliberately rejected account password was corrected in a temporary
+  session; the same session view model reconnected and received a real desktop.
+  Password submission now updates the current client and restarts a failed
+  connection instead of updating only the saved credential.
 - Observe Only kept receiving live frames while remote event counts stayed unchanged
   for clicks, text, wheel and clipboard attempts. The installed Mac GUI independently
   passed click, text and wheel suppression; keyboard and remote lock controls were

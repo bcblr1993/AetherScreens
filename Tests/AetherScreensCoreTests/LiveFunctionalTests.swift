@@ -3,6 +3,40 @@ import XCTest
 @testable import AetherScreensCore
 
 final class LiveFunctionalTests: XCTestCase {
+    @MainActor
+    func testLiveFailedPasswordCanBeCorrectedInTemporarySession() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard env["AETHERSCREENS_QA_PASSWORD_RETRY"] == "1",
+              let host = env["AETHERSCREENS_LIVE_HOST"],
+              let password = env["AETHERSCREENS_LIVE_PASSWORD"], password.utf8.count < 50,
+              let username = env["AETHERSCREENS_LIVE_USERNAME"] else {
+            throw XCTSkip("Requires explicit opt-in for one failed live account authentication and retry")
+        }
+        let device = RemoteDevice(name: "Temporary retry QA", host: host, authMethod: .macAccount, username: username)
+        let session = SessionViewModel(device: device, password: password + "-qa-invalid", isTemporary: true)
+        defer { session.endSession() }
+        let rejected = expectation(description: "Initial account password rejected")
+        rejected.assertForOverFulfill = false
+        session.client.onStateChanged = { state in if case .failed = state { rejected.fulfill() } }
+        session.startSession()
+        wait(for: [rejected], timeout: 30)
+        guard case .failed = session.client.state else {
+            XCTFail("Initial password must fail before checking correction")
+            return
+        }
+        let connected = expectation(description: "Corrected password authenticates")
+        connected.assertForOverFulfill = false
+        let frame = expectation(description: "Corrected session receives a real desktop")
+        frame.assertForOverFulfill = false
+        session.client.onStateChanged = { state in if state == .connected { connected.fulfill() } }
+        session.client.onFrameUpdated = { frame.fulfill() }
+        session.submitPassword(password, rememberInKeychain: true)
+        wait(for: [connected, frame], timeout: 30)
+        XCTAssertEqual(session.client.state, .connected)
+        XCTAssertGreaterThan(session.client.framebuffer.width, 0)
+        XCTAssertNil(DeviceStore.shared.getPassword(for: device), "Correcting a temporary session must not save credentials")
+    }
+
     func testLivePointerDeliveryToControlledFixture() throws {
         let env = ProcessInfo.processInfo.environment
         guard let host = env["AETHERSCREENS_LIVE_HOST"], let password = env["AETHERSCREENS_LIVE_PASSWORD"],

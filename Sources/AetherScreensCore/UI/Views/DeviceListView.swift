@@ -25,6 +25,8 @@ public struct DeviceListView: View {
     @StateObject private var viewModel = DeviceListViewModel()
     @State private var selectedCategory: DeviceCategory = .all
     @State private var showingAddSheet = false
+    @State private var showingQuickConnectSheet = false
+    @State private var pendingQuickSession: SessionViewModel?
     @State private var showingSettingsSheet = false
     @State private var activeSessionVM: SessionViewModel?
     @State private var editingDevice: RemoteDevice?
@@ -58,6 +60,9 @@ public struct DeviceListView: View {
         .sheet(isPresented: $showingAddSheet) {
             AddDeviceSheet(viewModel: viewModel)
         }
+        .sheet(isPresented: $showingQuickConnectSheet, onDismiss: openPendingQuickSession) {
+            quickConnectSheet
+        }
         .sheet(isPresented: $showingSettingsSheet) {
             TailscaleSettingsSheet(viewModel: viewModel)
         }
@@ -77,6 +82,9 @@ public struct DeviceListView: View {
                 }
                 .sheet(isPresented: $showingAddSheet) {
                     AddDeviceSheet(viewModel: viewModel)
+                }
+                .sheet(isPresented: $showingQuickConnectSheet, onDismiss: openPendingQuickSession) {
+                    quickConnectSheet
                 }
                 .sheet(isPresented: $showingSettingsSheet) {
                     TailscaleSettingsSheet(viewModel: viewModel)
@@ -257,6 +265,15 @@ public struct DeviceListView: View {
                 .help("Sync Tailscale Online Nodes")
                 .accessibilityLabel("Sync Tailscale Devices")
 
+                // Temporary or optionally saved connection
+                Button {
+                    showingQuickConnectSheet = true
+                } label: {
+                    Image(systemName: "bolt.horizontal.circle")
+                }
+                .help("Quick Connect")
+                .accessibilityLabel("Quick Connect")
+
                 // Add Computer Button
                 Button {
                     showingAddSheet = true
@@ -399,6 +416,18 @@ public struct DeviceListView: View {
         let password = DeviceStore.shared.getPassword(for: device)
         let session = SessionViewModel(device: device, password: password)
         self.activeSessionVM = session
+    }
+
+    private var quickConnectSheet: some View {
+        AddDeviceSheet(viewModel: viewModel) { request, saveComputer in
+            pendingQuickSession = viewModel.prepareQuickSession(request, saveComputer: saveComputer)
+        }
+    }
+
+    private func openPendingQuickSession() {
+        guard let session = pendingQuickSession else { return }
+        pendingQuickSession = nil
+        activeSessionVM = session
     }
 
     private var emptyStateView: some View {

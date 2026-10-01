@@ -59,6 +59,7 @@ public struct RemoteDesktopView: View {
                 host: viewModel.device.host,
                 username: viewModel.device.username,
                 errorMessage: viewModel.passwordPromptError,
+                canRememberPassword: viewModel.canRememberPassword,
                 onSubmit: { pwd, saveToKeychain in
                     viewModel.submitPassword(pwd, rememberInKeychain: saveToKeychain)
                 },

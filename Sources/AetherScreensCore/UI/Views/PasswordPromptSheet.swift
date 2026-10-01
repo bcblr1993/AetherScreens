@@ -6,6 +6,7 @@ public struct PasswordPromptSheet: View {
     public let host: String
     public let username: String?
     public let errorMessage: String?
+    public let canRememberPassword: Bool
     public let onSubmit: (String, Bool) -> Void
     public let onCancel: () -> Void
 
@@ -18,6 +19,7 @@ public struct PasswordPromptSheet: View {
         host: String,
         username: String? = nil,
         errorMessage: String? = nil,
+        canRememberPassword: Bool = true,
         onSubmit: @escaping (String, Bool) -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -25,6 +27,7 @@ public struct PasswordPromptSheet: View {
         self.host = host
         self.username = username
         self.errorMessage = errorMessage
+        self.canRememberPassword = canRememberPassword
         self.onSubmit = onSubmit
         self.onCancel = onCancel
     }
@@ -71,21 +74,23 @@ public struct PasswordPromptSheet: View {
 
             // Input Fields
             VStack(alignment: .leading, spacing: 12) {
-                SecureField("VNC Password", text: $password)
+                SecureField(username == nil ? "VNC Password" : "Mac Account Password", text: $password)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 14))
                     .focused($isPasswordFocused)
                     .onSubmit {
                         if !password.isEmpty {
-                            onSubmit(password, saveToKeychain)
+                            onSubmit(password, canRememberPassword && saveToKeychain)
                         }
                     }
 
-                Toggle("Save password in Keychain", isOn: $saveToKeychain)
+                if canRememberPassword {
+                    Toggle("Save password in Keychain", isOn: $saveToKeychain)
                     .font(.system(size: 13))
                     #if os(macOS)
                     .toggleStyle(.checkbox)
                     #endif
+                }
             }
             .padding(.horizontal, 8)
 
@@ -99,7 +104,7 @@ public struct PasswordPromptSheet: View {
                 Spacer()
 
                 Button("Connect") {
-                    onSubmit(password, saveToKeychain)
+                    onSubmit(password, canRememberPassword && saveToKeychain)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(password.isEmpty)
