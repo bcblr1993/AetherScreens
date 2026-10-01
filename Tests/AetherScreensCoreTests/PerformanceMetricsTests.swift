@@ -1,7 +1,36 @@
 import XCTest
+import Combine
 @testable import AetherScreensCore
 
 final class PerformanceMetricsTests: XCTestCase {
+    @MainActor
+    func testObservableNotificationCanReenterFrameRecording() {
+        let metrics = PerformanceMetrics()
+        var notifications = 0
+        let subscription = metrics.objectWillChange.sink {
+            XCTAssertTrue(Thread.isMainThread)
+            // Metal drawing can run while SwiftUI handles a metrics notification.
+            metrics.recordFrame()
+            notifications += 1
+        }
+        metrics.recordLatency(ms: 20)
+        XCTAssertGreaterThan(notifications, 0)
+        withExtendedLifetime(subscription) {}
+    }
+
+    @MainActor
+    func testNetworkThreadPublishesOnMainThread() async {
+        let metrics = PerformanceMetrics()
+        let notified = expectation(description: "Main-thread metrics publication")
+        let subscription = metrics.$latencyMs.dropFirst().sink { value in
+            XCTAssertTrue(Thread.isMainThread)
+            XCTAssertEqual(value, 25)
+            notified.fulfill()
+        }
+        DispatchQueue.global().async { metrics.recordLatency(ms: 25) }
+        await fulfillment(of: [notified], timeout: 2)
+        withExtendedLifetime(subscription) {}
+    }
 
     func testInitialState() {
         let metrics = PerformanceMetrics()

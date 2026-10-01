@@ -1,73 +1,69 @@
 import Foundation
 
-/// Real-time streaming performance metrics (FPS, Latency, Bandwidth, Encoding).
+/// Accumulators are synchronized; all observable updates happen on the main thread
+/// after releasing the lock. SwiftUI may reenter drawing from a publisher callback.
 public final class PerformanceMetrics: ObservableObject, @unchecked Sendable {
     public static let shared = PerformanceMetrics()
+    @Published public private(set) var currentFPS: Double = 0
+    @Published public private(set) var latencyMs: Double = 0
+    @Published public private(set) var bandwidthKbps: Double = 0
+    @Published public private(set) var isOptimal = true
 
-    @Published public private(set) var currentFPS: Double = 0.0
-    @Published public private(set) var latencyMs: Double = 0.0
-    @Published public private(set) var bandwidthKbps: Double = 0.0
-    @Published public private(set) var isOptimal: Bool = true // < 50ms latency & >= 55 FPS
-
-    private var frameCount: Int = 0
-    private var lastFPSUpdateTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
-    private var bytesAccumulator: Int = 0
-    private var lastBandwidthUpdateTime: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()
+    private var frameCount = 0
+    private var lastFPSUpdateTime = CFAbsoluteTimeGetCurrent()
+    private var bytesAccumulator = 0
+    private var lastBandwidthUpdateTime = CFAbsoluteTimeGetCurrent()
+    private var smoothedLatency: Double = 0
     private let lock = NSLock()
-
     public init() {}
 
-    /// Record a rendered frame to calculate FPS
     public func recordFrame() {
         lock.lock()
-        defer { lock.unlock() }
-
         frameCount += 1
         let now = CFAbsoluteTimeGetCurrent()
         let elapsed = now - lastFPSUpdateTime
-
-        if elapsed >= 1.0 {
-            let fps = Double(frameCount) / elapsed
-            self.currentFPS = (fps * 10).rounded() / 10
-            self.frameCount = 0
-            self.lastFPSUpdateTime = now
-            self.updateOptimalStatus()
-        }
+        let fps: Double?
+        if elapsed >= 1 {
+            fps = (Double(frameCount) / elapsed * 10).rounded() / 10
+            frameCount = 0
+            lastFPSUpdateTime = now
+        } else { fps = nil }
+        lock.unlock()
+        guard let fps else { return }
+        publish { self.currentFPS = fps }
     }
 
-    /// Record round-trip ping/latency in milliseconds
     public func recordLatency(ms: Double) {
+        guard ms.isFinite, ms >= 0 else { return }
         lock.lock()
-        defer { lock.unlock() }
-
-        // Exponential moving average for smooth display
-        if latencyMs == 0 {
-            latencyMs = ms
-        } else {
-            latencyMs = (latencyMs * 0.7) + (ms * 0.3)
+        smoothedLatency = smoothedLatency == 0 ? ms : smoothedLatency * 0.7 + ms * 0.3
+        let latency = smoothedLatency
+        lock.unlock()
+        publish {
+            self.latencyMs = latency
+            self.isOptimal = latency < 60
         }
-        self.updateOptimalStatus()
     }
 
-    /// Record incoming bytes received from the network
     public func recordBytesReceived(_ count: Int) {
+        guard count > 0 else { return }
         lock.lock()
-        defer { lock.unlock() }
-
         bytesAccumulator += count
         let now = CFAbsoluteTimeGetCurrent()
         let elapsed = now - lastBandwidthUpdateTime
-
-        if elapsed >= 1.0 {
-            let kbps = (Double(bytesAccumulator * 8) / 1024.0) / elapsed
-            self.bandwidthKbps = (kbps * 10).rounded() / 10
-            self.bytesAccumulator = 0
-            self.lastBandwidthUpdateTime = now
-        }
+        let bandwidth: Double?
+        if elapsed >= 1 {
+            bandwidth = (Double(bytesAccumulator) * 8 / 1024 / elapsed * 10).rounded() / 10
+            bytesAccumulator = 0
+            lastBandwidthUpdateTime = now
+        } else { bandwidth = nil }
+        lock.unlock()
+        guard let bandwidth else { return }
+        publish { self.bandwidthKbps = bandwidth }
     }
 
-    private func updateOptimalStatus() {
-        // Optimal if latency < 60ms and FPS >= 45 (or idle with low latency)
-        self.isOptimal = latencyMs < 60.0
+    private func publish(_ update: @escaping @Sendable () -> Void) {
+        if Thread.isMainThread { update() }
+        else { DispatchQueue.main.async(execute: update) }
     }
 }
