@@ -33,6 +33,47 @@ the reports finish. No real credentials or desktop data are used.
 Native two-finger scrolling and the two physical iPhones' interaction
 and perceived smoothness remain separate acceptance gates.
 
+## Pan input cancellation and guarded UI run (2026-10-01)
+
+A real loopback RFB session queued 300 wheel ticks, entered local Pan, then
+resumed scrolling. Before repair, wheel ticks kept reaching the server during
+Pan and the fresh wheel missed a 0.5-second delivery gate behind the backlog.
+The client now maintains a separate pointer-input gate. Entering Pan invalidates
+queued wheel work and releases held pointer buttons while leaving keys enabled;
+resuming pointer input resets wheel scheduling on its next generation. Observe's
+global input gate composes with the pointer gate. A received keyboard event acts
+as a TCP barrier so bytes sent before cancellation are not mistaken for queued
+old work. The test also verifies suppression of fresh engine/native/wheel input,
+keyboard delivery, Observe-to-control transition while still in Pan, and fresh
+scroll delivery after leaving Pan. These are transport liveness gates, not phone
+latency benchmarks.
+
+The final core suite passes 121 tests, five environment skips, no failures. Mac
+Release and signed iOS device Release builds pass. The initial hand-selected UI
+run retained only four cases even though six were requested; the report was not
+accepted as six-case coverage. A fresh configuration ran the missing two cases.
+`scripts/qa/run_controlled_gesture_qa.py` now copies a newly generated test plan
+to a unique path and verifies the exact result case set, count, skips, failures
+and runtime warnings. It preserves the generated plan and existing opt-in plans.
+Its actual run `build/ios-pan-input-guarded-qa/result.xcresult` contains all six
+requested English/Chinese gesture, viewport and recovery cases, no skips,
+failures or runtime warnings. The script is a controlled simulator sub-gate,
+not complete release or physical-device acceptance.
+
+Repeat with the fixture running separately:
+
+```sh
+python3 scripts/qa/gesture_rfb_fixture.py
+# In a second terminal:
+python3 scripts/qa/run_controlled_gesture_qa.py --simulator-id <simulator-UUID>
+```
+
+Use `--derived-data <directory>` to reuse existing build products and
+`--output <new-directory>` to select a new artifact directory. Existing output
+directories are rejected. Stop the fixture after completion. No credentials or
+real desktop content are used. The current physical phones retain the previous
+installed performance candidate pending the user's hand-feel trial.
+
 ## iOS local viewport navigation (2026-10-01)
 
 The old simulator build failed a new acceptance test because zoomed iOS

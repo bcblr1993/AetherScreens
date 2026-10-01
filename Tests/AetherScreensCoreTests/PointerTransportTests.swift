@@ -55,6 +55,62 @@ final class PointerTransportTests: XCTestCase {
         wait(for: [freshWheel], timeout: 1)
     }
 
+    @MainActor
+    func testPanCancelsQueuedWheelsWhileKeyboardAndResumedScrollStillWork() throws {
+        let ready = expectation(description: "Pan listener ready")
+        let connected = expectation(description: "Pan session connected")
+        let server = try PointerWireServer(ready: { ready.fulfill() })
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let suite = "test.aetherscreens.pan.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = DeviceStore(userDefaults: defaults, legacySources: [])
+        let session = SessionViewModel(device: RemoteDevice(name: "Pan transport QA", host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true, deviceStore: store)
+        session.client.onStateChanged = { if $0 == .connected { connected.fulfill() } }
+        session.startSession()
+        defer { session.endSession() }
+        wait(for: [connected], timeout: 3)
+        session.trackpadEngine.beginDrag()
+        for _ in 0..<300 { session.client.sendPointerEvent(buttonMask: [.left, .scrollDown], x: 10, y: 10) }
+        waitUntil { server.pointers.filter { $0.mask == 1 }.count >= 300 }
+        let released = expectation(description: "Pan releases remote mouse")
+        server.onPointer = { if $0.mask == 0 { server.onPointer = nil; released.fulfill() } }
+        session.isPanningViewport = true
+        let key = expectation(description: "Keyboard remains usable during local pan")
+        server.onKey = { if $0.down && $0.key == 97 { server.onKey = nil; key.fulfill() } }
+        session.client.sendKeyEvent(down: true, keySym: 97)
+        session.client.sendKeyEvent(down: false, keySym: 97)
+        // The key receipt is a TCP barrier after switching modes; earlier bytes
+        // already transmitted before cancellation are not queued old work.
+        wait(for: [released, key], timeout: 1)
+        let unwanted = expectation(description: "Pointer input continues while panning")
+        unwanted.isInverted = true
+        server.onPointer = { _ in server.onPointer = nil; unwanted.fulfill() }
+        session.trackpadEngine.handleTap()
+        session.sendNativePointer(buttonMask: .left, x: 10, y: 10)
+        session.client.sendPointerEvent(buttonMask: .scrollDown, x: 10, y: 10)
+        wait(for: [unwanted], timeout: 0.2)
+        // Observe's global input flag must not reopen the pointer gate when
+        // control resumes while the local Pan mode is still selected.
+        session.isObserveOnly = true
+        session.isObserveOnly = false
+        let nestedPointer = expectation(description: "Observe exit reopens mouse during Pan")
+        nestedPointer.isInverted = true
+        server.onPointer = { _ in server.onPointer = nil; nestedPointer.fulfill() }
+        let restoredKey = expectation(description: "Observe exit restores keyboard during Pan")
+        server.onKey = { if $0.down && $0.key == 98 { server.onKey = nil; restoredKey.fulfill() } }
+        session.client.sendPointerEvent(buttonMask: .scrollDown, x: 10, y: 10)
+        session.client.sendKeyEvent(down: true, keySym: 98)
+        session.client.sendKeyEvent(down: false, keySym: 98)
+        wait(for: [restoredKey, nestedPointer], timeout: 0.2)
+        session.isPanningViewport = false
+        let fresh = expectation(description: "Fresh scrolling resumes without old backlog delay")
+        server.onPointer = { if $0.mask == RFBConstants.ButtonMask.scrollUp.rawValue { server.onPointer = nil; fresh.fulfill() } }
+        session.client.sendPointerEvent(buttonMask: .scrollUp, x: 12, y: 12)
+        wait(for: [fresh], timeout: 0.5)
+    }
+
     private func connectedPair() throws -> (PointerWireServer, RFBClient) {
         let ready = expectation(description: "Loopback listener ready")
         let connected = expectation(description: "RFB handshake completed")
@@ -76,6 +132,7 @@ final class PointerTransportTests: XCTestCase {
 /// Inspects real TCP messages after a minimal RFB handshake; no client send hooks.
 private final class PointerWireServer: @unchecked Sendable {
     struct Pointer { let mask: UInt8; let x: UInt16; let y: UInt16 }
+    struct Key { let down: Bool; let key: UInt32 }
     let listener: NWListener
     private let queue = DispatchQueue(label: "aetherscreens.pointer-wire-qa")
     private let lock = NSLock()
@@ -85,6 +142,11 @@ private final class PointerWireServer: @unchecked Sendable {
     var onPointer: ((Pointer) -> Void)? {
         get { lock.lock(); defer { lock.unlock() }; return pointerHandler }
         set { lock.lock(); pointerHandler = newValue; lock.unlock() }
+    }
+    private var keyHandler: ((Key) -> Void)?
+    var onKey: ((Key) -> Void)? {
+        get { lock.lock(); defer { lock.unlock() }; return keyHandler }
+        set { lock.lock(); keyHandler = newValue; lock.unlock() }
     }
     var pointers: [Pointer] { lock.lock(); defer { lock.unlock() }; return received }
 
@@ -112,7 +174,7 @@ private final class PointerWireServer: @unchecked Sendable {
         }
         listener.start(queue: queue)
     }
-    func stop() { connection?.cancel(); listener.cancel() }
+    func stop() { onPointer = nil; onKey = nil; connection?.cancel(); listener.cancel() }
     private func send(_ data: Data) { connection?.send(content: data, completion: .contentProcessed { _ in }) }
     private func read(_ count: Int, accumulated: Data = Data(), done: @escaping (Data) -> Void) {
         if accumulated.count == count { done(accumulated); return }
@@ -134,7 +196,12 @@ private final class PointerWireServer: @unchecked Sendable {
                     self.read(count * 4) { _ in self.readMessage() }
                 }
             case 3: self.read(9) { _ in self.readMessage() }
-            case 4: self.read(7) { _ in self.readMessage() }
+            case 4:
+                self.read(7) { body in
+                    let key = Key(down: body[0] != 0, key: UInt32(body[3]) << 24 | UInt32(body[4]) << 16 | UInt32(body[5]) << 8 | UInt32(body[6]))
+                    self.onKey?(key)
+                    self.readMessage()
+                }
             case 5:
                 self.read(5) { body in
                     let pointer = Pointer(mask: body[0], x: UInt16(body[1]) << 8 | UInt16(body[2]), y: UInt16(body[3]) << 8 | UInt16(body[4]))

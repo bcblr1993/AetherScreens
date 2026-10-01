@@ -43,6 +43,7 @@ public final class RFBClient: @unchecked Sendable {
     private let zlibDecompressor = ZlibDecompressor()
     private let inputLock = NSRecursiveLock()
     private var inputEnabled = true
+    private var pointerInputEnabled = true
     private var inputGeneration = UUID()
     private var heldKeys = Set<UInt32>()
     private var pointerPosition: (UInt16, UInt16) = (0, 0)
@@ -674,11 +675,25 @@ public final class RFBClient: @unchecked Sendable {
         inputEnabled = enabled
     }
 
+    /// Local viewport navigation suppresses mouse input without disabling keys.
+    public func setPointerInputEnabled(_ enabled: Bool) {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        if pointerInputEnabled != enabled { inputGeneration = UUID() }
+        if !enabled && pointerInputEnabled {
+            if !heldPointerButtons.isEmpty {
+                sendData(RFBEncoder.encodePointerEvent(buttonMask: [], x: pointerPosition.0, y: pointerPosition.1))
+            }
+            heldPointerButtons = []
+        }
+        pointerInputEnabled = enabled
+    }
+
     @discardableResult
     private func sendPointerPacket(_ mask: RFBConstants.ButtonMask, x: UInt16, y: UInt16, generation: UUID? = nil) -> Bool {
         inputLock.lock()
         defer { inputLock.unlock() }
-        guard inputEnabled else { return false }
+        guard inputEnabled, pointerInputEnabled else { return false }
         if let generation, generation != inputGeneration { return false }
         pointerPosition = (x, y)
         heldPointerButtons = RFBConstants.ButtonMask(rawValue: mask.rawValue & 7)
@@ -693,7 +708,7 @@ public final class RFBClient: @unchecked Sendable {
     private func sendWheelPacket(_ wheel: RFBConstants.ButtonMask, generation: UUID) -> Bool {
         inputLock.lock()
         defer { inputLock.unlock() }
-        guard inputEnabled, generation == inputGeneration else { return false }
+        guard inputEnabled, pointerInputEnabled, generation == inputGeneration else { return false }
         let (x, y) = pointerPosition
         sendData(RFBEncoder.encodePointerEvent(buttonMask: heldPointerButtons.union(wheel), x: x, y: y))
         if !wheel.isEmpty {
@@ -712,7 +727,7 @@ public final class RFBClient: @unchecked Sendable {
         // Establish that position before sending spaced press/release pulses.
         inputLock.lock()
         let generation = inputGeneration
-        let enabled = inputEnabled
+        let enabled = inputEnabled && pointerInputEnabled
         if enabled {
             pointerPosition = (x, y)
             heldPointerButtons = RFBConstants.ButtonMask(rawValue: buttonMask.rawValue & 7)

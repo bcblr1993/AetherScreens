@@ -80,6 +80,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public var isPanningViewport: Bool = false {
         didSet {
             if isPanningViewport { trackpadEngine.releaseAllButtons() }
+            client.setPointerInputEnabled(!isPanningViewport)
         }
     }
     @Published public private(set) var inputGeneration = UUID()
