@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Mac-tailored keyboard accessory toolbar with Screens-style 3-state sticky modifiers,
 /// quick actions, F1-F12 function row, and text transmission.
@@ -6,7 +9,12 @@ public struct MacKeyboardToolbar: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: SessionViewModel
     @State private var showingTextInput: Bool = false
+    @FocusState private var textInputFocused: Bool
+    #if canImport(UIKit)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
     @State private var showingFunctionKeys: Bool = false
+    @State private var showingDictation = false
     @Binding private var showingCustomization: Bool
 
     public init(viewModel: SessionViewModel, showingCustomization: Binding<Bool>) {
@@ -26,13 +34,20 @@ public struct MacKeyboardToolbar: View {
 
                     TextField(AppLocalization.string("Type or paste text to send to Mac..."), text: $viewModel.textInputBuffer)
                         .textFieldStyle(.plain)
+                        .focused($textInputFocused)
+                        .accessibilityIdentifier("remote-text-input")
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        #endif
+                        .onAppear { textInputFocused = true }
                         .onSubmit {
-                            sendEnteredText()
+                            viewModel.submitTextInput(pressReturn: true)
                         }
 
                     if !viewModel.textInputBuffer.isEmpty {
                         Button {
-                            sendEnteredText()
+                            viewModel.submitTextInput(pressReturn: false)
                         } label: {
                             Text(AppLocalization.string("Send"))
                                 .font(.system(size: 13, weight: .semibold))
@@ -51,6 +66,9 @@ public struct MacKeyboardToolbar: View {
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(AppLocalization.string("Close"))
+                    .accessibilityIdentifier("remote-text-close")
+                    .frame(minWidth: 44, minHeight: 44)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -59,7 +77,7 @@ public struct MacKeyboardToolbar: View {
             }
 
             // Optional F1 - F12 Function Key Row
-            if showingFunctionKeys {
+            if showingFunctionKeys && !usesCompactTextInput {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(1...12, id: \.self) { num in
@@ -77,6 +95,7 @@ public struct MacKeyboardToolbar: View {
             }
 
             // Main Primary Keyboard Bar
+            if !usesCompactTextInput {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(viewModel.keyboardConfiguration.items.filter(\.isVisible)) { item in
@@ -98,9 +117,31 @@ public struct MacKeyboardToolbar: View {
             }
             .background(.bar)
             .accessibilityIdentifier("keyboard-toolbar-scroll")
+            }
         }
         .background(.regularMaterial)
         .environment(\.keyboardButtonHeight, buttonHeight)
+        .onDisappear {
+            viewModel.cancelToolbarKeyHold()
+            viewModel.isTextInputBarVisible = false
+        }
+        .onChange(of: showingTextInput) { _, visible in
+            viewModel.isTextInputBarVisible = visible
+            textInputFocused = visible
+            if visible { viewModel.cancelToolbarKeyHold() }
+        }
+        .onChange(of: showingCustomization) { _, visible in
+            if visible { viewModel.cancelToolbarKeyHold() }
+        }
+        .onChange(of: showingDictation) { _, visible in
+            if visible { viewModel.cancelToolbarKeyHold() }
+        }
+        #if canImport(UIKit)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            viewModel.cancelToolbarKeyHold()
+        }
+        #endif
+        .sheet(isPresented: $showingDictation) { RemoteDictationSheet(viewModel: viewModel) }
     }
 
     private var buttonHeight: CGFloat {
@@ -109,6 +150,23 @@ public struct MacKeyboardToolbar: View {
         case .medium: return 44
         case .large: return 52
         }
+    }
+
+    private var usesCompactTextInput: Bool {
+        #if canImport(UIKit)
+        showingTextInput && verticalSizeClass == .compact
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder private var userPasswordMenu: some View {
+        Button { viewModel.typeUserPassword() } label: {
+            Label(AppLocalization.string("Type User Password"), systemImage: "key.fill")
+        }.disabled(!viewModel.canTypeUserPassword).accessibilityIdentifier("menu-type-user-password")
+        Button { viewModel.typeUserPassword(pressReturn: false) } label: {
+            Text(AppLocalization.string("Type Password Without Return"))
+        }.disabled(!viewModel.canTypeUserPassword).accessibilityIdentifier("menu-type-password-without-return")
     }
 
     @ViewBuilder private func configuredButton(_ action: KeyboardToolbarConfiguration.Action) -> some View {
@@ -120,6 +178,10 @@ public struct MacKeyboardToolbar: View {
                         Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
                     }
                 }
+                Divider()
+                userPasswordMenu
+                ClipboardMenu(viewModel: viewModel)
+                HotCornerMenu(viewModel: viewModel)
             } label: {
                 Label(AppLocalization.string("Actions"), systemImage: "command")
                     .padding(.horizontal, 10).frame(minHeight: buttonHeight)
@@ -130,14 +192,18 @@ public struct MacKeyboardToolbar: View {
         case .control: ModifierKeyButton(symbol: "⌃", label: "Ctrl", state: viewModel.ctrlState) { viewModel.cycleControl() }
         case .shift: ModifierKeyButton(symbol: "⇧", label: "Shift", state: viewModel.shiftState) { viewModel.cycleShift() }
         case .escape: ActionButton(title: "esc") { viewModel.sendKeyTap(MacKeyMap.escape) }
-        case .tab: ActionButton(title: "tab") { viewModel.sendKeyTap(MacKeyMap.tab) }
+        case .tab: repeatKey(title: "tab", key: MacKeyMap.tab)
         case .space: ActionButton(title: "space") { viewModel.sendKeyTap(MacKeyMap.space) }
-        case .enter: ActionButton(title: "return") { viewModel.sendKeyTap(MacKeyMap.return) }
-        case .delete: ActionButton(title: "del") { viewModel.sendKeyTap(MacKeyMap.delete) }
-        case .left: ActionButton(icon: "arrow.left") { viewModel.sendKeyTap(MacKeyMap.arrowLeft) }
-        case .up: ActionButton(icon: "arrow.up") { viewModel.sendKeyTap(MacKeyMap.arrowUp) }
-        case .down: ActionButton(icon: "arrow.down") { viewModel.sendKeyTap(MacKeyMap.arrowDown) }
-        case .right: ActionButton(icon: "arrow.right") { viewModel.sendKeyTap(MacKeyMap.arrowRight) }
+        case .enter: repeatKey(title: "return", key: MacKeyMap.return)
+        case .delete: repeatKey(title: "del", key: MacKeyMap.delete)
+        case .left: repeatKey(icon: "arrow.left", key: MacKeyMap.arrowLeft)
+        case .up: repeatKey(icon: "arrow.up", key: MacKeyMap.arrowUp)
+        case .down: repeatKey(icon: "arrow.down", key: MacKeyMap.arrowDown)
+        case .right: repeatKey(icon: "arrow.right", key: MacKeyMap.arrowRight)
+        case .pageUp, .pageDown:
+            if let key = action.keySym { repeatKey(title: action.rawValue, key: key) }
+        case .home, .end, .f1, .f2, .f3, .f4, .f5, .f6, .f7, .f8, .f9, .f10, .f11, .f12:
+            if let key = action.keySym { ActionButton(title: action.rawValue) { viewModel.sendKeyTap(key) } }
         case .functionKeys:
             ActionButton(title: "Fn") { withAnimation { showingFunctionKeys.toggle() } }
         case .text:
@@ -145,15 +211,38 @@ public struct MacKeyboardToolbar: View {
         case .paste:
             ActionButton(title: "Paste Text") { viewModel.syncClipboardToMac() }
                 .help(AppLocalization.string("Insert local clipboard text into the focused remote field"))
+        case .userPassword:
+            TypeUserPasswordButton(viewModel: viewModel, height: buttonHeight)
+        case .dictation:
+            ActionButton(title: "Dictation") { showingDictation = true }
+                .disabled(!viewModel.canSendDictation)
+                .accessibilityIdentifier("session-dictation")
         case .spacer:
             Color.clear.frame(width: 12, height: buttonHeight).accessibilityHidden(true)
         }
     }
 
-    private func sendEnteredText() {
-        guard !viewModel.textInputBuffer.isEmpty else { return }
-        viewModel.sendTextString(viewModel.textInputBuffer)
-        viewModel.textInputBuffer = ""
+    @ViewBuilder private func repeatKey(title: String? = nil, icon: String? = nil, key: UInt32) -> some View {
+        #if canImport(UIKit)
+        IOSRepeatKeyButton(title: title, icon: icon, height: buttonHeight, enabled: viewModel.canSendDictation,
+                           onBegin: { viewModel.beginToolbarKeyHold(key) },
+                           onEnd: { viewModel.endToolbarKeyHold(key, activate: $0) },
+                           onActivate: { if viewModel.canSendDictation { viewModel.sendKeyTap(key) } })
+            .frame(width: repeatKeyWidth(title), height: buttonHeight)
+        #else
+        ActionButton(title: title, icon: icon) { viewModel.sendKeyTap(key) }
+        #endif
+    }
+
+    private func repeatKeyWidth(_ title: String?) -> CGFloat {
+        guard let title else { return buttonHeight }
+        #if canImport(UIKit)
+        let textWidth = (AppLocalization.string(title) as NSString).size(
+            withAttributes: [.font: UIFont.systemFont(ofSize: 12, weight: .semibold)]).width + 18
+        return max(buttonHeight, ceil(textWidth))
+        #else
+        return buttonHeight
+        #endif
     }
 
     private func fKeySym(for num: Int) -> UInt32 {

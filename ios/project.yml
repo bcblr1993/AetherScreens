@@ -11,17 +11,26 @@ targets:
     deploymentTarget: '17.0'
     sources:
       - AetherScreensIOSApp.swift
+      - path: ../Sources/AetherScreensAppIntents/SavedComputerIntents.swift
       - Assets.xcassets
       - path: ../assets/localization
     dependencies:
+      - sdk: AppIntents.framework
+      - sdk: ActivityKit.framework
       - package: AetherScreens
         product: AetherScreensCore
+      - target: AetherScreensWidgets
+        embed: true
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: AetherScreens
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, zh-Hans]
+        NSSupportsLiveActivities: true
+        AetherScreensWidgetGroupIdentifier: group.com.aethernative.aetherscreens
         CFBundleURLTypes:
           - CFBundleURLName: com.aethernative.aetherscreens.connection
             CFBundleURLSchemes: [aetherscreens]
@@ -41,6 +50,9 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSLocalNetworkUsageDescription: 'Discover nearby computers for remote screen sharing.'
+        NSFaceIDUsageDescription: 'Authenticate before typing your saved user password on the remote Mac.'
+        NSMicrophoneUsageDescription: 'Use the microphone for on-device dictation. Review text before sending it to the remote computer.'
+        NSSpeechRecognitionUsageDescription: 'Recognize dictation on this device before you choose to send the text to the remote computer.'
         NSBonjourServices:
           - _rfb._tcp
           - _apple-sas._tcp
@@ -48,6 +60,41 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_ENTITLEMENTS: ../assets/AetherScreensWidgets.entitlements
+        TARGETED_DEVICE_FAMILY: '1,2'
+        SWIFT_VERSION: '5.9'
+  AetherScreensWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources:
+      - path: ../Sources/AetherScreensWidgets
+      - path: ../assets/widget-localization
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: ActivityKit.framework
+      - sdk: AppIntents.framework
+      - package: AetherScreens
+        product: AetherScreensWidgetSupport
+    info:
+      path: build/AetherScreensWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: AetherScreens Widgets
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh-Hans]
+        AetherScreensWidgetGroupIdentifier: group.com.aethernative.aetherscreens
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios.widgets
+        CODE_SIGN_ENTITLEMENTS: ../assets/AetherScreensWidgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
         MARKETING_VERSION: 1.0.0
         CURRENT_PROJECT_VERSION: 1
         TARGETED_DEVICE_FAMILY: '1,2'

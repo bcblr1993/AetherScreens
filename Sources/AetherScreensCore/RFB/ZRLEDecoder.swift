@@ -1,4 +1,5 @@
 import Foundation
+import Accelerate
 
 /// RFC 6143 section 7.7.6, for the 32-bit little-endian BGRA format requested by RFBClient.
 /// Tile data uses three-byte BGR pixels; decoded output is opaque four-byte BGRA.
@@ -50,14 +51,17 @@ final class ZRLEDecoder {
                             // Validate a complete compact-pixel tile once, then expand it
                             // without three throwing byte reads for every pixel.
                             let compact = try reader.take(count * 3)
-                            for row in 0..<tileHeight {
-                                let start = (y + row) * width + x
-                                for column in 0..<tileWidth {
-                                    let index = (row * tileWidth + column) * 3
-                                    let color = UInt32(compact[index]) | UInt32(compact[index + 1]) << 8
-                                        | UInt32(compact[index + 2]) << 16 | 0xff000000
-                                    output[start + column] = color.littleEndian
-                                }
+                            // Preserve BGR channel order and append opaque alpha.
+                            // Each destination tile retains the full image's stride.
+                            var source = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: compact.baseAddress!),
+                                                       height: vImagePixelCount(tileHeight), width: vImagePixelCount(tileWidth),
+                                                       rowBytes: tileWidth * 3)
+                            var destination = vImage_Buffer(data: output.baseAddress!.advanced(by: y * width + x),
+                                                            height: vImagePixelCount(tileHeight), width: vImagePixelCount(tileWidth),
+                                                            rowBytes: width * 4)
+                            guard vImageConvert_RGB888toRGBA8888(&source, nil, 255, &destination, false,
+                                                               vImage_Flags(kvImageDoNotTile)) == kvImageNoError else {
+                                throw TileError.invalid
                             }
                         case 1:
                             write(try reader.pixel(), length: count)

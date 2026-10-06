@@ -27,6 +27,9 @@
 "Cancel" = "Cancel";
 "Clear" = "Clear";
 "Close" = "Close";
+"Unable to Paste" = "Unable to Paste";
+"Clipboard text is too large. Copy a smaller selection and try again." = "Clipboard text is too large. Copy a smaller selection and try again.";
+"Clipboard text could not be sent. Try again." = "Clipboard text could not be sent. Try again.";
 "Close Window" = "Close Window";
 "Connect" = "Connect";
 "Connect to %@" = "Connect to %@";
@@ -58,7 +61,7 @@
 "Enter the VNC password for %@" = "Enter the VNC password for %@";
 "Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping." = "Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping.";
 "Enter your Mac account username and password. Leave Username empty to use a VNC password." = "Enter your Mac account username and password. Leave Username empty to use a VNC password.";
-"Failed to send Wake-on-LAN packet. Check MAC format." = "Failed to send Wake-on-LAN packet. Check MAC format.";
+"Failed to send Wake-on-LAN packet. Check local network access and the MAC address." = "Failed to send Wake-on-LAN packet. Check local network access and the MAC address.";
 "Filter logs..." = "Filter logs...";
 "Fit to Window" = "Fit to Window";
 "Fn" = "Fn";
@@ -70,7 +73,7 @@
 "Initializing…" = "Initializing…";
 "Input Mode" = "Input Mode";
 "Remote desktop canvas" = "Remote desktop canvas";
-"Insert local clipboard text into the focused remote field" = "Insert local clipboard text into the focused remote field";
+"Insert local clipboard text into the focused remote field" = "Paste local clipboard content into the focused remote application";
 "Language" = "Language";
 "Level" = "Level";
 "Loading remote desktop…" = "Loading remote desktop…";
@@ -99,7 +102,7 @@
 "Other" = "Other";
 "Pan View" = "Pan View";
 "Paste" = "Paste";
-"Paste Text" = "Paste Text";
+"Paste Text" = "Paste Clipboard";
 "Please enter your Tailscale API Key in Settings" = "Please enter your Tailscale API Key in Settings";
 "Port" = "Port";
 "Quick Connect" = "Quick Connect";
@@ -186,6 +189,8 @@
 "Tailscale HTTP %d: %@" = "Tailscale HTTP %d: %@";
 "Tailscale authentication failed. Check your API access token." = "Tailscale authentication failed. Check your API access token.";
 "Unsupported Mac account authentication key length" = "Unsupported Mac account authentication key length";
+"Unsupported framebuffer encoding: %@" = "Unsupported framebuffer encoding: %@";
+"Unsupported server message type: %@" = "Unsupported server message type: %@";
 "VNC Password required to connect" = "VNC Password required to connect";
 "WARNING" = "WARNING";
 "cmd" = "cmd";
@@ -264,6 +269,273 @@
 "Invalid ZRLE pixel data" = "Invalid ZRLE pixel data";
 "Network round-trip time; excludes remote processing and display delay." = "Network round-trip time; excludes remote processing and display delay.";
 "Invalid Zlib rectangle size" = "Invalid Zlib rectangle size";
+"Invalid Raw rectangle size" = "Invalid Raw rectangle size";
 "Invalid Zlib compressed length" = "Invalid Zlib compressed length";
 "Invalid Zlib pixel data" = "Invalid Zlib pixel data";
 "Return to Computers" = "Return to Computers";
+
+// Remote Mac hot corners
+"Hot Corners" = "Hot Corners";
+"Top Left" = "Top Left";
+"Top Right" = "Top Right";
+"Bottom Left" = "Bottom Left";
+"Bottom Right" = "Bottom Right";
+"Trigger a corner configured on the remote Mac's selected display" = "Trigger a corner configured on the remote Mac's selected display";
+
+// Saved connection disconnect action
+"When Disconnecting" = "When Disconnecting";
+"Action" = "Action";
+"Disconnect Only" = "Disconnect Only";
+"Log Out Remote User" = "Log Out Remote User";
+"Logging out closes remote apps. Save your work first." = "Logging out closes remote apps. Save your work first.";
+"Runs when you close a control session. Observe sessions and interrupted connections do not run this action. Hot corners must be configured on the remote Mac." = "Runs when you close a control session. Observe sessions and interrupted connections do not run this action. Hot corners must be configured on the remote Mac.";
+"Dictation" = "Dictation";
+"Dictation Language" = "Dictation Language";
+"Dictation Preview" = "Dictation Preview";
+"Review the recognized text before sending it to the remote computer." = "Review the recognized text before sending it to the remote computer.";
+"Preparing Dictation…" = "Preparing Dictation…";
+"Finishing Dictation…" = "Finishing Dictation…";
+"Stop Dictation" = "Stop Dictation";
+"Start Dictation" = "Start Dictation";
+"Allow Speech Recognition in system settings to use Dictation." = "Allow Speech Recognition in system settings to use Dictation.";
+"Allow Microphone access in system settings to use Dictation." = "Allow Microphone access in system settings to use Dictation.";
+"On-device Dictation is unavailable for this language." = "On-device Dictation is unavailable for this language.";
+"The microphone is unavailable. Try again." = "The microphone is unavailable. Try again.";
+"Dictation stopped. Try again." = "Dictation stopped. Try again.";
+"Pencil Double Tap" = "Pencil Double Tap";
+"Pencil Squeeze" = "Pencil Squeeze";
+"Toggle Toolbar Visibility" = "Toggle Toolbar Visibility";
+"Secondary Click" = "Secondary Click";
+"Middle Click" = "Middle Click";
+"None" = "None";
+"Requires a compatible Apple Pencil with gestures enabled in system settings. Click actions are unavailable in Observe and Pan modes." = "Requires a compatible Apple Pencil with gestures enabled in system settings. Click actions are unavailable in Observe and Pan modes.";
+
+"Hardware Keyboard" = "Hardware Keyboard";
+
+"Key Repeat" = "Key Repeat";
+
+"Repeat Delay" = "Repeat Delay";
+
+"Repeat Interval" = "Repeat Interval";
+
+"%.2f seconds" = "%.2f seconds";
+
+"Page Up" = "Page Up";
+
+"Page Down" = "Page Down";
+
+"Home" = "Home";
+
+"End" = "End";
+
+"F1" = "F1";
+
+"F2" = "F2";
+
+"F3" = "F3";
+
+"F4" = "F4";
+
+"F5" = "F5";
+
+"F6" = "F6";
+
+"F7" = "F7";
+
+"F8" = "F8";
+
+"F9" = "F9";
+
+"F10" = "F10";
+
+"F11" = "F11";
+
+"F12" = "F12";
+
+"Controls" = "Controls";
+
+"Cursor Speed" = "Cursor Speed";
+
+"Cursor Speed: %.2f×" = "Cursor Speed: %.2f×";
+
+"%.2f×" = "%.2f×";
+
+"This connection does not support this clipboard content." = "This connection does not support this clipboard content.";
+
+"Clipboard content could not be sent. Copy a smaller selection and try again." = "Clipboard content could not be sent. Copy a smaller selection and try again.";
+
+"Clipboard" = "Clipboard";
+
+"Use Shared Clipboard" = "Use Shared Clipboard";
+
+"Send Clipboard" = "Send Clipboard";
+
+"Get Clipboard" = "Get Clipboard";
+
+"This connection cannot fetch clipboard content." = "This connection cannot fetch clipboard content.";
+
+"Swap Command and Control" = "Swap Command and Control";
+"Switch Apps with Command-Backslash" = "Switch Apps with Command-Backslash";
+
+"Type User Password" = "Type User Password";
+"Type Password Without Return" = "Type Password Without Return";
+"Hold to type without pressing Return." = "Hold to type without pressing Return.";
+"Authenticate to type your saved user password on the remote Mac." = "Authenticate to type your saved user password on the remote Mac.";
+"The saved user password is unavailable for this session." = "The saved user password is unavailable for this session.";
+"The saved user password could not be typed. Reconnect and try again." = "The saved user password could not be typed. Reconnect and try again.";
+
+"View" = "View";
+
+"Displays" = "Displays";
+
+"Clipboard changed. Try again." = "Clipboard changed. Try again.";
+
+"Unable to read clipboard. Try copying again." = "Unable to read clipboard. Try copying again.";
+"ssh.connection.settings.required" = "Check the SSH connection settings before connecting.";
+"Could not remove saved SSH credentials. Unlock the device and try again." = "Could not remove saved SSH credentials. Unlock the device and try again.";
+
+"SSH connection failed. Check the credentials and trusted host key." = "SSH connection failed. Check the credentials and trusted host key.";
+
+"Verify this fingerprint with the computer owner before trusting the SSH server." = "Verify this fingerprint with the computer owner before trusting the SSH server.";
+
+"SSH Server" = "SSH Server";
+
+"Host Key Fingerprint" = "Host Key Fingerprint";
+
+"Trust Once" = "Trust Once";
+
+"Trust and Remember" = "Trust and Remember";
+
+"Verify SSH Server" = "Verify SSH Server";
+
+"Secure Connection" = "Secure Connection";
+
+"Use SSH Tunnel" = "Use SSH Tunnel";
+
+"SSH Host (blank uses computer address)" = "SSH Host (blank uses computer address)";
+
+"SSH Port" = "SSH Port";
+
+"SSH Username" = "SSH Username";
+
+"SSH Authentication" = "SSH Authentication";
+
+"Password" = "Password";
+
+"Ed25519 Private Key" = "Ed25519 Private Key";
+
+"SSH Password" = "SSH Password";
+
+"SSH Password (leave blank to keep)" = "SSH Password (leave blank to keep)";
+
+"Private Key (leave blank to keep)" = "Private Key (leave blank to keep)";
+
+"OpenSSH Private Key" = "OpenSSH Private Key";
+
+"Private Key Passphrase (optional)" = "Private Key Passphrase (optional)";
+
+"Screen Sharing Host from SSH Server" = "Screen Sharing Host from SSH Server";
+
+"SSH credentials are separate from your Mac account or VNC password. You will review the server fingerprint before connecting." = "SSH credentials are separate from your Mac account or VNC password. You will review the server fingerprint before connecting.";
+
+"Unable to Save Connection" = "Unable to Save Connection";
+
+"Could not save SSH credentials. Check the private key or unlock the device and try again." = "Could not save SSH credentials. Check the private key or unlock the device and try again.";
+
+"Import Private Key" = "Import Private Key";
+
+"Private Key Selected" = "Private Key Selected";
+
+"Remove Selected Key" = "Remove Selected Key";
+
+"Unable to Import Private Key" = "Unable to Import Private Key";
+
+"Choose an OpenSSH Ed25519 private key smaller than 64 KiB." = "Choose an OpenSSH Ed25519 private key smaller than 64 KiB.";
+
+"Enter new SSH credentials after changing the server, account, or authentication method." = "Enter new SSH credentials after changing the server, account, or authentication method.";
+
+"Trusted SSH Server" = "Trusted SSH Server";
+
+"Forget Trusted Server" = "Forget Trusted Server";
+
+"Forget Trusted SSH Server?" = "Forget Trusted SSH Server?";
+
+"Forget" = "Forget";
+
+"SSH Server Trust" = "SSH Server Trust";
+
+"The next connection must verify the server fingerprint again. This affects all saved computers using the same SSH server and port. Existing connected sessions stay open." = "The next connection must verify the server fingerprint again. This affects all saved computers using the same SSH server and port. Existing connected sessions stay open.";
+
+"Could not read the trusted SSH server. Unlock the device and try again." = "Could not read the trusted SSH server. Unlock the device and try again.";
+
+"Could not forget the trusted SSH server. Its identity or saved connection may have changed. Unlock the device and try again." = "Could not forget the trusted SSH server. Its identity or saved connection may have changed. Unlock the device and try again.";
+
+// Saved-computer storage and synchronization
+"Saved Computers" = "Saved Computers";
+"Storage" = "Storage";
+"On This Device" = "On This Device";
+"Sync Now" = "Sync Now";
+"Retry Sync" = "Retry Sync";
+"Saved computers stay on this device." = "Saved computers stay on this device.";
+"Changes are waiting to sync." = "Changes are waiting to sync.";
+"Syncing saved computers…" = "Syncing saved computers…";
+"Saved computers synchronized." = "Saved computers synchronized.";
+"iCloud synchronization is unavailable in this build." = "iCloud synchronization is unavailable in this build.";
+"Sign in to iCloud in system settings, then retry." = "Sign in to iCloud in system settings, then retry.";
+"The iCloud account has changed. Your saved computers remain on this device." = "The iCloud account has changed. Your saved computers remain on this device.";
+"Could not sync. Your changes are saved on this device. Retry when connected." = "Could not sync. Your changes are saved on this device. Retry when connected.";
+"Other changes arrived during sync. Retry to merge them." = "Other changes arrived during sync. Retry to merge them.";
+"Could not read synchronization data. Your local computers are preserved." = "Could not read synchronization data. Your local computers are preserved.";
+"The synchronization storage limit was reached. Your changes remain on this device." = "The synchronization storage limit was reached. Your changes remain on this device.";
+"Could not save the storage setting. Your current storage choice is preserved." = "Could not save the storage setting. Your current storage choice is preserved.";
+"Saved computer preferences can sync through iCloud. Passwords and SSH keys remain in this device’s Keychain." = "Saved computer preferences can sync through iCloud. Passwords and SSH keys remain in this device’s Keychain.";
+"Computers synchronized, but credentials could not sync. Retry when Keychain is available." = "Computers synchronized, but credentials could not sync. Retry when Keychain is available.";
+"Re-enter credentials for the edited computer before syncing again." = "Re-enter credentials for the edited computer before syncing again.";
+
+"Unable to Switch Display" = "Unable to Switch Display";
+
+"Switching Display" = "Switching Display";
+
+"The display switch was not confirmed. Try again." = "The display switch was not confirmed. Try again.";
+"Image Compression" = "Image Compression";
+"Image Compression: %@" = "Image Compression: %@";
+"Retry" = "Retry";
+"Always" = "Always";
+"Only for Remote Connections" = "Only for Remote Connections";
+"Never" = "Never";
+"Changing Image Resolution…" = "Changing Image Resolution…";
+"Unable to Change Image Compression" = "Unable to Change Image Compression";
+"The image compression change was not confirmed. Try again." = "The image compression change was not confirmed. Try again.";
+"Image compression halves the width and height. Remote-only keeps full resolution on the same LAN or when the network route cannot be determined." = "Image compression halves the width and height. Remote-only keeps full resolution on the same LAN or when the network route cannot be determined.";
+"Mirror to External Display" = "Mirror to External Display";
+
+// Native Shortcuts
+"Shortcuts" = "Shortcuts";
+"Show in Shortcuts" = "Show in Shortcuts";
+"Shortcut Alias" = "Shortcut Alias";
+"Only the alias you choose is shared with Shortcuts. Connection details and passwords stay in AetherScreens." = "Only the alias you choose is shared with Shortcuts. Connection details and passwords stay in AetherScreens.";
+"Enter a shortcut alias of 1–80 characters without control characters." = "Enter a shortcut alias of 1–80 characters without control characters.";
+"Too many computers are enabled in Shortcuts. Disable one and try again." = "Too many computers are enabled in Shortcuts. Disable one and try again.";
+
+// Quick Connect Widgets
+"Widgets" = "Widgets";
+"Show in Widgets" = "Show in Widgets";
+"Widget Alias" = "Widget Alias";
+"Only the alias you choose is shared with Widgets. Connection details and passwords stay in AetherScreens." = "Only the alias you choose is shared with Widgets. Connection details and passwords stay in AetherScreens.";
+"Enter a Widget alias of 1–80 characters without control characters." = "Enter a Widget alias of 1–80 characters without control characters.";
+"Widgets are unavailable. Open the app and try again." = "Widgets are unavailable. Open the app and try again.";
+"This Widget link is invalid." = "This Widget link is invalid.";
+"This computer is no longer enabled for Widgets." = "This computer is no longer enabled for Widgets.";
+"Connection settings were saved, but Widgets were not updated. Please try again." = "Connection settings were saved, but Widgets were not updated. Please try again.";
+
+// Apple Curtain console visibility
+"Hide Remote Console" = "Hide Remote Console";
+"Restore Remote Console" = "Restore Remote Console";
+"Hiding remote console…" = "Hiding remote console…";
+"Restoring remote console…" = "Restoring remote console…";
+"Remote console hidden. Check the Mac’s display before relying on privacy." = "Remote console hidden. Check the Mac’s display before relying on privacy.";
+"The remote console change timed out. Its state is unconfirmed." = "The remote console change timed out. Its state is unconfirmed.";
+"The remote console change failed. Its state is unconfirmed." = "The remote console change failed. Its state is unconfirmed.";
+"Remote console visibility is unconfirmed." = "Remote console visibility is unconfirmed.";
+"Remote console restoration is unconfirmed. Check the Mac before leaving it unattended." = "Remote console restoration is unconfirmed. Check the Mac before leaving it unattended.";
+"Requires an available Remote Management session outside the login window." = "Requires an available Remote Management session outside the login window.";

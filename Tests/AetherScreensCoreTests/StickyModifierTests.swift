@@ -5,7 +5,7 @@ import XCTest
 final class StickyModifierTests: XCTestCase {
 
     func testObserveModeClearsAndRejectsStickyModifiers() {
-        let vm = SessionViewModel(device: RemoteDevice(name: "Observe QA", host: "localhost"), password: nil)
+        let vm = TestSession.make(device: RemoteDevice(name: "Observe QA", host: "localhost"), password: nil)
         vm.cycleCmd()
         vm.isKeyboardVisible = true
         vm.isObserveOnly = true
@@ -24,7 +24,7 @@ final class StickyModifierTests: XCTestCase {
 
     func testModifierThreeStateTransitions() {
         let device = RemoteDevice(name: "Test Mac", host: "127.0.0.1")
-        let vm = SessionViewModel(device: device, password: nil)
+        let vm = TestSession.make(device: device, password: nil)
 
         // Initial state: inactive
         XCTAssertEqual(vm.cmdState, .inactive)
@@ -48,7 +48,7 @@ final class StickyModifierTests: XCTestCase {
 
     func testReleaseAllModifiers() {
         let device = RemoteDevice(name: "Test Mac", host: "127.0.0.1")
-        let vm = SessionViewModel(device: device, password: nil)
+        let vm = TestSession.make(device: device, password: nil)
 
         vm.cycleCmd()
         vm.cycleOption()

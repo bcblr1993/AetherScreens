@@ -1,4 +1,5 @@
 import SwiftUI
+import AetherScreensWidgetSupport
 
 /// Sidebar navigation category for macOS and iPadOS
 public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
@@ -23,6 +24,7 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
 /// Fully optimized for both iOS (iPhone & iPad) and macOS (Apple Silicon Mac).
 public struct DeviceListView: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = DeviceListViewModel()
     @State private var selectedCategory: DeviceCategory = .all
     @State private var showingAddSheet = false
@@ -33,13 +35,26 @@ public struct DeviceListView: View {
     @State private var editingDevice: RemoteDevice?
     @State private var showingLogs = false
     @State private var pendingConnectionLinks: [ConnectionLink.Resolved] = []
+    @Binding private var incomingURLs: [URL]
+    @ObservedObject private var shortcutRequests = ShortcutLaunchQueue.shared
+    @ObservedObject private var widgetRequests = ShortcutLaunchQueue.widgets
     @ObservedObject private var sessionRegistry = SessionRegistry.shared
+    @ObservedObject private var curtainRecoveryStore = CurtainRecoveryStore.shared
 
     private let columns = [
         GridItem(.adaptive(minimum: 230, maximum: 320), spacing: 16)
     ]
 
-    public init() {}
+    public init() {
+        _incomingURLs = .constant([])
+        _ = InputDiagnostics.enabled
+    }
+
+    public init(viewModel: DeviceListViewModel, incomingURLs: Binding<[URL]>) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+        _incomingURLs = incomingURLs
+        _ = InputDiagnostics.enabled
+    }
 
     public var body: some View {
         Group {
@@ -108,7 +123,22 @@ public struct DeviceListView: View {
         #endif
         }
         .environment(\.locale, languageSettings.locale)
-        .onOpenURL(perform: receiveConnectionLink)
+        .onAppear {
+            if scenePhase == .active { viewModel.librarySync.resumeAutomaticSynchronization() }
+            openIncomingURLs()
+            openPendingShortcut()
+        }
+        .onChange(of: incomingURLs) { _, _ in openIncomingURLs() }
+        .onChange(of: shortcutRequests.revision) { _, _ in openPendingShortcut() }
+        .onChange(of: widgetRequests.revision) { _, _ in openPendingShortcut() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                viewModel.librarySync.resumeAutomaticSynchronization()
+                openIncomingURLs()
+                openPendingConnectionLink()
+            }
+            else { viewModel.librarySync.suspendAutomaticSynchronization() }
+        }
     }
 
     // MARK: - Sidebar (macOS)
@@ -149,6 +179,29 @@ public struct DeviceListView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 dashboardHeader
+                ForEach(curtainRecoveryStore.warnings) { warning in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(warning.device.name).font(.headline)
+                                Text(warning.device.host).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button(AppLocalization.string("Reconnect")) {
+                                reconnectCurtainWarning(warning)
+                            }
+                            .disabled(!viewModel.devices.contains(where: { warning.id.matches($0) }))
+                        }
+                        Text(AppLocalization.string("Remote console restoration is unconfirmed. Check the Mac before leaving it unattended."))
+                            .font(.caption)
+                    }
+                    .padding(12)
+                    .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal)
+                    .accessibilityIdentifier("library-curtain-recovery-warning")
+                }
                 // Error Notification Banner
                 if let err = viewModel.errorMessage {
                     HStack {
@@ -489,9 +542,26 @@ public struct DeviceListView: View {
         presentSession(session)
     }
 
+    private func reconnectCurtainWarning(_ warning: CurtainRecoveryStore.Warning) {
+        guard let device = viewModel.devices.first(where: { warning.id.matches($0) }) else { return }
+        if let id = sessionRegistry.reusableSessionID(for: device), let session = sessionRegistry.session(for: id) {
+            switch session.client.state {
+            case .disconnected, .failed: session.reconnectSession()
+            default: break
+            }
+            #if os(macOS)
+            SessionWindowManager.shared.focus(id)
+            #else
+            activeSessionVM = sessionRegistry.activate(id)
+            #endif
+        } else {
+            openSession(for: device)
+        }
+    }
+
     private var quickConnectSheet: some View {
         AddDeviceSheet(viewModel: viewModel) { request, saveComputer in
-            pendingQuickSession = viewModel.prepareQuickSession(request, saveComputer: saveComputer)
+            pendingQuickSession = try viewModel.prepareQuickSession(request, saveComputer: saveComputer)
         }
     }
 
@@ -504,6 +574,23 @@ public struct DeviceListView: View {
     }
 
     private func receiveConnectionLink(_ url: URL) {
+        if url == WidgetLaunchURL.libraryURL { return }
+        if URLComponents(url: url, resolvingAgainstBaseURL: false)?.host?.lowercased() == "widget" {
+            guard let id = WidgetLaunchURL.parse(url), let catalog = viewModel.widgetCatalogStore else {
+                viewModel.errorMessage = "This Widget link is invalid."
+                return
+            }
+            viewModel.reload()
+            do {
+                try widgetRequests.enqueue(deviceID: id, catalog: catalog.freshLaunchCatalog())
+                openPendingShortcut()
+            } catch ShortcutLaunchQueue.Failure.notEnabled {
+                viewModel.errorMessage = "This computer is no longer enabled for Widgets."
+            } catch {
+                viewModel.errorMessage = "Widgets are unavailable. Open the app and try again."
+            }
+            return
+        }
         do {
             let link = try ConnectionLink(url: url)
             viewModel.reload()
@@ -518,6 +605,8 @@ public struct DeviceListView: View {
     }
 
     private func openPendingConnectionLink() {
+        guard scenePhase == .active else { return }
+        openPendingShortcut()
         guard !showingAddSheet, !showingQuickConnectSheet, !showingSettingsSheet,
               !showingLogs, editingDevice == nil, pendingQuickSession == nil,
               !pendingConnectionLinks.isEmpty else { return }
@@ -535,9 +624,55 @@ public struct DeviceListView: View {
         #endif
     }
 
+    private func openIncomingURLs() {
+        guard scenePhase == .active, !incomingURLs.isEmpty else { return }
+        let urls = incomingURLs
+        incomingURLs.removeAll()
+        for url in urls { receiveConnectionLink(url) }
+    }
+
+    private func openPendingShortcut() {
+        let draftsClosed = !showingAddSheet && !showingQuickConnectSheet && !showingSettingsSheet
+            && !showingLogs && editingDevice == nil && pendingQuickSession == nil
+            && pendingConnectionLinks.isEmpty
+        #if os(macOS)
+        let ready = draftsClosed
+        #else
+        // Do not dismiss an active canvas: it may have authentication, trust
+        // or editing prompts. Returning to the library preserves its socket
+        // and retries the request through the existing onDismiss handler.
+        let ready = draftsClosed && activeSessionVM == nil
+        #endif
+        let shortcut = shortcutRequests.takeNext(
+            isActive: scenePhase == .active, isReady: ready,
+            catalog: ShortcutCatalogReader.standard().read(),
+            availableIDs: Set(viewModel.devices.map(\.id)))
+        let widgetSnapshot = viewModel.widgetCatalogStore == nil ? nil : viewModel.verifiedWidgetSavedDevices()
+        let widget = shortcut == nil ? widgetRequests.takeNextWidget(
+            isActive: scenePhase == .active, isReady: ready,
+            catalog: viewModel.widgetCatalogStore?.freshLaunchCatalog() ?? ShortcutCatalog(),
+            verifiedAvailableIDs: widgetSnapshot.map { Set($0.map(\.id)) }) : nil
+        guard let request = shortcut ?? widget else { return }
+        let selectedDevice = widget != nil
+            ? widgetSnapshot?.first { $0.id == request.deviceID }
+            : viewModel.savedDevice(withID: request.deviceID)
+        guard let device = selectedDevice else { return }
+        // Match the retained session before looking up any credential.
+        if let id = sessionRegistry.reusableSessionID(for: device) {
+            #if os(macOS)
+            SessionWindowManager.shared.focus(id)
+            #else
+            activeSessionVM = sessionRegistry.activate(id)
+            #endif
+            return
+        }
+        let session = SessionViewModel(device: device, password: viewModel.passwordForSavedDevice(device))
+        presentSession(session)
+    }
+
     private func presentSession(_ session: SessionViewModel, reuseExisting: Bool = true) {
         #if os(macOS)
-        SessionWindowManager.shared.open(session)
+        SessionWindowManager.shared.open(session, reuseExisting: reuseExisting)
         #else
         let id = sessionRegistry.register(session, reuseExisting: reuseExisting)
         activeSessionVM = sessionRegistry.activate(id)
@@ -599,6 +734,7 @@ public struct TailscaleSettingsSheet: View {
     public var body: some View {
         NavigationStack {
             Form {
+                DeviceLibraryStorageSection(controller: viewModel.librarySync)
                 Section(header: Text(AppLocalization.string("Language"))) {
                     Picker(AppLocalization.string("App Language"), selection: $languageSettings.language) {
                         ForEach(AppLanguage.allCases) { language in
@@ -631,7 +767,7 @@ public struct TailscaleSettingsSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(AppLocalization.string("Tailscale Settings"))
+            .navigationTitle(AppLocalization.string("Settings"))
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             #endif

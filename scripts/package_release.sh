@@ -3,6 +3,15 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR"
+# Inspection builds stop before loading any signing configuration.
+if [ "${1:-}" = "--compile-only" ]; then
+    shift
+    exec /usr/bin/python3 "$DIR/scripts/build_macos_app.py" "$@"
+fi
+if [ "$#" -ne 0 ]; then
+    echo "Usage: package_release.sh [--compile-only build-options]" >&2
+    exit 2
+fi
 if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
@@ -10,47 +19,41 @@ VERSION="${AETHERSCREENS_VERSION:-1.0.0}"
 BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-1}"
 SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
 NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
+HOST_PROFILE="${AETHERSCREENS_MAC_HOST_PROFILE:?Set a provisioning profile authorizing the host production App Group}"
+WIDGET_PROFILE="${AETHERSCREENS_MAC_WIDGET_PROFILE:?Set a provisioning profile authorizing the Widget production App Group}"
 OUTPUT="$DIR/build/release"
 mkdir -p "$OUTPUT"
 STAGE="$(mktemp -d "$OUTPUT/staging.XXXXXX")"
-trap 'rm -rf "$STAGE"' EXIT
+NATIVE_PARENT="$(mktemp -d "$OUTPUT/native.XXXXXX")"
+trap 'rm -rf "$STAGE" "$NATIVE_PARENT"' EXIT
 
 swift test
-swift build -c release --arch arm64
-RELEASE_BIN="$(swift build -c release --arch arm64 --show-bin-path)/AetherScreensApp"
+NATIVE_BUILD="$NATIVE_PARENT/build"
+/usr/bin/python3 "$DIR/scripts/build_macos_app.py" --build-root "$NATIVE_BUILD" --version "$VERSION" --build-number "$BUILD_NUMBER"
 APP_DIR="$STAGE/AetherScreens.app"
-mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
-cp "$RELEASE_BIN" "$APP_DIR/Contents/MacOS/AetherScreens"
-cp assets/branding/AppIcon-v1.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
-cp assets/licenses/BigInt-MIT.txt "$APP_DIR/Contents/Resources/BigInt-MIT.txt"
-ditto "$(dirname "$RELEASE_BIN")/AetherScreens_AetherScreensCore.bundle" "$APP_DIR/Contents/Resources/AetherScreens_AetherScreensCore.bundle"
-cp -R assets/localization/*.lproj "$APP_DIR/Contents/Resources/"
-cat > "$APP_DIR/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>CFBundleDevelopmentRegion</key><string>en</string>
-<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array>
-<key>CFBundleExecutable</key><string>AetherScreens</string>
-<key>CFBundleIconFile</key><string>AppIcon</string>
-<key>CFBundleIdentifier</key><string>com.aethernative.aetherscreens</string>
-<key>CFBundleName</key><string>AetherScreens</string>
-<key>CFBundleURLTypes</key><array>
-<dict><key>CFBundleURLName</key><string>com.aethernative.aetherscreens.connection</string><key>CFBundleURLSchemes</key><array><string>aetherscreens</string></array><key>CFBundleTypeRole</key><string>Viewer</string></dict>
-<dict><key>CFBundleURLName</key><string>com.aethernative.aetherscreens.vnc</string><key>CFBundleURLSchemes</key><array><string>vnc</string></array><key>CFBundleTypeRole</key><string>Viewer</string><key>LSHandlerRank</key><string>Alternate</string></dict>
-</array>
-<key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>$VERSION</string>
-<key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
-<key>LSMinimumSystemVersion</key><string>14.0</string>
-<key>NSHighResolutionCapable</key><true/>
-<key>NSPrincipalClass</key><string>NSApplication</string>
-<key>NSHumanReadableCopyright</key><string>Copyright © 2026 Aether Native.</string>
-<key>NSLocalNetworkUsageDescription</key><string>Discover nearby Macs with Screen Sharing enabled.</string>
-<key>NSBonjourServices</key><array><string>_rfb._tcp</string><string>_apple-sas._tcp</string></array>
-</dict></plist>
-PLIST
-codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP_DIR"
+ditto "$NATIVE_BUILD/DerivedData/Build/Products/Release/AetherScreens.app" "$APP_DIR"
+WIDGET_DIR="$APP_DIR/Contents/PlugIns/AetherScreensWidgets.appex"
+cp "$HOST_PROFILE" "$APP_DIR/Contents/embedded.provisionprofile"
+cp "$WIDGET_PROFILE" "$WIDGET_DIR/Contents/embedded.provisionprofile"
+# Sign the native runtime libraries before their extension/host containers.
+for CONTAINER in "$APP_DIR" "$WIDGET_DIR"; do
+    if [ -d "$CONTAINER/Contents/Frameworks" ]; then
+        for OBJECT in "$CONTAINER/Contents/Frameworks/"*; do
+            [ -e "$OBJECT" ] || continue
+            case "$OBJECT" in
+                *.framework|*.dylib)
+                    codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$OBJECT"
+                    ;;
+                *)
+                    echo "Unsupported nested runtime object in release bundle" >&2
+                    exit 2
+                    ;;
+            esac
+        done
+    fi
+done
+codesign --force --options runtime --timestamp --entitlements "$DIR/assets/AetherScreensMacReleaseWidgets.entitlements" --sign "$SIGNING_IDENTITY" "$WIDGET_DIR"
+codesign --force --options runtime --timestamp --entitlements "$DIR/assets/AetherScreensMacReleaseHost.entitlements" --sign "$SIGNING_IDENTITY" "$APP_DIR"
 codesign --verify --deep --strict "$APP_DIR"
 NOTARY_ZIP="$STAGE/notarization.zip"
 ditto -c -k --keepParent "$APP_DIR" "$NOTARY_ZIP"

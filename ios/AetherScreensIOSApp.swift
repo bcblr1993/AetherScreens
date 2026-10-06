@@ -5,7 +5,7 @@ import AetherScreensCore
 struct AetherScreensIOSApp: App {
     var body: some Scene {
         WindowGroup {
-            DeviceListView()
+            ForegroundLibraryRootView()
                 .tint(.blue)
         }
     }

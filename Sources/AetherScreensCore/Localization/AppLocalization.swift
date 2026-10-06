@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
+public enum AppLanguage: String, Codable, CaseIterable, Identifiable, Sendable {
     case system
     case english = "en"
     case simplifiedChinese = "zh-Hans"
@@ -20,7 +20,13 @@ public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 public enum AppLocalization {
     public static let preferenceKey = "com.aethernative.aetherscreens.language"
     private static let lock = NSLock()
+    #if AETHERSCREENS_QA_ISOLATION
+    // Isolated tests inject preferences into AppLanguageSettings; localization
+    // itself must not initialize or read the user's standard preferences.
+    private static var selection = AppLanguage.system
+    #else
     private static var selection = AppLanguage(rawValue: UserDefaults.standard.string(forKey: preferenceKey) ?? "system") ?? .system
+    #endif
 
     public static var language: AppLanguage {
         lock.lock()
@@ -126,10 +132,25 @@ public enum AppLocalization {
 public final class AppLanguageSettings: ObservableObject {
     public static let shared = AppLanguageSettings()
     private let defaults: UserDefaults
+    private var preferenceObserver: AnyCancellable?
+    private var applyingPreference = false
     @Published public var language: AppLanguage {
         didSet {
             AppLocalization.select(language)
-            defaults.set(language.rawValue, forKey: AppLocalization.preferenceKey)
+            guard !applyingPreference else { return }
+            let changed = DevicePreferenceStorage.withLock {
+                // A launch preset supplies the initial language. A later manual
+                // selection must also become the value read by preference observers.
+                var arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+                let hadLaunchOverride = arguments.removeValue(forKey: AppLocalization.preferenceKey) != nil
+                if hadLaunchOverride {
+                    defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+                }
+                guard defaults.string(forKey: AppLocalization.preferenceKey) != language.rawValue else { return hadLaunchOverride }
+                defaults.set(language.rawValue, forKey: AppLocalization.preferenceKey)
+                return true
+            }
+            if changed { DevicePreferenceStorage.notify(defaults, origin: .local) }
         }
     }
     public var locale: Locale { Locale(identifier: AppLocalization.identifier(for: language)) }
@@ -138,5 +159,18 @@ public final class AppLanguageSettings: ObservableObject {
         self.defaults = defaults
         self.language = AppLanguage(rawValue: defaults.string(forKey: AppLocalization.preferenceKey) ?? "system") ?? .system
         AppLocalization.select(language)
+        preferenceObserver = NotificationCenter.default.publisher(for: DevicePreferenceStorage.didChange)
+            .filter { ($0.object as? UserDefaults) === defaults }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let current = DevicePreferenceStorage.withLock {
+                    AppLanguage(rawValue: defaults.string(forKey: AppLocalization.preferenceKey) ?? "system") ?? .system
+                }
+                guard self.language != current else { return }
+                self.applyingPreference = true
+                self.language = current
+                self.applyingPreference = false
+            }
     }
 }

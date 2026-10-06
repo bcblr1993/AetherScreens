@@ -1,0 +1,81 @@
+# Internal native AppIntents compilation target; release packaging is gated separately.
+name: AetherScreensNativeShortcutsQA
+options:
+  bundleIdPrefix: com.aethernative
+  developmentLanguage: en
+packages:
+  AetherScreens:
+    path: ..
+targets:
+  AetherScreensNativeShortcutsQA:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ../Sources/AetherScreensApp/main.swift
+      - path: ../Sources/AetherScreensAppIntents/SavedComputerIntents.swift
+      - path: ../assets/localization
+    dependencies:
+      - package: AetherScreens
+        product: AetherScreensCore
+      - sdk: AppIntents.framework
+      - target: AetherScreensWidgets
+        embed: true
+    info:
+      path: build/NativeShortcutsQA-Info.plist
+      properties:
+        AetherScreensShortcutCatalogSuite: com.aethernative.aetherscreens.shortcutsqa
+        AetherScreensWidgetGroupIdentifier: group.com.aethernative.aetherscreens.widgetqa
+        CFBundleDisplayName: AetherScreens Shortcuts QA
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations: [en, zh-Hans]
+        NSPrincipalClass: NSApplication
+        NSLocalNetworkUsageDescription: Discover nearby Macs with Screen Sharing enabled.
+        NSBonjourServices: [_rfb._tcp, _apple-sas._tcp]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.aethernative.aetherscreens.connection
+            CFBundleURLSchemes: [aetherscreens]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.shortcutsqa
+        SWIFT_VERSION: "5.9"
+        OTHER_SWIFT_FLAGS: "$(inherited) -parse-as-library"
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "26"
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_ENTITLEMENTS: ../assets/AetherScreensWidgetQAHost.entitlements
+  AetherScreensWidgets:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: ../Sources/AetherScreensWidgets
+      - path: ../assets/widget-localization
+    dependencies:
+      - sdk: WidgetKit.framework
+      - sdk: AppIntents.framework
+      - package: AetherScreens
+        product: AetherScreensWidgetSupport
+    info:
+      path: build/AetherScreensWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: AetherScreens Widgets
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh-Hans]
+        AetherScreensWidgetGroupIdentifier: group.com.aethernative.aetherscreens.widgetqa
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.shortcutsqa.widgets
+        CODE_SIGN_ENTITLEMENTS: ../assets/AetherScreensMacWidgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        ENABLE_APP_SANDBOX: YES
+        SKIP_INSTALL: YES
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "26"
+        SWIFT_VERSION: "5.9"
+        CODE_SIGNING_ALLOWED: NO

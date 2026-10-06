@@ -197,10 +197,196 @@ final class ZRLETransportTests: XCTestCase {
                                              expectedReason: "Invalid Zlib rectangle size")
     }
 
+    func testOutOfBoundsRawRectangleFailsBeforeReadingPixels() throws {
+        // The server keeps the socket open and supplies no pixel payload.
+        // Geometry must fail immediately instead of waiting for eight bytes.
+        try assertUnsupportedPacketPreservesFramebuffer(Self.rectangle(.raw, x: 3, y: 1, width: 2, height: 1, payload: Data()),
+                                                        expectedReason: "Invalid Raw rectangle size")
+    }
+
+    func testOutOfBoundsRawPixelsCannotPublishAClippedFrame() throws {
+        try assertUnsupportedPacketPreservesFramebuffer(Self.rectangle(.raw, x: 3, y: 1, width: 2, height: 1,
+                                                                         payload: Data([61, 62, 63, 255, 71, 72, 73, 255])),
+                                                        expectedReason: "Invalid Raw rectangle size")
+    }
+
+    func testRawRectangleAtBottomRightEdgePreservesPixelsAndRequestsNextUpdate() throws {
+        let replacement = Data([61, 62, 63, 255, 71, 72, 73, 255])
+        try assertRawSequence(Self.rectangle(.raw, x: 2, y: 1, width: 2, height: 1, payload: replacement),
+                              replacement: replacement)
+    }
+
+    func testZeroAreaRawAtFramebufferBoundaryKeepsTheNextUpdateReadable() throws {
+        try assertRawSequence(Self.rectangle(.raw, x: 4, y: 2, width: 0, height: 0, payload: Data()),
+                              replacement: nil)
+    }
+
+    private func assertRawSequence(_ packet: Data, replacement: Data?) throws {
+        let ready = expectation(description: "Raw geometry listener ready")
+        let original = Data(Array(repeating: [UInt8(4), 5, 6, 255], count: 8).flatMap { $0 })
+        var expected = Array(original)
+        if let replacement { expected.replaceSubrange(24..<32, with: replacement) }
+        let marker = "raw-geometry-sequence-complete"
+        var boundary = Data([RFBConstants.ServerMessageType.serverCutText.rawValue, 0, 0, 0])
+        Self.append(UInt32(marker.utf8.count), to: &boundary)
+        boundary.append(contentsOf: marker.utf8)
+        // Each packet is released only after a complete client update request.
+        // Receiving the marker proves the request after the second frame arrived.
+        let server = try ZRLEWireServer(ready: { ready.fulfill() }) {
+            [Self.rectangle(.raw, x: 0, y: 0, width: 4, height: 2, payload: original), packet, boundary]
+        }
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue)
+        defer { client.disconnect() }
+        let completed = expectation(description: "Raw sequence protocol boundary received")
+        completed.assertForOverFulfill = true
+        let frames = ZRLEFrameSnapshots()
+        let framebuffer = client.framebuffer
+        client.onFrameUpdated = {
+            let pixels = framebuffer.pixels
+            let count = frames.record(pixels)
+            XCTAssertLessThanOrEqual(count, 2)
+            XCTAssertEqual(pixels, count == 1 ? Array(original) : expected)
+        }
+        client.onClipboardReceived = { text in
+            XCTAssertEqual(text, marker)
+            XCTAssertEqual(frames.snapshots, [Array(original), expected])
+            completed.fulfill()
+        }
+        client.onStateChanged = { if case .failed(let reason) = $0 { XCTFail(reason) } }
+        client.connect()
+        wait(for: [completed], timeout: 5)
+        XCTAssertEqual(frames.snapshots, [Array(original), expected])
+        XCTAssertEqual(client.framebuffer.pixels, expected)
+        XCTAssertEqual(client.state, .connected)
+    }
+
+    func testUnknownFramebufferEncodingFailsBeforeParsingPayloadAsNextRectangle() throws {
+        let unknown = RFBConstants.EncodingType(rawValue: 2_147_483_646)
+        let forged = Self.rectangle(.raw, x: 0, y: 0, width: 4, height: 2,
+                                    payload: Data(repeating: 99, count: 4 * 2 * 4))
+        // The unknown body deliberately resembles the next rectangle. Its
+        // length is unknown, so skipping only its header loses framing.
+        var packet = Self.rectangle(unknown, x: 0, y: 0, width: 4, height: 2,
+                                    payload: Data(forged.dropFirst(4)))
+        packet[3] = 2
+        try assertUnsupportedPacketPreservesFramebuffer(packet,
+            expectedReason: "Unsupported framebuffer encoding: \(unknown.rawValue)")
+    }
+
+    func testUnknownServerMessageFailsBeforeParsingPayloadAsFramebufferUpdate() throws {
+        let unknown: UInt8 = 126
+        var packet = Data([unknown])
+        // A body with a valid message prefix must not become a new message.
+        packet.append(Self.rectangle(.raw, x: 0, y: 0, width: 4, height: 2,
+                                     payload: Data(repeating: 88, count: 4 * 2 * 4)))
+        try assertUnsupportedPacketPreservesFramebuffer(packet,
+            expectedReason: "Unsupported server message type: \(unknown)")
+    }
+
+    func testSupportedBellAndMixedLosslessFramebufferUpdatesRemainConnected() throws {
+        let ready = expectation(description: "Supported message listener ready")
+        let original = Data(Array(repeating: [UInt8(4), 5, 6, 255], count: 8).flatMap { $0 })
+        var afterZlib = Array(original)
+        afterZlib.replaceSubrange(4..<8, with: [UInt8(61), 62, 63, 255])
+        var afterCopy = afterZlib
+        afterCopy.replaceSubrange(0..<4, with: [UInt8(61), 62, 63, 255])
+        var afterZRLE = afterCopy
+        afterZRLE.replaceSubrange(16..<20, with: [UInt8(71), 72, 73, 255])
+        let expectedSnapshots = [Array(original), afterZlib, afterCopy, afterZRLE]
+        let completionMarker = "supported-frame-sequence-complete"
+        let server = try ZRLEWireServer(ready: { ready.fulfill() }) {
+            var first = Data([RFBConstants.ServerMessageType.bell.rawValue])
+            first.append(Self.rectangle(.raw, x: 0, y: 0, width: 4, height: 2, payload: original))
+            // The fixture sends this boundary only after the request following
+            // the fourth frame. Its callback never touches a system pasteboard.
+            var boundary = Data([RFBConstants.ServerMessageType.serverCutText.rawValue, 0, 0, 0])
+            Self.append(UInt32(completionMarker.utf8.count), to: &boundary)
+            boundary.append(contentsOf: completionMarker.utf8)
+            return [
+                first,
+                Self.rectangle(.zlib, x: 1, y: 0, width: 1, height: 1,
+                               compressed: try ZRLETestDeflater().compress(Data([61, 62, 63, 255]))),
+                Self.rectangle(.copyRect, x: 0, y: 0, width: 1, height: 1, payload: Data([0, 1, 0, 0])),
+                Self.rectangle(.zrle, x: 0, y: 1, width: 1, height: 1,
+                               compressed: try ZRLETestDeflater().compress(Data([1, 71, 72, 73]))),
+                boundary
+            ]
+        }
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue)
+        defer { client.disconnect() }
+        let delivered = expectation(description: "Final supported pixel update decoded correctly")
+        delivered.assertForOverFulfill = true
+        let completed = expectation(description: "Supported sequence protocol boundary received")
+        completed.assertForOverFulfill = true
+        let observations = ZRLEFrameSnapshots()
+        let framebuffer = client.framebuffer
+        client.onFrameUpdated = {
+            let pixels = framebuffer.pixels
+            let frame = observations.record(pixels)
+            guard frame <= expectedSnapshots.count else {
+                XCTFail("Unexpected framebuffer callback after the supported sequence")
+                return
+            }
+            let expected = expectedSnapshots[frame - 1]
+            XCTAssertEqual(pixels, expected, "Supported frame \(frame) must have its exact ordered snapshot")
+            if frame == expectedSnapshots.count, pixels == expected { delivered.fulfill() }
+        }
+        client.onClipboardReceived = { marker in
+            XCTAssertEqual(marker, completionMarker)
+            XCTAssertEqual(observations.snapshots, expectedSnapshots,
+                           "Bell and the completion boundary must not publish extra frame callbacks")
+            completed.fulfill()
+        }
+        client.onStateChanged = { if case .failed(let reason) = $0 { XCTFail(reason) } }
+        client.connect()
+        wait(for: [delivered, completed], timeout: 5)
+        XCTAssertEqual(observations.snapshots, expectedSnapshots)
+        XCTAssertEqual(client.framebuffer.pixels, afterZRLE)
+        XCTAssertEqual(client.state, .connected)
+        let offer = try XCTUnwrap(server.offers.last)
+        for encoding in [RFBConstants.EncodingType.raw, .zlib, .copyRect, .zrle] {
+            XCTAssertTrue(offer.contains(encoding.rawValue))
+        }
+    }
+
     func testOversizedAnnouncedLengthFailsBeforeReadingPayload() throws {
         var packet = Self.rectangle(.zrle, x: 0, y: 0, width: 4, height: 2, payload: Data())
         packet.append(contentsOf: [255, 255, 255, 255])
         try assertFailurePreservesFramebuffer(packet, expectedReason: "Invalid ZRLE compressed length")
+    }
+
+    private func assertUnsupportedPacketPreservesFramebuffer(_ packet: Data, expectedReason: String) throws {
+        let ready = expectation(description: "Unsupported packet listener ready")
+        let original = Data(Array(repeating: [UInt8(4), 5, 6, 255], count: 8).flatMap { $0 })
+        let server = try ZRLEWireServer(ready: { ready.fulfill() }) {
+            [Self.rectangle(.raw, x: 0, y: 0, width: 4, height: 2, payload: original), packet]
+        }
+        defer { server.stop() }
+        wait(for: [ready], timeout: 3)
+        let client = RFBClient(host: "127.0.0.1", port: try XCTUnwrap(server.listener.port).rawValue)
+        defer { client.disconnect() }
+        let first = expectation(description: "Baseline framebuffer received")
+        let failed = expectation(description: "Unsupported packet terminates the connection")
+        let frames = ZRLEFrameCounter()
+        client.onFrameUpdated = {
+            frames.increment()
+            if frames.value == 1 { first.fulfill() }
+        }
+        client.onStateChanged = { state in
+            if case .failed(let reason) = state {
+                XCTAssertEqual(reason, expectedReason)
+                failed.fulfill()
+            }
+        }
+        client.connect()
+        wait(for: [first, failed], timeout: 5)
+        XCTAssertEqual(client.state, .failed(expectedReason))
+        XCTAssertEqual(frames.value, 1, "Unsupported payload must never publish a forged framebuffer")
+        XCTAssertEqual(client.framebuffer.pixels, Array(original), "Unsupported payload must preserve the last complete framebuffer")
     }
 
     private func assertFailurePreservesFramebuffer(_ invalid: Data, expectedReason: String) throws {
@@ -260,6 +446,17 @@ private final class ZRLEFrameCounter: @unchecked Sendable {
     private var count = 0
     func increment() { lock.lock(); count += 1; lock.unlock() }
     var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+}
+
+private final class ZRLEFrameSnapshots: @unchecked Sendable {
+    private let lock = NSLock()
+    private var received: [[UInt8]] = []
+    func record(_ pixels: [UInt8]) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        received.append(pixels)
+        return received.count
+    }
+    var snapshots: [[UInt8]] { lock.lock(); defer { lock.unlock() }; return received }
 }
 
 /// Reads the client's actual pixel-format/encoding/request messages before sending rectangles.

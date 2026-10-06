@@ -1,1 +1,5 @@
 "NSLocalNetworkUsageDescription" = "发现附近的电脑并连接其共享屏幕。";
+"NSMicrophoneUsageDescription" = "使用麦克风在本设备上听写，文字经您确认后才发送到远程电脑。";
+"NSSpeechRecognitionUsageDescription" = "在本设备上识别听写内容，由您确认是否将文字发送到远程电脑。";
+
+"NSFaceIDUsageDescription" = "验证身份后，才将已保存的用户密码输入远程 Mac。";

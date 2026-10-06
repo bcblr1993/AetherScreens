@@ -53,6 +53,164 @@ final class InteractiveAuthAndLoggerTests: XCTestCase {
         try verifyCancelledOldPasswordPrompt(firstMacAccount: false)
     }
 
+    func testWaitingForMacAccountInputDoesNotExpireConnectionDeadline() throws {
+        let ready = expectation(description: "Mac-only listener ready")
+        let requested = expectation(description: "Waiting for account input")
+        let userInputDelay = expectation(description: "User takes longer than the network deadline")
+        let reply = CapturedMacAccountReply()
+        listener = try NWListener(using: .tcp, on: .any)
+        listener?.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener?.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            connection.start(queue: self.queue)
+            connection.send(content: Data(RFBConstants.protocolVersion38.utf8), completion: .contentProcessed { _ in
+                connection.receive(minimumIncompleteLength: 12, maximumLength: 12) { _, _, _, _ in
+                    connection.send(content: Data([1, 30]), completion: .contentProcessed { _ in
+                        // The user has not submitted credentials; hold the socket
+                        // until the client explicitly cancels this test session.
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in
+                            connection.cancel()
+                        }
+                    })
+                }
+            })
+        }
+        listener?.start(queue: queue)
+        wait(for: [ready], timeout: 3)
+        let port = try XCTUnwrap(listener?.port)
+        let client = RFBClient(host: "127.0.0.1", port: port.rawValue)
+        defer { client.disconnect() }
+        client.onRequestMacAccount = { continuation in
+            reply.store(continuation)
+            requested.fulfill()
+        }
+        client.connect()
+        wait(for: [requested], timeout: 3)
+        queue.asyncAfter(deadline: .now() + 21) { userInputDelay.fulfill() }
+        wait(for: [userInputDelay], timeout: 24)
+        XCTAssertNotNil(reply.load())
+        XCTAssertEqual(client.state, .authenticating,
+                       "Waiting for user input must not consume the network handshake deadline")
+    }
+
+    func testWaitingForVNCPasswordDoesNotExpireConnectionDeadline() throws {
+        try verifyWaitingForPassword(ard: false)
+    }
+
+    func testWaitingForARDPasswordDoesNotExpireConnectionDeadline() throws {
+        try verifyWaitingForPassword(ard: true)
+    }
+
+    private func verifyWaitingForPassword(ard: Bool) throws {
+        let ready = expectation(description: "Password listener ready")
+        let requested = expectation(description: "Password requested")
+        let delay = expectation(description: "User still entering password")
+        let reply = CapturedPasswordReply()
+        listener = try NWListener(using: .tcp, on: .any)
+        listener?.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener?.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            connection.start(queue: self.queue)
+            connection.send(content: Data(RFBConstants.protocolVersion38.utf8), completion: .contentProcessed { _ in
+                connection.receive(minimumIncompleteLength: 12, maximumLength: 12) { _, _, _, _ in
+                    connection.send(content: Data([1, ard ? 30 : 2]), completion: .contentProcessed { _ in
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in
+                            connection.send(content: Data(repeating: 42, count: 16), completion: .contentProcessed { _ in
+                                connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in connection.cancel() }
+                            })
+                        }
+                    })
+                }
+            })
+        }
+        listener?.start(queue: queue)
+        wait(for: [ready], timeout: 3)
+        let port = try XCTUnwrap(listener?.port)
+        let client = RFBClient(host: "127.0.0.1", port: port.rawValue,
+                               username: ard ? "qa-account" : nil, connectionTimeoutInterval: 0.5)
+        defer { client.disconnect() }
+        client.onRequestPassword = { continuation in reply.store(continuation); requested.fulfill() }
+        client.connect()
+        wait(for: [requested], timeout: 3)
+        queue.asyncAfter(deadline: .now() + 1) { delay.fulfill() }
+        wait(for: [delay], timeout: 3)
+        XCTAssertNotNil(reply.load())
+        XCTAssertEqual(client.state, .authenticating)
+    }
+
+    func testSubmittedPasswordGetsFreshDeadlineAndStalledServerStillTimesOut() throws {
+        let ready = expectation(description: "VNC listener ready")
+        let requested = expectation(description: "Password requested")
+        let entered = expectation(description: "User finishes entering password")
+        let response = expectation(description: "Server receives challenge response")
+        let oldDeadline = expectation(description: "Original deadline has elapsed")
+        let expired = expectation(description: "Resumed handshake times out")
+        let reply = CapturedPasswordReply()
+        listener = try NWListener(using: .tcp, on: .any)
+        listener?.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener?.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            connection.start(queue: self.queue)
+            connection.send(content: Data(RFBConstants.protocolVersion38.utf8), completion: .contentProcessed { _ in
+                connection.receive(minimumIncompleteLength: 12, maximumLength: 12) { _, _, _, _ in
+                    connection.send(content: Data([1, 2]), completion: .contentProcessed { _ in
+                        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in
+                            connection.send(content: Data(repeating: 42, count: 16), completion: .contentProcessed { _ in
+                                connection.receive(minimumIncompleteLength: 16, maximumLength: 16) { data, _, _, _ in
+                                    XCTAssertEqual(data?.count, 16)
+                                    response.fulfill()
+                                    // Deliberately withhold SecurityResult to exercise the resumed deadline.
+                                    connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in connection.cancel() }
+                                }
+                            })
+                        }
+                    })
+                }
+            })
+        }
+        listener?.start(queue: queue)
+        wait(for: [ready], timeout: 3)
+        let port = try XCTUnwrap(listener?.port)
+        let client = RFBClient(host: "127.0.0.1", port: port.rawValue, connectionTimeoutInterval: 3)
+        defer { client.disconnect() }
+        client.onRequestPassword = { continuation in reply.store(continuation); requested.fulfill() }
+        client.onStateChanged = { state in
+            if case .failed(let message) = state, message.contains("Connection timed out") { expired.fulfill() }
+        }
+        client.connect()
+        wait(for: [requested], timeout: 3)
+        queue.asyncAfter(deadline: .now() + 1) { entered.fulfill() }
+        wait(for: [entered], timeout: 3)
+        try XCTUnwrap(reply.load())("dummy-password")
+        wait(for: [response], timeout: 2)
+        queue.asyncAfter(deadline: .now() + 2.3) { oldDeadline.fulfill() }
+        wait(for: [oldDeadline], timeout: 3)
+        XCTAssertEqual(client.state, .authenticating, "The pre-prompt deadline must not expire the resumed handshake")
+        wait(for: [expired], timeout: 2)
+    }
+
+    func testSilentServerStillUsesConnectionDeadline() throws {
+        let ready = expectation(description: "Silent listener ready")
+        let expired = expectation(description: "Silent peer times out")
+        listener = try NWListener(using: .tcp, on: .any)
+        listener?.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        listener?.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            connection.start(queue: self.queue)
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, _, _ in connection.cancel() }
+        }
+        listener?.start(queue: queue)
+        wait(for: [ready], timeout: 3)
+        let port = try XCTUnwrap(listener?.port)
+        let client = RFBClient(host: "127.0.0.1", port: port.rawValue, connectionTimeoutInterval: 0.5)
+        defer { client.disconnect() }
+        client.onStateChanged = { state in
+            if case .failed(let message) = state, message.contains("Connection timed out") { expired.fulfill() }
+        }
+        client.connect()
+        wait(for: [expired], timeout: 3)
+    }
+
     func testCancelledOldARDPasswordPromptCannotFailAReconnectedClient() throws {
         try verifyCancelledOldPasswordPrompt(firstMacAccount: true)
     }
@@ -139,8 +297,8 @@ final class InteractiveAuthAndLoggerTests: XCTestCase {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let keychain = KeychainStore(serviceName: "test.aetherscreens.credentials.\(UUID().uuidString)",
-                                     legacyServiceName: nil)
-        let store = DeviceStore(userDefaults: defaults, keychain: keychain)
+                                     legacyServiceName: nil, backend: TestKeychainBackend())
+        let store = TestStorage.make(userDefaults: defaults, keychain: keychain)
         let testDev = RemoteDevice(
             name: "Test Auth Mac",
             host: "100.99.99.99",
@@ -152,6 +310,12 @@ final class InteractiveAuthAndLoggerTests: XCTestCase {
         // Clear any old credentials
         store.clearPassword(for: testDev)
         XCTAssertFalse(store.hasPassword(for: testDev))
+
+        // An unsaved/removed target cannot create an orphan Keychain entry.
+        store.updatePassword("synthetic-unsaved-password", for: testDev)
+        XCTAssertFalse(store.hasPassword(for: testDev))
+        XCTAssertNil(keychain.loadPassword(forKey: testDev.id.uuidString))
+        store.addDevice(testDev)
 
         // Update password
         store.updatePassword("secret123", for: testDev)
@@ -248,4 +412,11 @@ private final class CapturedPasswordReply: @unchecked Sendable {
     private var value: (@Sendable (String?) -> Void)?
     func store(_ reply: @escaping @Sendable (String?) -> Void) { lock.lock(); value = reply; lock.unlock() }
     func load() -> (@Sendable (String?) -> Void)? { lock.lock(); defer { lock.unlock() }; return value }
+}
+
+private final class CapturedMacAccountReply: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: (@Sendable (String?, String?) -> Void)?
+    func store(_ reply: @escaping @Sendable (String?, String?) -> Void) { lock.lock(); value = reply; lock.unlock() }
+    func load() -> (@Sendable (String?, String?) -> Void)? { lock.lock(); defer { lock.unlock() }; return value }
 }

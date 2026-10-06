@@ -1,0 +1,17 @@
+"Computer" = "电脑";
+"Open Computer" = "打开电脑";
+"Open a saved computer that you enabled in AetherScreens." = "打开你在 AetherScreens 中为快捷指令启用的已保存电脑。";
+"Open ${target}" = "打开 ${target}";
+"Open request submitted. Return to the library if a session or editor is already open." = "已提交打开请求。如果已有会话或编辑窗口，请先返回电脑列表。";
+
+// Apple Curtain console visibility
+"Hide Remote Console" = "遮屏";
+"Restore Remote Console" = "恢复远端屏幕";
+"Hiding remote console…" = "正在请求遮屏…";
+"Restoring remote console…" = "正在恢复远端屏幕…";
+"Remote console hidden. Check the Mac’s display before relying on privacy." = "远端已报告遮屏。依赖隐私保护前，请检查 Mac 的实体屏幕。";
+"The remote console change timed out. Its state is unconfirmed." = "远端屏幕操作已超时，当前状态尚未确认。";
+"The remote console change failed. Its state is unconfirmed." = "远端屏幕操作失败，当前状态尚未确认。";
+"Remote console visibility is unconfirmed." = "远端屏幕是否可见尚未确认。";
+"Remote console restoration is unconfirmed. Check the Mac before leaving it unattended." = "远端屏幕恢复尚未确认。离开前请检查 Mac。";
+"Requires an available Remote Management session outside the login window." = "需要远端管理会话支持，且远端不处于登录界面。";

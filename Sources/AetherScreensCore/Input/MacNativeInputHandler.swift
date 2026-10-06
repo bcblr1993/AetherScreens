@@ -4,29 +4,17 @@ import CoreGraphics
 #if canImport(AppKit)
 import AppKit
 
-struct NativeScrollAccumulator {
-    private var remainderX: CGFloat = 0
-    private var remainderY: CGFloat = 0
-
-    mutating func consume(dx: CGFloat, dy: CGFloat, precise: Bool) -> [RFBConstants.ButtonMask] {
-        let divisor: CGFloat = precise ? 10 : 1
-        remainderX += dx / divisor
-        remainderY += dy / divisor
-        let ticksX = max(-64, min(64, Int(abs(remainderX) + 1e-9) * (remainderX >= 0 ? 1 : -1)))
-        let ticksY = max(-64, min(64, Int(abs(remainderY) + 1e-9) * (remainderY >= 0 ? 1 : -1)))
-        remainderX -= CGFloat(ticksX)
-        remainderY -= CGFloat(ticksY)
-        return Array(repeating: ticksY > 0 ? .scrollUp : .scrollDown, count: abs(ticksY))
-            + Array(repeating: ticksX > 0 ? .scrollLeft : .scrollRight, count: abs(ticksX))
-    }
-}
-
 /// macOS Native Input View capturing mouse tracking, hover, scroll wheel with momentum, and keyboard events.
 public final class MacNativeInputView: NSView, NSTextInputClient {
     public var onPointerEvent: ((RFBConstants.ButtonMask, UInt16, UInt16) -> Void)?
     public var onKeyEvent: ((Bool, UInt32) -> Void)?
     public var onTextEvent: ((String) -> Void)?
-    public var isPanning = false
+    public var onInputReset: (() -> Void)?
+    public var isPanning = false {
+        didSet {
+            if isPanning && !oldValue { releaseHeldInput() }
+        }
+    }
     public var onPan: ((CGFloat, CGFloat) -> Void)?
     private var lastPanPosition: NSPoint?
     public var remoteSize: CGSize = CGSize(width: 1920, height: 1080)
@@ -35,8 +23,77 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
     private var scrollAccumulator = NativeScrollAccumulator()
     private var markedText = NSAttributedString(string: "")
     private var pressedKeySyms: [UInt16: UInt32] = [:]
+    private var transientKeySyms: [UUID: UInt32] = [:]
+    private var pressedMouseButtons: RFBConstants.ButtonMask = []
+    private var lastPointerPosition: (UInt16, UInt16) = (0, 0)
+    private var inputEnabled = true
+    private var dismantled = false
+    private var inputRevision: UInt64 = 0
+    private var inputReleaseDepth = 0
 
     public override var acceptsFirstResponder: Bool { true }
+
+    public override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { releaseHeldInput() }
+        return resigned
+    }
+
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil || newWindow !== window {
+            inputEnabled = false
+            releaseHeldInput()
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil && !dismantled { inputEnabled = true }
+    }
+
+    /// Clear local ownership before callbacks can rebuild the native view.
+    private func releaseHeldInput() {
+        let keyRelease = onKeyEvent
+        let pointerRelease = onPointerEvent
+        let resetTransport = onInputReset
+        let outermostRelease = inputReleaseDepth == 0
+        inputReleaseDepth += 1
+        defer {
+            if outermostRelease { resetTransport?() }
+            inputReleaseDepth -= 1
+        }
+        var keys = Set(pressedKeySyms.values).union(transientKeySyms.values)
+        for (flag, key) in [(NSEvent.ModifierFlags.command, MacKeyMap.commandLeft),
+                            (.option, MacKeyMap.optionLeft), (.control, MacKeyMap.controlLeft),
+                            (.shift, MacKeyMap.shiftLeft)] where lastModifierFlags.contains(flag) {
+            keys.insert(key)
+        }
+        let buttons = pressedMouseButtons
+        let position = lastPointerPosition
+        inputRevision &+= 1
+        pressedKeySyms.removeAll()
+        transientKeySyms.removeAll()
+        lastModifierFlags = []
+        pressedMouseButtons = []
+        lastPanPosition = nil
+        scrollAccumulator = NativeScrollAccumulator()
+        markedText = NSAttributedString(string: "")
+        for key in keys.sorted() { keyRelease?(false, key) }
+        if !buttons.isEmpty { pointerRelease?([], position.0, position.1) }
+    }
+
+    func invalidateInput() {
+        guard !dismantled else { return }
+        dismantled = true
+        inputEnabled = false
+        releaseHeldInput()
+        onKeyEvent = nil
+        onPointerEvent = nil
+        onTextEvent = nil
+        onPan = nil
+        onInputReset = nil
+    }
 
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -69,63 +126,85 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
     // MARK: - Mouse Events
 
     public override func mouseMoved(with event: NSEvent) {
-        guard !isPanning else { return }
+        guard inputEnabled, !isPanning else { return }
         let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        lastPointerPosition = (x, y)
+        onPointerEvent?(pressedMouseButtons, x, y)
     }
 
     public override func mouseDown(with event: NSEvent) {
+        guard inputEnabled else { return }
+        let revision = inputRevision
         window?.makeFirstResponder(self)
+        guard inputEnabled, inputRevision == revision else { return }
         if isPanning {
             lastPanPosition = convert(event.locationInWindow, from: nil)
             return
         }
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.left], x, y)
+        pressMouseButton(.left, event: event)
     }
 
     public override func mouseUp(with event: NSEvent) {
+        guard inputEnabled else { return }
         if isPanning { lastPanPosition = nil; return }
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        releaseMouseButton(.left, event: event)
     }
 
     public override func mouseDragged(with event: NSEvent) {
+        guard inputEnabled else { return }
         if isPanning {
             let point = convert(event.locationInWindow, from: nil)
+            let revision = inputRevision
             if let old = lastPanPosition { onPan?(point.x - old.x, old.y - point.y) }
+            guard inputEnabled, isPanning, inputRevision == revision else { return }
             lastPanPosition = point
             return
         }
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.left], x, y)
+        pressMouseButton(.left, event: event)
     }
 
     public override func rightMouseDown(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.right], x, y)
+        pressMouseButton(.right, event: event)
     }
 
     public override func rightMouseUp(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        releaseMouseButton(.right, event: event)
     }
 
     public override func otherMouseDown(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.middle], x, y)
+        pressMouseButton(.middle, event: event)
     }
 
     public override func otherMouseUp(with event: NSEvent) {
+        releaseMouseButton(.middle, event: event)
+    }
+
+    private func pressMouseButton(_ button: RFBConstants.ButtonMask, event: NSEvent) {
+        guard inputEnabled, !isPanning else { return }
+        pressedMouseButtons.insert(button)
         let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        lastPointerPosition = (x, y)
+        onPointerEvent?(pressedMouseButtons, x, y)
+    }
+
+    private func releaseMouseButton(_ button: RFBConstants.ButtonMask, event: NSEvent) {
+        guard inputEnabled, !isPanning, pressedMouseButtons.contains(button) else { return }
+        pressedMouseButtons.remove(button)
+        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
+        lastPointerPosition = (x, y)
+        onPointerEvent?(pressedMouseButtons, x, y)
     }
 
     public override func scrollWheel(with event: NSEvent) {
+        guard inputEnabled, !isPanning else { return }
         let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
+        lastPointerPosition = (x, y)
+        let revision = inputRevision
         for mask in scrollAccumulator.consume(dx: event.scrollingDeltaX, dy: event.scrollingDeltaY, precise: event.hasPreciseScrollingDeltas) {
-            onPointerEvent?(mask, x, y)
-            onPointerEvent?([], x, y)
+            guard inputEnabled, !isPanning, inputRevision == revision else { return }
+            onPointerEvent?(pressedMouseButtons.union(mask), x, y)
+            guard inputEnabled, !isPanning, inputRevision == revision else { return }
+            onPointerEvent?(pressedMouseButtons, x, y)
         }
     }
 
@@ -134,41 +213,41 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
     private var lastModifierFlags: NSEvent.ModifierFlags = []
 
     public override func flagsChanged(with event: NSEvent) {
+        guard inputEnabled else { return }
         let current = event.modifierFlags
-        // Command
-        if current.contains(.command) != lastModifierFlags.contains(.command) {
-            onKeyEvent?(current.contains(.command), MacKeyMap.commandLeft)
+        let revision = inputRevision
+        for (flag, key) in [(NSEvent.ModifierFlags.command, MacKeyMap.commandLeft),
+                            (.option, MacKeyMap.optionLeft), (.control, MacKeyMap.controlLeft),
+                            (.shift, MacKeyMap.shiftLeft)] {
+            guard inputEnabled, inputRevision == revision else { return }
+            let down = current.contains(flag)
+            guard down != lastModifierFlags.contains(flag) else { continue }
+            // Own only the transition being sent. A callback can dismantle the
+            // view synchronously and must be able to balance this down then.
+            if down { lastModifierFlags.insert(flag) }
+            else { lastModifierFlags.remove(flag) }
+            onKeyEvent?(down, key)
         }
-        // Option
-        if current.contains(.option) != lastModifierFlags.contains(.option) {
-            onKeyEvent?(current.contains(.option), MacKeyMap.optionLeft)
-        }
-        // Control
-        if current.contains(.control) != lastModifierFlags.contains(.control) {
-            onKeyEvent?(current.contains(.control), MacKeyMap.controlLeft)
-        }
-        // Shift
-        if current.contains(.shift) != lastModifierFlags.contains(.shift) {
-            onKeyEvent?(current.contains(.shift), MacKeyMap.shiftLeft)
-        }
-        lastModifierFlags = current
     }
 
     // MARK: - Keyboard Events
 
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard inputEnabled else { return false }
         guard window?.firstResponder === self, event.modifierFlags.contains(.command) else {
             return super.performKeyEquivalent(with: event)
         }
+        let revision = inputRevision
         flagsChanged(with: event)
+        guard inputEnabled, inputRevision == revision else { return true }
         if let key = mapMacKeyCode(event.keyCode, characters: event.charactersIgnoringModifiers) {
-            onKeyEvent?(true, key)
-            onKeyEvent?(false, key)
+            sendKeyStroke(key)
         }
         return true
     }
 
     public override func keyDown(with event: NSEvent) {
+        guard inputEnabled else { return }
         let printable = event.characters?.unicodeScalars.allSatisfy {
             $0.value >= 0x20 && $0.value != 0x7F && $0.value < 0xF700
         } ?? false
@@ -182,12 +261,14 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
     }
 
     public override func keyUp(with event: NSEvent) {
+        guard inputEnabled else { return }
         if let key = pressedKeySyms.removeValue(forKey: event.keyCode) {
             onKeyEvent?(false, key)
         }
     }
 
     public func insertText(_ string: Any, replacementRange: NSRange) {
+        guard inputEnabled else { return }
         let text = (string as? NSAttributedString)?.string ?? (string as? String ?? "")
         markedText = NSAttributedString(string: "")
         if text.unicodeScalars.contains(where: { $0.value > 127 }) {
@@ -197,15 +278,30 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
             onTextEvent(text)
             return
         }
+        let revision = inputRevision
         for character in text {
-            if let key = MacKeyMap.keySym(for: character) {
-                onKeyEvent?(true, key)
-                onKeyEvent?(false, key)
-            }
+            guard inputEnabled, inputRevision == revision else { return }
+            if let key = MacKeyMap.keySym(for: character), !sendKeyStroke(key) { return }
         }
     }
 
+    /// Own a temporary key before its callback so synchronous cleanup can
+    /// balance the down, then stop this event if cleanup changed the view.
+    @discardableResult
+    private func sendKeyStroke(_ key: UInt32) -> Bool {
+        guard inputEnabled, let callback = onKeyEvent else { return false }
+        let revision = inputRevision
+        let token = UUID()
+        transientKeySyms[token] = key
+        callback(true, key)
+        guard inputEnabled, inputRevision == revision else { return false }
+        transientKeySyms.removeValue(forKey: token)
+        callback(false, key)
+        return inputEnabled && inputRevision == revision
+    }
+
     public func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        guard inputEnabled else { return }
         markedText = (string as? NSAttributedString) ?? NSAttributedString(string: string as? String ?? "")
     }
     public func unmarkText() { markedText = NSAttributedString(string: "") }
@@ -273,6 +369,7 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
     public let isPanning: Bool
     public let onPan: (CGFloat, CGFloat) -> Void
     public let onTextEvent: ((String) -> Void)?
+    public let onInputReset: () -> Void
 
     public init(
         remoteWidth: CGFloat,
@@ -280,6 +377,7 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         isPanning: Bool = false,
         onPan: @escaping (CGFloat, CGFloat) -> Void = { _, _ in },
         onTextEvent: ((String) -> Void)? = nil,
+        onInputReset: @escaping () -> Void = {},
         onPointerEvent: @escaping (RFBConstants.ButtonMask, UInt16, UInt16) -> Void,
         onKeyEvent: @escaping (Bool, UInt32) -> Void
     ) {
@@ -288,6 +386,7 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         self.isPanning = isPanning
         self.onPan = onPan
         self.onTextEvent = onTextEvent
+        self.onInputReset = onInputReset
         self.onPointerEvent = onPointerEvent
         self.onKeyEvent = onKeyEvent
     }
@@ -300,6 +399,7 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         view.isPanning = isPanning
         view.onPan = onPan
         view.onTextEvent = onTextEvent
+        view.onInputReset = onInputReset
         view.remoteSize = CGSize(width: remoteWidth, height: remoteHeight)
         view.onPointerEvent = onPointerEvent
         view.onKeyEvent = onKeyEvent
@@ -314,9 +414,14 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         nsView.isPanning = isPanning
         nsView.onPan = onPan
         nsView.onTextEvent = onTextEvent
+        nsView.onInputReset = onInputReset
         nsView.remoteSize = CGSize(width: remoteWidth, height: remoteHeight)
         nsView.onPointerEvent = onPointerEvent
         nsView.onKeyEvent = onKeyEvent
+    }
+
+    public static func dismantleNSView(_ nsView: MacNativeInputView, coordinator: ()) {
+        nsView.invalidateInput()
     }
 }
 #endif

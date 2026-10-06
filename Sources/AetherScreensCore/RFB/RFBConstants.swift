@@ -77,6 +77,8 @@ public enum RFBConstants {
         public static let cursor = EncodingType(rawValue: -239)
         public static let desktopSize = EncodingType(rawValue: -223)
         public static let extendedDesktopSize = EncodingType(rawValue: -308)
+        public static let appleDisplayInfo = EncodingType(rawValue: 0x44D)
+        public static let appleDisplayLayout = EncodingType(rawValue: 0x451)
         public static let lastRect = EncodingType(rawValue: -224)
     }
 

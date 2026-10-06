@@ -27,6 +27,9 @@
 "Cancel" = "取消";
 "Clear" = "清空";
 "Close" = "关闭";
+"Unable to Paste" = "无法粘贴";
+"Clipboard text is too large. Copy a smaller selection and try again." = "剪贴板文本过长，请缩小复制范围后重试。";
+"Clipboard text could not be sent. Try again." = "剪贴板文本未能发送，请重试。";
 "Close Window" = "关闭窗口";
 "Connect" = "连接";
 "Connect to %@" = "连接到 %@";
@@ -58,7 +61,7 @@
 "Enter the VNC password for %@" = "请输入 %@ 的 VNC 密码";
 "Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping." = "填写远端 Mac 的硬件 MAC 地址（如 AA:BB:CC:DD:EE:FF），用于唤醒休眠中的电脑。";
 "Enter your Mac account username and password. Leave Username empty to use a VNC password." = "填写 Mac 账户用户名和密码。使用 VNC 密码时，请将用户名留空。";
-"Failed to send Wake-on-LAN packet. Check MAC format." = "发送网络唤醒数据包失败，请检查 MAC 地址格式。";
+"Failed to send Wake-on-LAN packet. Check local network access and the MAC address." = "发送网络唤醒数据包失败，请检查本地网络访问权限和 MAC 地址。";
 "Filter logs..." = "筛选日志…";
 "Fit to Window" = "适应窗口";
 "Fn" = "Fn";
@@ -70,7 +73,7 @@
 "Initializing…" = "正在初始化…";
 "Input Mode" = "输入模式";
 "Remote desktop canvas" = "远程桌面画布";
-"Insert local clipboard text into the focused remote field" = "将本机剪贴板文本输入到远端当前字段";
+"Insert local clipboard text into the focused remote field" = "将本机剪贴板内容粘贴到远端当前应用";
 "Language" = "语言";
 "Level" = "级别";
 "Loading remote desktop…" = "正在加载远端桌面…";
@@ -99,7 +102,7 @@
 "Other" = "其他";
 "Pan View" = "移动视图";
 "Paste" = "粘贴";
-"Paste Text" = "粘贴文本";
+"Paste Text" = "粘贴剪贴板";
 "Please enter your Tailscale API Key in Settings" = "请在设置中填写 Tailscale API 密钥";
 "Port" = "端口";
 "Quick Connect" = "快速连接";
@@ -186,6 +189,8 @@
 "Tailscale HTTP %d: %@" = "Tailscale HTTP 错误 %d：%@";
 "Tailscale authentication failed. Check your API access token." = "Tailscale 认证失败，请检查 API 访问令牌。";
 "Unsupported Mac account authentication key length" = "不支持此 Mac 账户认证密钥长度";
+"Unsupported framebuffer encoding: %@" = "不支持的画面编码：%@";
+"Unsupported server message type: %@" = "不支持的服务器消息类型：%@";
 "VNC Password required to connect" = "需要 VNC 密码才能连接";
 "WARNING" = "警告";
 "cmd" = "cmd";
@@ -264,6 +269,273 @@
 "Invalid ZRLE pixel data" = "远端压缩画面数据无效";
 "Network round-trip time; excludes remote processing and display delay." = "网络往返时间，不包含远端处理和显示延迟。";
 "Invalid Zlib rectangle size" = "远端压缩画面尺寸无效";
+"Invalid Raw rectangle size" = "远端画面区域尺寸无效";
 "Invalid Zlib compressed length" = "远端压缩画面数据长度无效";
 "Invalid Zlib pixel data" = "远端压缩画面数据无效";
 "Return to Computers" = "返回电脑列表";
+
+// Remote Mac hot corners
+"Hot Corners" = "触发角";
+"Top Left" = "左上角";
+"Top Right" = "右上角";
+"Bottom Left" = "左下角";
+"Bottom Right" = "右下角";
+"Trigger a corner configured on the remote Mac's selected display" = "触发远程 Mac 所选显示器上已配置的屏幕角落";
+
+// Saved connection disconnect action
+"When Disconnecting" = "断开连接时";
+"Action" = "动作";
+"Disconnect Only" = "仅断开连接";
+"Log Out Remote User" = "退出登录远程用户";
+"Logging out closes remote apps. Save your work first." = "退出登录会关闭远程应用，请先保存工作。";
+"Runs when you close a control session. Observe sessions and interrupted connections do not run this action. Hot corners must be configured on the remote Mac." = "关闭控制会话时执行；仅观看或连接中断时不执行。触发角需先在远程 Mac 上配置。";
+"Dictation" = "听写";
+"Dictation Language" = "听写语言";
+"Dictation Preview" = "听写预览";
+"Review the recognized text before sending it to the remote computer." = "发送到远程电脑之前，请检查识别出的文字。";
+"Preparing Dictation…" = "正在准备听写…";
+"Finishing Dictation…" = "正在完成听写…";
+"Stop Dictation" = "停止听写";
+"Start Dictation" = "开始听写";
+"Allow Speech Recognition in system settings to use Dictation." = "请在系统设置中允许语音识别，以使用听写。";
+"Allow Microphone access in system settings to use Dictation." = "请在系统设置中允许访问麦克风，以使用听写。";
+"On-device Dictation is unavailable for this language." = "此语言暂不支持设备端听写。";
+"The microphone is unavailable. Try again." = "麦克风暂不可用，请重试。";
+"Dictation stopped. Try again." = "听写已停止，请重试。";
+"Pencil Double Tap" = "Pencil 双击";
+"Pencil Squeeze" = "Pencil 挤压";
+"Toggle Toolbar Visibility" = "显示／隐藏工具栏";
+"Secondary Click" = "右键单击";
+"Middle Click" = "中键单击";
+"None" = "无";
+"Requires a compatible Apple Pencil with gestures enabled in system settings. Click actions are unavailable in Observe and Pan modes." = "需使用支持此手势的 Apple Pencil，并在系统设置中启用手势。仅观看和画面平移模式下无法执行单击动作。";
+
+"Hardware Keyboard" = "外接键盘";
+
+"Key Repeat" = "按键重复";
+
+"Repeat Delay" = "重复延迟";
+
+"Repeat Interval" = "重复间隔";
+
+"%.2f seconds" = "%.2f 秒";
+
+"Page Up" = "向上翻页";
+
+"Page Down" = "向下翻页";
+
+"Home" = "起始";
+
+"End" = "末尾";
+
+"F1" = "F1";
+
+"F2" = "F2";
+
+"F3" = "F3";
+
+"F4" = "F4";
+
+"F5" = "F5";
+
+"F6" = "F6";
+
+"F7" = "F7";
+
+"F8" = "F8";
+
+"F9" = "F9";
+
+"F10" = "F10";
+
+"F11" = "F11";
+
+"F12" = "F12";
+
+"Controls" = "控制";
+
+"Cursor Speed" = "光标速度";
+
+"Cursor Speed: %.2f×" = "光标速度：%.2f×";
+
+"%.2f×" = "%.2f×";
+
+"This connection does not support this clipboard content." = "此连接不支持这种剪贴板内容。";
+
+"Clipboard content could not be sent. Copy a smaller selection and try again." = "无法发送剪贴板内容。请复制较小的内容后重试。";
+
+"Clipboard" = "剪贴板";
+
+"Use Shared Clipboard" = "共享剪贴板";
+
+"Send Clipboard" = "发送剪贴板";
+
+"Get Clipboard" = "获取剪贴板";
+
+"This connection cannot fetch clipboard content." = "此连接无法获取剪贴板内容。";
+
+"Swap Command and Control" = "交换 Command 与 Control";
+"Switch Apps with Command-Backslash" = "使用 Command-反斜杠切换应用";
+
+"Type User Password" = "输入用户密码";
+"Type Password Without Return" = "输入密码但不按回车";
+"Hold to type without pressing Return." = "按住按钮可输入密码而不按回车。";
+"Authenticate to type your saved user password on the remote Mac." = "验证身份后，将已保存的用户密码输入远程 Mac。";
+"The saved user password is unavailable for this session." = "当前会话没有可用的已保存用户密码。";
+"The saved user password could not be typed. Reconnect and try again." = "无法输入已保存的用户密码，请重新连接后重试。";
+
+"View" = "视图";
+
+"Displays" = "显示器";
+
+"Clipboard changed. Try again." = "剪贴板内容已更改，请重试。";
+
+"Unable to read clipboard. Try copying again." = "无法读取剪贴板，请重新复制后重试。";
+"ssh.connection.settings.required" = "请检查 SSH 连接设置后再连接。";
+"Could not remove saved SSH credentials. Unlock the device and try again." = "无法删除已保存的 SSH 凭据。请解锁设备后重试。";
+
+"SSH connection failed. Check the credentials and trusted host key." = "SSH 连接失败。请检查凭据和已信任的主机密钥。";
+
+"Verify this fingerprint with the computer owner before trusting the SSH server." = "信任 SSH 服务器前，请与电脑所有者核对该指纹。";
+
+"SSH Server" = "SSH 服务器";
+
+"Host Key Fingerprint" = "主机密钥指纹";
+
+"Trust Once" = "仅信任本次";
+
+"Trust and Remember" = "信任并记住";
+
+"Verify SSH Server" = "验证 SSH 服务器";
+
+"Secure Connection" = "安全连接";
+
+"Use SSH Tunnel" = "使用 SSH 隧道";
+
+"SSH Host (blank uses computer address)" = "SSH 主机（留空使用电脑地址）";
+
+"SSH Port" = "SSH 端口";
+
+"SSH Username" = "SSH 用户名";
+
+"SSH Authentication" = "SSH 认证方式";
+
+"Password" = "密码";
+
+"Ed25519 Private Key" = "Ed25519 私钥";
+
+"SSH Password" = "SSH 密码";
+
+"SSH Password (leave blank to keep)" = "SSH 密码（留空保留）";
+
+"Private Key (leave blank to keep)" = "私钥（留空保留）";
+
+"OpenSSH Private Key" = "OpenSSH 私钥";
+
+"Private Key Passphrase (optional)" = "私钥口令（可选）";
+
+"Screen Sharing Host from SSH Server" = "SSH 服务器访问的屏幕共享主机";
+
+"SSH credentials are separate from your Mac account or VNC password. You will review the server fingerprint before connecting." = "SSH 凭据与 Mac 账户或 VNC 密码独立。连接前需要确认服务器指纹。";
+
+"Unable to Save Connection" = "无法保存连接";
+
+"Could not save SSH credentials. Check the private key or unlock the device and try again." = "无法保存 SSH 凭据。请检查私钥或解锁设备后重试。";
+
+"Import Private Key" = "导入私钥";
+
+"Private Key Selected" = "已选择私钥";
+
+"Remove Selected Key" = "移除所选私钥";
+
+"Unable to Import Private Key" = "无法导入私钥";
+
+"Choose an OpenSSH Ed25519 private key smaller than 64 KiB." = "请选择不超过 64 KiB 的 OpenSSH Ed25519 私钥。";
+
+"Enter new SSH credentials after changing the server, account, or authentication method." = "更改服务器、账户或认证方式后，请重新输入 SSH 凭据。";
+
+"Trusted SSH Server" = "已信任的 SSH 服务器";
+
+"Forget Trusted Server" = "忘记已信任的服务器";
+
+"Forget Trusted SSH Server?" = "忘记已信任的 SSH 服务器？";
+
+"Forget" = "忘记";
+
+"SSH Server Trust" = "SSH 服务器信任";
+
+"The next connection must verify the server fingerprint again. This affects all saved computers using the same SSH server and port. Existing connected sessions stay open." = "下次连接必须重新确认服务器指纹。这会影响使用相同 SSH 服务器和端口的所有已保存电脑。当前已连接的会话会保持连接。";
+
+"Could not read the trusted SSH server. Unlock the device and try again." = "无法读取已信任的 SSH 服务器。请解锁设备后重试。";
+
+"Could not forget the trusted SSH server. Its identity or saved connection may have changed. Unlock the device and try again." = "无法忘记已信任的 SSH 服务器。其身份或已保存的连接可能已更改，请解锁设备后重试。";
+
+// Saved-computer storage and synchronization
+"Saved Computers" = "已保存的电脑";
+"Storage" = "存储方式";
+"On This Device" = "本机";
+"Sync Now" = "立即同步";
+"Retry Sync" = "重试同步";
+"Saved computers stay on this device." = "已保存的电脑仅保存在本机。";
+"Changes are waiting to sync." = "更改正在等待同步。";
+"Syncing saved computers…" = "正在同步已保存的电脑…";
+"Saved computers synchronized." = "已保存的电脑同步完成。";
+"iCloud synchronization is unavailable in this build." = "当前版本暂不支持 iCloud 同步。";
+"Sign in to iCloud in system settings, then retry." = "请在系统设置中登录 iCloud 后重试。";
+"The iCloud account has changed. Your saved computers remain on this device." = "iCloud 账户已变更。已保存的电脑仍保留在本机。";
+"Could not sync. Your changes are saved on this device. Retry when connected." = "同步失败，更改已保存在本机。连接网络后请重试。";
+"Other changes arrived during sync. Retry to merge them." = "同步期间收到其他更改。请重试以合并。";
+"Could not read synchronization data. Your local computers are preserved." = "无法读取同步数据。本机已保存的电脑仍然保留。";
+"The synchronization storage limit was reached. Your changes remain on this device." = "同步存储空间已达到上限。更改仍保留在本机。";
+"Could not save the storage setting. Your current storage choice is preserved." = "无法保存存储设置，仍使用当前存储方式。";
+"Saved computer preferences can sync through iCloud. Passwords and SSH keys remain in this device’s Keychain." = "已保存电脑的偏好设置可通过 iCloud 同步。密码和 SSH 密钥仍保存在本机钥匙串中。";
+"Computers synchronized, but credentials could not sync. Retry when Keychain is available." = "电脑信息已同步，但凭据未能同步。请在钥匙串可用后重试。";
+"Re-enter credentials for the edited computer before syncing again." = "请为修改后的电脑重新输入凭据，再进行同步。";
+
+"Unable to Switch Display" = "无法切换显示器";
+
+"Switching Display" = "正在切换显示器";
+
+"The display switch was not confirmed. Try again." = "未能确认显示器切换，请重试。";
+"Image Compression" = "图像压缩";
+"Image Compression: %@" = "图像压缩：%@";
+"Retry" = "重试";
+"Always" = "始终";
+"Only for Remote Connections" = "仅远程连接";
+"Never" = "从不";
+"Changing Image Resolution…" = "正在切换图像分辨率…";
+"Unable to Change Image Compression" = "无法切换图像压缩";
+"The image compression change was not confirmed. Try again." = "服务器未确认图像压缩切换，请重试。";
+"Image compression halves the width and height. Remote-only keeps full resolution on the same LAN or when the network route cannot be determined." = "图像压缩会将宽和高各减半。选择“仅远程连接”时，同一局域网内或无法判断网络路径时保留完整分辨率。";
+"Mirror to External Display" = "镜像到外接显示器";
+
+// Native Shortcuts
+"Shortcuts" = "快捷指令";
+"Show in Shortcuts" = "在快捷指令中显示";
+"Shortcut Alias" = "快捷指令别名";
+"Only the alias you choose is shared with Shortcuts. Connection details and passwords stay in AetherScreens." = "仅将你选定的别名提供给快捷指令。连接信息和密码保留在 AetherScreens 中。";
+"Enter a shortcut alias of 1–80 characters without control characters." = "请输入 1–80 个字符的快捷指令别名，不含控制字符。";
+"Too many computers are enabled in Shortcuts. Disable one and try again." = "快捷指令中启用的电脑过多，请停用一台后重试。";
+
+// Quick Connect Widgets
+"Widgets" = "小组件";
+"Show in Widgets" = "在小组件中显示";
+"Widget Alias" = "小组件别名";
+"Only the alias you choose is shared with Widgets. Connection details and passwords stay in AetherScreens." = "仅将你选择的别名共享给小组件。连接详情和密码保留在 AetherScreens 中。";
+"Enter a Widget alias of 1–80 characters without control characters." = "请输入 1–80 个字符的小组件别名，不含控制字符。";
+"Widgets are unavailable. Open the app and try again." = "小组件暂不可用。请打开应用后重试。";
+"This Widget link is invalid." = "此小组件链接无效。";
+"This computer is no longer enabled for Widgets." = "此电脑已不再启用小组件。";
+"Connection settings were saved, but Widgets were not updated. Please try again." = "连接设置已保存，但小组件未更新。请重试。";
+
+// Apple Curtain console visibility
+"Hide Remote Console" = "遮屏";
+"Restore Remote Console" = "恢复远端屏幕";
+"Hiding remote console…" = "正在请求遮屏…";
+"Restoring remote console…" = "正在恢复远端屏幕…";
+"Remote console hidden. Check the Mac’s display before relying on privacy." = "远端已报告遮屏。依赖隐私保护前，请检查 Mac 的实体屏幕。";
+"The remote console change timed out. Its state is unconfirmed." = "远端屏幕操作已超时，当前状态尚未确认。";
+"The remote console change failed. Its state is unconfirmed." = "远端屏幕操作失败，当前状态尚未确认。";
+"Remote console visibility is unconfirmed." = "远端屏幕是否可见尚未确认。";
+"Remote console restoration is unconfirmed. Check the Mac before leaving it unattended." = "远端屏幕恢复尚未确认。离开前请检查 Mac。";
+"Requires an available Remote Management session outside the login window." = "需要远端管理会话支持，且远端不处于登录界面。";

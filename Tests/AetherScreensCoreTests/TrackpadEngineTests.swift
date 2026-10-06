@@ -2,6 +2,77 @@ import XCTest
 @testable import AetherScreensCore
 
 final class TrackpadEngineTests: XCTestCase {
+    func testCursorSpeedScalesRelativeMotionWithoutChangingAbsoluteInput() {
+        let slow = TrackpadEngine(remoteWidth: 1000, remoteHeight: 1000)
+        let fast = TrackpadEngine(remoteWidth: 1000, remoteHeight: 1000)
+        fast.cursorSpeedMultiplier = 2
+        slow.handlePanDelta(dx: 5, dy: -5, coordinateScale: 2)
+        fast.handlePanDelta(dx: 5, dy: -5, coordinateScale: 2)
+        XCTAssertEqual(fast.cursorX - 500, (slow.cursorX - 500) * 2, accuracy: 0.001)
+        XCTAssertEqual(fast.cursorY - 500, (slow.cursorY - 500) * 2, accuracy: 0.001)
+        for engine in [slow, fast] {
+            engine.handleAbsolutePointer(point: CGPoint(x: 25, y: 75), viewSize: CGSize(width: 100, height: 100), buttons: [], source: .mouse)
+        }
+        XCTAssertEqual(slow.cursorX, fast.cursorX)
+        XCTAssertEqual(slow.cursorY, fast.cursorY)
+        let before = fast.cursorX
+        fast.handlePanDelta(dx: .nan, dy: 0)
+        XCTAssertEqual(fast.cursorX, before)
+        XCTAssertEqual(RemoteDevice.validatedCursorSpeed(.nan), 1)
+        XCTAssertEqual(RemoteDevice.validatedCursorSpeed(-1), 0.25)
+        XCTAssertEqual(RemoteDevice.validatedCursorSpeed(100), 2)
+    }
+
+    func testAbsoluteDevicesMapDesktopCoordinatesInEitherFingerModeAndRejectInvalidGeometry() {
+        for mode in [TrackpadEngine.Mode.trackpad, .touch] {
+            let engine = TrackpadEngine(remoteWidth: 1920, remoteHeight: 1080)
+            engine.mode = mode
+            let events = EventCollector()
+            engine.onPointerEvent = { events.addEvent(mask: $0, x: $1, y: $2) }
+            engine.handleAbsolutePointer(point: CGPoint(x: 100, y: 50), viewSize: CGSize(width: 400, height: 200), buttons: [.right, .middle], source: .mouse)
+            XCTAssertEqual(events.events.last?.x, 480)
+            XCTAssertEqual(events.events.last?.y, 270)
+            XCTAssertEqual(events.events.last?.mask, [.right, .middle])
+            engine.handleAbsolutePointer(point: CGPoint(x: 800, y: -50), viewSize: CGSize(width: 400, height: 200), buttons: .left, source: .pencil)
+            XCTAssertEqual(events.events.last?.x, 1919)
+            XCTAssertEqual(events.events.last?.y, 0)
+            let count = events.events.count
+            engine.handleAbsolutePointer(point: CGPoint(x: CGFloat.nan, y: 0), viewSize: CGSize(width: 400, height: 200), buttons: [], source: .mouse)
+            engine.handleAbsolutePointer(point: .zero, viewSize: .zero, buttons: [], source: .pencil)
+            XCTAssertEqual(events.events.count, count)
+            XCTAssertEqual(engine.activeButtons, [.left, .right, .middle])
+        }
+    }
+
+    func testFingerMouseAndPencilOwnButtonsIndependentlyIncludingScroll() {
+        let engine = TrackpadEngine()
+        let events = EventCollector()
+        engine.onPointerEvent = { events.addEvent(mask: $0, x: $1, y: $2) }
+        engine.beginDrag(button: .left)
+        engine.handleAbsolutePointer(point: .zero, viewSize: CGSize(width: 100, height: 100), buttons: [.left, .right], source: .mouse)
+        engine.handleAbsolutePointer(point: .zero, viewSize: CGSize(width: 100, height: 100), buttons: .left, source: .pencil)
+        engine.endDrag(button: .left)
+        XCTAssertEqual(engine.activeButtons, [.left, .right])
+        engine.releaseAbsolutePointer(.mouse)
+        XCTAssertEqual(engine.activeButtons, .left, "Releasing the mouse must preserve the Pencil's held left button")
+        engine.handleHorizontalScroll(deltaX: 8)
+        XCTAssertEqual(events.events.suffix(2).map(\.mask), [[.left, .scrollLeft], .left])
+        engine.releaseAbsolutePointer(.pencil)
+        XCTAssertTrue(engine.activeButtons.isEmpty)
+        XCTAssertTrue(events.events.last?.mask.isEmpty == true)
+    }
+
+    func testReleaseAllClearsEveryDeviceAndWheelBitsCannotBecomeHeldButtons() {
+        let engine = TrackpadEngine()
+        engine.beginDrag(button: .middle)
+        engine.handleAbsolutePointer(point: .zero, viewSize: CGSize(width: 100, height: 100), buttons: [.right, .scrollUp], source: .mouse)
+        engine.handleAbsolutePointer(point: .zero, viewSize: CGSize(width: 100, height: 100), buttons: .left, source: .pencil)
+        XCTAssertEqual(engine.activeButtons, [.left, .right, .middle])
+        engine.releaseAllButtons()
+        XCTAssertTrue(engine.activeButtons.isEmpty)
+        XCTAssertTrue(engine.absolutePointerButtons(for: .mouse).isEmpty)
+        XCTAssertTrue(engine.absolutePointerButtons(for: .pencil).isEmpty)
+    }
 
     func testCursorInitAndReset() {
         let engine = TrackpadEngine(remoteWidth: 1920, remoteHeight: 1080)
@@ -113,6 +184,48 @@ final class TrackpadEngineTests: XCTestCase {
         XCTAssertTrue(collector.events.contains { $0.mask.contains(.scrollRight) })
         engine.endDrag(button: .right)
         XCTAssertTrue(collector.events.last?.mask.isEmpty ?? false)
+    }
+
+    func testScrollAccumulatorRetainsFractionsAndBalancesBothAxes() {
+        var scroll = NativeScrollAccumulator()
+        for _ in 0..<7 { XCTAssertTrue(scroll.consume(dx: 1, dy: -1, pointsPerTick: 8).isEmpty) }
+        XCTAssertEqual(scroll.consume(dx: 1, dy: -1, pointsPerTick: 8), [.scrollDown, .scrollLeft])
+        XCTAssertEqual(scroll.consume(dx: -16, dy: 24, pointsPerTick: 8), [.scrollUp, .scrollUp, .scrollUp, .scrollRight, .scrollRight])
+        XCTAssertTrue(scroll.consume(dx: 4, dy: 0, pointsPerTick: 8).isEmpty)
+        XCTAssertTrue(scroll.consume(dx: -4, dy: 0, pointsPerTick: 8).isEmpty)
+    }
+
+    func testScrollAccumulatorRejectsInvalidSamplesAndBoundsLargeSamplesWithoutBacklog() {
+        var scroll = NativeScrollAccumulator()
+        XCTAssertTrue(scroll.consume(dx: 4, dy: 0, pointsPerTick: 8).isEmpty)
+        for invalid: CGFloat in [.nan, .infinity, -.infinity] {
+            XCTAssertTrue(scroll.consume(dx: invalid, dy: 8, pointsPerTick: 8).isEmpty)
+            XCTAssertTrue(scroll.consume(dx: 8, dy: invalid, pointsPerTick: 8).isEmpty)
+            XCTAssertTrue(scroll.consume(dx: 8, dy: 8, pointsPerTick: invalid).isEmpty)
+        }
+        XCTAssertTrue(scroll.consume(dx: 8, dy: 8, pointsPerTick: 0).isEmpty)
+        XCTAssertEqual(scroll.consume(dx: 4, dy: 0, pointsPerTick: 8), [.scrollLeft], "Invalid samples must preserve normal fractional motion")
+        let ticks = scroll.consume(dx: .greatestFiniteMagnitude, dy: -.greatestFiniteMagnitude, pointsPerTick: 8)
+        XCTAssertEqual(ticks.count, 128)
+        XCTAssertEqual(ticks.filter { $0 == .scrollLeft }.count, 64)
+        XCTAssertEqual(ticks.filter { $0 == .scrollDown }.count, 64)
+        XCTAssertTrue(scroll.consume(dx: 0, dy: 0, pointsPerTick: 8).isEmpty, "Oversized events must not defer wheel floods into later input")
+    }
+
+    func testInvalidScrollDoesNotEmitOrReleaseHeldButtons() {
+        let engine = TrackpadEngine()
+        let collector = EventCollector()
+        engine.onPointerEvent = { collector.addEvent(mask: $0, x: $1, y: $2) }
+        engine.beginDrag(button: .right)
+        let before = collector.events.count
+        for invalid: CGFloat in [.nan, .infinity, -.infinity] {
+            engine.handleScroll(deltaY: invalid)
+            engine.handleHorizontalScroll(deltaX: invalid)
+        }
+        XCTAssertEqual(collector.events.count, before)
+        XCTAssertEqual(engine.activeButtons, .right)
+        engine.handleScroll(deltaY: -8)
+        XCTAssertEqual(collector.events.suffix(2).map(\.mask), [[.right, .scrollDown], .right])
     }
 
     func testScrollEvent() {

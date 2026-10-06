@@ -6,8 +6,12 @@ public struct RemoteDesktopView: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: SessionViewModel
     @ObservedObject private var displayManager: MultiDisplayManager
+    @ObservedObject private var externalDisplayMirror: RemoteDisplayMirror
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
+    #if canImport(UIKit)
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     @State private var showingLogs: Bool = false
     @State private var showingKeyboardCustomization = false
@@ -19,6 +23,7 @@ public struct RemoteDesktopView: View {
                 onReturnToLibrary: (() -> Void)? = nil) {
         self.viewModel = viewModel
         self.displayManager = viewModel.multiDisplayManager
+        self.externalDisplayMirror = viewModel.externalDisplayMirror
         self.managesSessionLifecycle = managesSessionLifecycle
         self.onDisconnect = onDisconnect
         self.onReturnToLibrary = onReturnToLibrary
@@ -46,35 +51,121 @@ public struct RemoteDesktopView: View {
                     firstFrameLoadingHUD
                 }
 
-                // Floating Top Controls Bar & Diagnostic HUD
+                #if os(macOS)
                 if !usesFullscreenLayout {
                     VStack {
-                        floatingTopBar
-                            .padding(.top, 12)
-                        if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .top {
-                            MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
-                                .transition(.move(edge: .top))
-                        }
+                        floatingTopBar.padding(.top, 12)
                         Spacer()
-
-                        // Bottom Mac Keyboard Toolbar (if toggled)
-                        if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .bottom {
-                            MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
-                                .transition(.move(edge: .bottom))
+                    }
+                }
+                #else
+                if usesFullscreenLayout {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Button {
+                                viewModel.toggleFullscreen()
+                                viewModel.isKeyboardVisible = true
+                            } label: { controlIcon("keyboard") }
+                            .accessibilityLabel(AppLocalization.string("Show Keyboard"))
+                            .disabled(viewModel.isObserveOnly)
+                            Button { viewModel.toggleFullscreen() } label: {
+                                controlIcon("arrow.down.right.and.arrow.up.left")
+                            }
+                            .accessibilityLabel(AppLocalization.string("Exit Full Screen"))
                         }
+                        .buttonStyle(.plain)
+                        .padding(4)
+                        .background(.black.opacity(0.72), in: Capsule())
+                        .fixedSize()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, max(12, geometry.safeAreaInsets.trailing))
+                        .padding(.top, max(4, geometry.safeAreaInsets.top))
+                        Spacer()
+                    }
+                }
+                #endif
+
+                // Recovery must remain visible on failure/disconnected pages,
+                // including Metal sessions that never populate currentImage.
+                if let message = viewModel.curtainStatusMessage {
+                    VStack {
+                        Spacer()
+                        Text(AppLocalization.string(message))
+                            .font(.caption)
+                            .padding(10)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                            .padding(.horizontal)
+                            .padding(.bottom, 12)
+                            .accessibilityIdentifier("session-curtain-status")
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+            .clipped()
+        }
+        // Reserve room for controls so a zoomed desktop never hides behind the
+        // keyboard. Safe-area insets also follow rotation and the software IME.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !usesFullscreenLayout && viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .bottom {
+                MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                if !usesFullscreenLayout {
+                    #if canImport(UIKit)
+                    if verticalSizeClass != .compact || !viewModel.isTextInputBarVisible {
+                        floatingTopBar.padding(.vertical, 4)
+                    }
+                    #endif
+                    if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .top {
+                        MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
                     }
                 }
             }
         }
-        #if canImport(UIKit)
-        .ignoresSafeArea(usesFullscreenLayout ? .all : [])
-        .statusBarHidden(usesFullscreenLayout)
+        // The clipped desktop must not leave the host view's white background
+        // visible around the camera/home-indicator safe areas after rotation.
+        .background {
+            Color(red: 0.055, green: 0.07, blue: 0.09).ignoresSafeArea()
+        }
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        .background {
+            if #available(iOS 27.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+                ExternalRemoteDisplayRegistration(session: viewModel)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         #endif
+        #if canImport(UIKit)
+        .ignoresSafeArea(.container, edges: usesFullscreenLayout ? .all : [])
+        .statusBarHidden(viewModel.sessionState == .connected)
+        .defersSystemGestures(on: viewModel.canTriggerHotCorner ? .all : [])
+        #endif
+        .alert(AppLocalization.string("Type User Password"), isPresented: Binding(
+            get: { viewModel.userPasswordError != nil },
+            set: { if !$0 { viewModel.userPasswordError = nil } }
+        )) {
+            Button(AppLocalization.string("OK"), role: .cancel) { viewModel.userPasswordError = nil }
+        } message: {
+            Text(AppLocalization.string(viewModel.userPasswordError ?? ""))
+        }
         .onAppear {
             if managesSessionLifecycle { viewModel.startSession() }
         }
         .onDisappear {
             if managesSessionLifecycle { viewModel.endSession() }
+        }
+        .sheet(item: Binding(get: { viewModel.sshTrustRequest }, set: { request in
+            if request == nil, let pending = viewModel.sshTrustRequest {
+                viewModel.submitSSHTrust(id: pending.id, decision: .cancel)
+            }
+        })) { request in
+            SSHTrustSheet(request: request, canRemember: !viewModel.isTemporary) { decision in
+                viewModel.submitSSHTrust(id: request.id, decision: decision)
+            }
         }
         .sheet(isPresented: $viewModel.isPromptingPassword) {
             PasswordPromptSheet(
@@ -101,6 +192,31 @@ public struct RemoteDesktopView: View {
         }
         .sheet(isPresented: $showingKeyboardCustomization) {
             KeyboardToolbarSettingsView(configuration: $viewModel.keyboardConfiguration)
+        }
+        .alert(AppLocalization.string("Unable to Paste"), isPresented: Binding(
+            get: { viewModel.clipboardPasteError != nil },
+            set: { if !$0 { viewModel.clipboardPasteError = nil } }
+        )) {
+            Button(AppLocalization.string("Close"), role: .cancel) { viewModel.clipboardPasteError = nil }
+        } message: {
+            Text(AppLocalization.string(viewModel.clipboardPasteError ?? ""))
+        }
+        .alert(AppLocalization.string("Unable to Switch Display"), isPresented: Binding(
+            get: { viewModel.displaySelectionError != nil },
+            set: { if !$0 { viewModel.displaySelectionError = nil } }
+        )) {
+            Button(AppLocalization.string("Close"), role: .cancel) { viewModel.displaySelectionError = nil }
+        } message: {
+            Text(AppLocalization.string(viewModel.displaySelectionError ?? ""))
+        }
+        .alert(AppLocalization.string("Unable to Change Image Compression"), isPresented: Binding(
+            get: { viewModel.imageCompressionError != nil },
+            set: { if !$0 { viewModel.imageCompressionError = nil } }
+        )) {
+            Button(AppLocalization.string("Retry")) { viewModel.setImageCompression(viewModel.imageCompression) }
+            Button(AppLocalization.string("Close"), role: .cancel) { viewModel.imageCompressionError = nil }
+        } message: {
+            Text(AppLocalization.string(viewModel.imageCompressionError ?? ""))
         }
     }
 
@@ -146,6 +262,7 @@ public struct RemoteDesktopView: View {
                     viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
                 },
                 onTextEvent: { text in viewModel.sendTextString(text) },
+                onInputReset: { viewModel.resetNativePointerInput() },
                 onPointerEvent: { mask, x, y in
                     viewModel.sendNativePointer(buttonMask: mask, x: x, y: y)
                 },
@@ -162,6 +279,7 @@ public struct RemoteDesktopView: View {
             #if canImport(UIKit)
             IOSRemoteInputView(
                 engine: viewModel.trackpadEngine,
+                inputDiagnosticIdentifier: viewModel.client.inputDiagnosticIdentifier,
                 canvas: CGRect(x: originX, y: originY, width: canvasWidth, height: canvasHeight),
                 zoom: viewModel.zoomScale,
                 isPanning: viewModel.isPanningViewport,
@@ -169,6 +287,12 @@ public struct RemoteDesktopView: View {
                 isFullscreen: usesFullscreenLayout,
                 onToggleFullscreen: { viewModel.toggleFullscreen() },
                 onThreeFingerSwipe: { viewModel.handleThreeFingerSwipe($0) },
+                hardwareKeyboardConfiguration: viewModel.keyboardConfiguration.hardwareKeyboard ?? HardwareKeyboardConfiguration(),
+                hardwareKeyboardEnabled: viewModel.canSendDictation && !viewModel.isTextInputBarVisible && !showingLogs && !showingKeyboardCustomization,
+                onHardwareKey: { viewModel.handleHardwareKey(down: $0, keySym: $1) },
+                onPencilGesture: { viewModel.handlePencilGesture($0, location: $1, viewSize: $2) },
+                boundaryGesturesEnabled: viewModel.canTriggerHotCorner && !showingLogs && !showingKeyboardCustomization && !viewModel.isTextInputBarVisible,
+                onScreenBoundary: { viewModel.triggerScreenBoundary($0) },
                 onPan: { dx, dy in
                     viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
                 },
@@ -178,7 +302,7 @@ public struct RemoteDesktopView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             #endif
 
-            // Curtain Mode Active Overlay Banner
+            // Local Lock Remote Mac notice; independent of real Curtain status.
             if viewModel.curtainManager.isCurtainActive {
                 VStack {
                     HStack(spacing: 8) {
@@ -357,24 +481,43 @@ public struct RemoteDesktopView: View {
                     .frame(width: 32, height: 32)
                     .background(Color.black.opacity(0.65))
                     .clipShape(Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel(AppLocalization.string("Disconnect"))
 
-            // Machine Name & State Dot
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(viewModel.sessionState == .connected ? Color.green : Color.orange)
-                    .frame(width: 8, height: 8)
-                Text(sessionTitle)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .frame(maxWidth: sessionNameWidth, alignment: .leading)
+            // Keep monitor selection directly accessible without widening the toolbar.
+            Menu {
+                displayChoices
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "display")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white)
+                    Circle()
+                        .fill(viewModel.sessionState == .connected ? Color.green : Color.orange)
+                        .frame(width: 8, height: 8)
+                    Text(sessionTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .frame(maxWidth: sessionNameWidth, alignment: .leading)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.65))
+                .clipShape(Capsule())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.black.opacity(0.65))
-            .clipShape(Capsule())
+            .accessibilityLabel(AppLocalization.string("Displays"))
+            .accessibilityValue(AppLocalization.message(displayManager.currentDisplay?.name ?? "All Displays"))
+            .accessibilityIdentifier("session-display-selector")
+            .disabled(viewModel.pendingImageScale != nil)
+            #if os(macOS)
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            #endif
 
             #if os(macOS)
             PerformanceHUDView(metrics: viewModel.metrics, isTailscale: viewModel.device.isTailscaleNode)
@@ -398,7 +541,44 @@ public struct RemoteDesktopView: View {
                     .accessibilityIdentifier("session-return-to-library")
                     Divider()
                 }
+                Button { viewModel.reconnectSession() } label: {
+                    Label(AppLocalization.string("Reconnect"), systemImage: "arrow.clockwise")
+                }
+                .accessibilityIdentifier("session-reconnect")
                 Toggle(AppLocalization.string("Observe Only"), isOn: $viewModel.isObserveOnly)
+                Menu(AppLocalization.format("Cursor Speed: %.2f×", viewModel.cursorSpeed)) {
+                    Picker(AppLocalization.string("Cursor Speed"), selection: Binding(
+                        get: { viewModel.cursorSpeed }, set: { viewModel.setCursorSpeed($0) }
+                    )) {
+                        ForEach([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { value in
+                            Text(AppLocalization.format("%.2f×", value)).tag(value)
+                        }
+                    }
+                }.accessibilityIdentifier("session-cursor-speed")
+                Menu(AppLocalization.format("Image Compression: %@",
+                                            AppLocalization.string(viewModel.imageCompression.rawValue))) {
+                    Picker(AppLocalization.string("Image Compression"), selection: Binding(
+                        get: { viewModel.imageCompression }, set: { viewModel.setImageCompression($0) }
+                    )) {
+                        ForEach(RemoteImageCompressionPolicy.allCases) { policy in
+                            Text(AppLocalization.string(policy.rawValue)).tag(policy)
+                        }
+                    }
+                    if viewModel.pendingImageScale != nil {
+                        Text(AppLocalization.string("Changing Image Resolution…"))
+                    }
+                }
+                .disabled(!viewModel.canChangeImageCompression)
+                .accessibilityIdentifier("session-image-compression")
+                .accessibilityValue(AppLocalization.string(viewModel.imageCompression.rawValue))
+                Button { viewModel.typeUserPassword() } label: {
+                    Label(AppLocalization.string("Type User Password"), systemImage: "key.fill")
+                }.disabled(!viewModel.canTypeUserPassword).accessibilityIdentifier("session-type-user-password")
+                Button { viewModel.typeUserPassword(pressReturn: false) } label: {
+                    Text(AppLocalization.string("Type Password Without Return"))
+                }.disabled(!viewModel.canTypeUserPassword).accessibilityIdentifier("session-type-password-without-return")
+                ClipboardMenu(viewModel: viewModel)
+                HotCornerMenu(viewModel: viewModel)
                 Button { showingKeyboardCustomization = true } label: {
                     Label(AppLocalization.string("Customize Keyboard Toolbar"), systemImage: "slider.horizontal.3")
                 }
@@ -409,43 +589,60 @@ public struct RemoteDesktopView: View {
                     Label(AppLocalization.string("Diagnostic Logs"), systemImage: "list.bullet.rectangle")
                 }
                 #endif
-                Button(AppLocalization.string("Fit to Window")) {
-                    viewModel.zoomScale = 1
-                    viewModel.viewOffset = .zero
-                    viewModel.isPanningViewport = false
-                }
-                Button(AppLocalization.string("Actual Size")) {
-                    viewModel.zoomScale = viewModel.actualSizeZoomScale
-                }
-                Button(AppLocalization.string("Zoom In")) {
-                    viewModel.zoomScale = min(max(4, viewModel.actualSizeZoomScale), viewModel.zoomScale * 1.25)
-                }
-                Button(AppLocalization.string("Zoom Out")) {
-                    viewModel.zoomScale = max(1, viewModel.zoomScale / 1.25)
-                    if viewModel.zoomScale == 1 {
+                Menu {
+                    Button(AppLocalization.string("Fit to Window")) {
+                        viewModel.zoomScale = 1
                         viewModel.viewOffset = .zero
                         viewModel.isPanningViewport = false
                     }
-                }
-                Toggle(AppLocalization.string("Pan View"), isOn: $viewModel.isPanningViewport)
-                    #if canImport(UIKit)
-                    .disabled(viewModel.zoomScale <= 1 || viewModel.isObserveOnly)
-                    #else
-                    .disabled(viewModel.zoomScale <= 1)
-                    #endif
-                Divider()
-                ForEach(displayManager.availableDisplays) { display in
-                    Button {
-                        displayManager.selectDisplay(id: display.id)
-                    } label: {
-                        HStack {
-                            Text(AppLocalization.message(display.name))
-                            if displayManager.selectedDisplayId == display.id {
-                                Image(systemName: "checkmark")
-                            }
+                    Button(AppLocalization.string("Actual Size")) {
+                        viewModel.zoomScale = viewModel.actualSizeZoomScale
+                    }
+                    Button(AppLocalization.string("Zoom In")) {
+                        viewModel.zoomScale = min(max(4, viewModel.actualSizeZoomScale), viewModel.zoomScale * 1.25)
+                    }
+                    Button(AppLocalization.string("Zoom Out")) {
+                        viewModel.zoomScale = max(1, viewModel.zoomScale / 1.25)
+                        if viewModel.zoomScale == 1 {
+                            viewModel.viewOffset = .zero
+                            viewModel.isPanningViewport = false
                         }
                     }
+                    Toggle(AppLocalization.string("Pan View"), isOn: $viewModel.isPanningViewport)
+                        #if canImport(UIKit)
+                        .disabled(viewModel.zoomScale <= 1 || viewModel.isObserveOnly)
+                        #else
+                        .disabled(viewModel.zoomScale <= 1)
+                        #endif
+                } label: {
+                    Label(AppLocalization.string("View"), systemImage: "magnifyingglass")
                 }
+                .accessibilityIdentifier("session-view-menu")
+                Divider()
+                Menu {
+                    displayChoices
+                } label: {
+                    Label(AppLocalization.string("Displays"), systemImage: "display")
+                }
+                .accessibilityIdentifier("session-displays")
+                #if os(iOS) && !targetEnvironment(macCatalyst)
+                if #available(iOS 27.0, *), UIDevice.current.userInterfaceIdiom == .pad,
+                   externalDisplayMirror.isAvailable {
+                    Toggle(AppLocalization.string("Mirror to External Display"), isOn: Binding(
+                        get: { externalDisplayMirror.isMirroring },
+                        set: { externalDisplayMirror.setMirroring($0) }))
+                        .disabled(!externalDisplayMirror.canPresent)
+                        .accessibilityIdentifier("session-external-display-mirror")
+                }
+                #endif
+                Button {
+                    viewModel.changeCurtain()
+                } label: {
+                    Label(AppLocalization.string(viewModel.curtainActionTitle), systemImage: "eye.slash")
+                }
+                .disabled(!viewModel.canChangeCurtain)
+                .help(AppLocalization.string("Requires an available Remote Management session outside the login window."))
+                .accessibilityIdentifier("session-curtain-toggle")
                 Button {
                     viewModel.triggerHaptic()
                     viewModel.curtainManager.toggleCurtain()
@@ -453,9 +650,6 @@ public struct RemoteDesktopView: View {
                     Label(AppLocalization.string(viewModel.curtainManager.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac"), systemImage: "lock")
                 }
                 .disabled(viewModel.isObserveOnly && !viewModel.curtainManager.isCurtainActive)
-                Button { viewModel.reconnectSession() } label: {
-                    Label(AppLocalization.string("Reconnect"), systemImage: "arrow.clockwise")
-                }
             } label: {
                 controlIcon("ellipsis")
             }
@@ -496,11 +690,31 @@ public struct RemoteDesktopView: View {
         .padding(.horizontal, 12)
     }
 
+    @ViewBuilder
+    private var displayChoices: some View {
+        ForEach(displayManager.availableDisplays) { display in
+            Button {
+                viewModel.selectDisplay(id: display.id)
+            } label: {
+                HStack {
+                    Text(AppLocalization.message(display.name))
+                    if displayManager.pendingDisplayId == display.id {
+                        ProgressView().accessibilityLabel(AppLocalization.string("Switching Display"))
+                    }
+                    if displayManager.selectedDisplayId == display.id {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+            .disabled(viewModel.pendingImageScale != nil)
+        }
+    }
+
     private func controlIcon(_ symbol: String) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.white)
-            .frame(width: 34, height: 34)
+            .frame(width: 44, height: 44)
             .contentShape(Rectangle())
     }
 

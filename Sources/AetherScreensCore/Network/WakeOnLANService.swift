@@ -1,5 +1,5 @@
 import Foundation
-import Network
+import Darwin
 
 /// Sends Wake-on-LAN (WOL) Magic Packets to wake up sleeping Macs on the local network.
 public enum WakeOnLANService {
@@ -50,38 +50,79 @@ public enum WakeOnLANService {
         port: UInt16 = 9,
         completion: (@Sendable (Bool) -> Void)? = nil
     ) {
-        guard let macBytes = parseMACAddress(macAddress) else {
+        guard let macBytes = parseMACAddress(macAddress), port > 0,
+              !broadcastHost.isEmpty, !broadcastHost.contains(where: { $0.isWhitespace }),
+              !broadcastHost.utf8.contains(0) else {
             completion?(false)
             return
         }
 
         let packet = createMagicPacket(macBytes: macBytes)
 
-        let host = NWEndpoint.Host(broadcastHost)
-        let nwPort = NWEndpoint.Port(rawValue: port)!
-
-        let udpParams = NWParameters.udp
-        udpParams.allowLocalEndpointReuse = true
-
-        let connection = NWConnection(host: host, port: nwPort, using: udpParams)
+        let result = WakePacketCompletion(completion)
         let queue = DispatchQueue(label: "com.aethernative.aetherscreens.wol", qos: .utility)
-
-        connection.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                connection.send(content: packet, completion: .contentProcessed({ error in
-                    let success = (error == nil)
-                    connection.cancel()
-                    completion?(success)
-                }))
-            case .failed:
-                connection.cancel()
-                completion?(false)
-            default:
-                break
+        // Resolution must not hold up the UI or leave the completion pending.
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 5) {
+            result.finish(false)
+        }
+        queue.async {
+            var hints = addrinfo()
+            hints.ai_family = AF_INET
+            hints.ai_socktype = SOCK_DGRAM
+            hints.ai_protocol = IPPROTO_UDP
+            var addresses: UnsafeMutablePointer<addrinfo>?
+            guard getaddrinfo(broadcastHost, String(port), &hints, &addresses) == 0,
+                  let address = addresses else {
+                result.finish(false); return
+            }
+            defer { freeaddrinfo(addresses) }
+            guard result.isPending else { return }
+            let socket = Darwin.socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+            guard socket >= 0 else { result.finish(false); return }
+            defer { Darwin.close(socket) }
+            var enabled: Int32 = 1
+            let flags = fcntl(socket, F_GETFL)
+            // Network framework does not support UDP broadcast. Use a bounded
+            // datagram socket; iOS still enforces its multicast entitlement.
+            guard setsockopt(socket, SOL_SOCKET, SO_BROADCAST, &enabled, socklen_t(MemoryLayout<Int32>.size)) == 0,
+                  flags >= 0, fcntl(socket, F_SETFL, flags | O_NONBLOCK) == 0,
+                  result.isPending else { result.finish(false); return }
+            // Local socket acceptance is not evidence that the Mac woke up.
+            result.finish {
+                packet.withUnsafeBytes {
+                    Darwin.sendto(socket, $0.baseAddress, $0.count, 0, address.pointee.ai_addr, address.pointee.ai_addrlen) == packet.count
+                }
             }
         }
+    }
+}
 
-        connection.start(queue: queue)
+private final class WakePacketCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    private var completion: (@Sendable (Bool) -> Void)?
+
+    init(_ completion: (@Sendable (Bool) -> Void)?) { self.completion = completion }
+
+    var isPending: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return !finished
+    }
+
+    func finish(_ success: Bool) {
+        finish { success }
+    }
+
+    /// The bounded nonblocking send and its deadline share this lock, so a
+    /// resolver that returns after expiration cannot send a late wake packet.
+    func finish(_ operation: () -> Bool) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        let success = operation()
+        finished = true
+        let completion = self.completion
+        self.completion = nil
+        lock.unlock()
+        completion?(success)
     }
 }

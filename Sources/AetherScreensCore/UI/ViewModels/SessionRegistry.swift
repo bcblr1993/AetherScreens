@@ -21,13 +21,24 @@ public final class SessionRegistry: ObservableObject {
 
     @discardableResult
     public func register(_ session: SessionViewModel, reuseExisting: Bool = true) -> UUID {
-        if reuseExisting, let existing = sessions.first(where: { $0.viewModel.device.id == session.device.id }) {
-            return existing.id
+        if reuseExisting, let id = reusableSessionID(for: session.device) {
+            return id
         }
         let id = UUID()
         sessions.append(Entry(id: id, viewModel: session, number: nextNumber))
         nextNumber += 1
         return id
+    }
+
+    /// Metadata-only lookup; callers can focus an existing session before
+    /// reading credentials or constructing a replacement SessionViewModel.
+    public func reusableSessionID(for device: RemoteDevice) -> UUID? {
+        sessions.first(where: {
+            let old = $0.viewModel.device, new = device
+            return old.id == new.id && old.host == new.host && old.port == new.port &&
+                old.username == new.username && old.authMethod == new.authMethod &&
+                old.sshConfiguration == new.sshConfiguration
+        })?.id
     }
 
     public func session(for id: UUID) -> SessionViewModel? {

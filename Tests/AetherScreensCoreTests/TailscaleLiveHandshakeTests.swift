@@ -1,5 +1,6 @@
 import XCTest
 import Network
+import Security
 @testable import AetherScreensCore
 
 /// Talks to a real Mac with Screen Sharing on. Skipped unless a host is given, e.g.
@@ -120,31 +121,28 @@ final class TailscaleLiveHandshakeTests: XCTestCase {
     }
 
     func testLiveTailscaleFullSessionWithSavedPassword() throws {
-        var dev = DeviceStore.shared.devices.first(where: { $0.host == targetHost })
-        if dev == nil {
-            if let appDefaults = UserDefaults(suiteName: "com.aethernative.aetherscreens"),
-               let data = appDefaults.data(forKey: DeviceStore.storageKey),
-               let devs = try? JSONDecoder().decode([RemoteDevice].self, from: data) {
-                dev = devs.first(where: { $0.host == targetHost })
-            }
-        }
+        let env = ProcessInfo.processInfo.environment
+        let savedDevice = env["AETHERSCREENS_QA_USE_SAVED_CREDENTIALS"] == "1" ? UserDefaults(suiteName: "com.aethernative.aetherscreens")?
+            .data(forKey: DeviceStore.storageKey)
+            .flatMap { try? JSONDecoder().decode([RemoteDevice].self, from: $0) }?
+            .first { $0.host == targetHost && $0.port == targetPort } : nil
 
-        let configuredPassword = ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_PASSWORD"]
-        let savedPassword = dev.flatMap { DeviceStore.shared.getPassword(for: $0) }
+        let configuredPassword = env["AETHERSCREENS_LIVE_PASSWORD"]
+        let savedPassword = configuredPassword == nil ? savedDevice.flatMap(noninteractiveSavedPassword) : nil
         guard let pwd = configuredPassword ?? savedPassword, !pwd.isEmpty else {
-            throw XCTSkip("Provide AETHERSCREENS_LIVE_PASSWORD or save a password in Keychain for full live acceptance")
+            throw XCTSkip("Provide a test password or an existing credential readable without a Keychain prompt")
         }
+        let username = env["AETHERSCREENS_LIVE_USERNAME"] ??
+            (configuredPassword == nil && savedDevice?.authMethod == .macAccount ? savedDevice?.username : nil)
 
-        print("[TailscaleLiveHandshakeTests] Using supplied or Keychain password for \(targetHost), running live session test...")
         let frameExpectation = expectation(description: "Receive at least 1 screen frame from remote Mac")
         frameExpectation.assertForOverFulfill = false
 
-        let client = RFBClient(host: targetHost, port: targetPort, password: pwd, username: ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_USERNAME"])
-        client.onStateChanged = { state in
-            print("[TailscaleLiveHandshakeTests] Client state changed: \(state)")
-        }
+        let client = RFBClient(host: targetHost, port: targetPort, password: pwd,
+                               username: username, automaticClipboard: false)
+        client.setInputEnabled(false)
+        defer { client.disconnect() }
         client.onFrameUpdated = {
-            print("[TailscaleLiveHandshakeTests] Frame received! Dimensions: \(client.framebuffer.width)x\(client.framebuffer.height)")
             frameExpectation.fulfill()
         }
 
@@ -166,5 +164,25 @@ final class TailscaleLiveHandshakeTests: XCTestCase {
         client.disconnect()
         wait(for: [unexpectedFailure], timeout: 1)
         XCTAssertEqual(client.state, .disconnected)
+    }
+
+    private func noninteractiveSavedPassword(for device: RemoteDevice) -> String? {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_QA_USE_SAVED_CREDENTIALS"] == "1" else { return nil }
+        for service in [KeychainStore.defaultServiceName, KeychainStore.legacyServiceName] {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: service,
+                kSecAttrAccount as String: device.id.uuidString,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitOne,
+                kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail
+            ]
+            var item: CFTypeRef?
+            if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+               let data = item as? Data, let password = String(data: data, encoding: .utf8) {
+                return password
+            }
+        }
+        return nil
     }
 }

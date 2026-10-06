@@ -1,6 +1,22 @@
 import Foundation
 import Security
 
+protocol DevicePasswordStore: Sendable {
+    @discardableResult func savePassword(_ password: String, forKey key: String) -> Bool
+    func loadPassword(forKey key: String) -> String?
+    @discardableResult func deletePassword(forKey key: String) -> Bool
+}
+
+extension KeychainStore: DevicePasswordStore {}
+
+/// Injectable primitives keep credential behavior testable without opening the
+/// user's Keychain. The store owns serialization and its existing memory cache.
+protocol KeychainSecretBackend: Sendable {
+    func read(service: String, key: String) -> Data?
+    func write(_ data: Data, service: String, key: String) -> Bool
+    func delete(service: String, key: String) -> OSStatus
+}
+
 /// Secure storage helper using system Keychain for passwords, with memory cache fallback.
 public final class KeychainStore: @unchecked Sendable {
     public static let shared = KeychainStore()
@@ -11,6 +27,7 @@ public final class KeychainStore: @unchecked Sendable {
 
     private let serviceName: String
     private let legacyServiceName: String?
+    private let backend: any KeychainSecretBackend
     private var inMemoryStore: [String: String] = [:]
     private let lock = NSLock()
 
@@ -18,6 +35,15 @@ public final class KeychainStore: @unchecked Sendable {
                 legacyServiceName: String? = KeychainStore.legacyServiceName) {
         self.serviceName = serviceName
         self.legacyServiceName = legacyServiceName
+        self.backend = SystemKeychainSecretBackend()
+    }
+
+    init(serviceName: String = KeychainStore.defaultServiceName,
+         legacyServiceName: String? = KeychainStore.legacyServiceName,
+         backend: any KeychainSecretBackend) {
+        self.serviceName = serviceName
+        self.legacyServiceName = legacyServiceName
+        self.backend = backend
     }
 
     /// Save a password for a given device ID or key.
@@ -80,6 +106,21 @@ public final class KeychainStore: @unchecked Sendable {
     // MARK: - Keychain primitives (callers hold `lock`)
 
     private func readItem(service: String, key: String) -> Data? {
+        backend.read(service: service, key: key)
+    }
+
+    private func writeItem(_ data: Data, service: String, key: String) -> Bool {
+        backend.write(data, service: service, key: key)
+    }
+
+    @discardableResult
+    private func deleteItem(service: String, key: String) -> OSStatus {
+        backend.delete(service: service, key: key)
+    }
+}
+
+private struct SystemKeychainSecretBackend: KeychainSecretBackend {
+    func read(service: String, key: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -94,9 +135,9 @@ public final class KeychainStore: @unchecked Sendable {
         return item as? Data
     }
 
-    private func writeItem(_ data: Data, service: String, key: String) -> Bool {
+    func write(_ data: Data, service: String, key: String) -> Bool {
         // Remove existing item if present
-        deleteItem(service: service, key: key)
+        _ = delete(service: service, key: key)
 
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -110,7 +151,7 @@ public final class KeychainStore: @unchecked Sendable {
     }
 
     @discardableResult
-    private func deleteItem(service: String, key: String) -> OSStatus {
+    func delete(service: String, key: String) -> OSStatus {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

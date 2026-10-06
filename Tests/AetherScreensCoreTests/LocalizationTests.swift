@@ -44,10 +44,14 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(AppLocalization.message("Socket read error: original reason"), "读取连接数据失败：original reason")
         XCTAssertEqual(AppLocalization.message("Tailscale HTTP 401: original reason"), "Tailscale HTTP 错误 401：original reason")
         XCTAssertEqual(AppLocalization.message("Remote host closed connection (received 4/8 bytes)"), "远端主机已关闭连接（已接收 4/8 字节）")
+        XCTAssertEqual(AppLocalization.message("Unsupported framebuffer encoding: 2147483646"), "不支持的画面编码：2147483646")
+        XCTAssertEqual(AppLocalization.message("Unsupported server message type: 126"), "不支持的服务器消息类型：126")
         XCTAssertTrue(AppLocalization.message("Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network.").contains("系统设置"))
         XCTAssertTrue(AppLocalization.message("Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in Settings > Privacy & Security > Local Network.").contains("“设置”"))
         AppLocalization.select(.english)
         XCTAssertEqual(AppLocalization.message("Synced 12 nodes from Tailscale"), "Synced 12 nodes from Tailscale")
+        XCTAssertEqual(AppLocalization.message("Unsupported framebuffer encoding: 2147483646"), "Unsupported framebuffer encoding: 2147483646")
+        XCTAssertEqual(AppLocalization.message("Unsupported server message type: 126"), "Unsupported server message type: 126")
     }
 
     @MainActor
@@ -62,5 +66,33 @@ final class LocalizationTests: XCTestCase {
         settings.language = .english
         XCTAssertEqual(settings.locale.language.languageCode?.identifier, "en")
         XCTAssertEqual(AppLanguageSettings(defaults: defaults).language, .english)
+    }
+
+    @MainActor
+    func testManualSelectionOverridesInitialLaunchLanguage() async throws {
+        let previous = AppLocalization.language
+        let suite = "test.aetherscreens.language-launch.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let arguments = defaults.volatileDomain(forName: UserDefaults.argumentDomain)
+        defer {
+            defaults.setVolatileDomain(arguments, forName: UserDefaults.argumentDomain)
+            defaults.removePersistentDomain(forName: suite)
+            AppLocalization.select(previous)
+        }
+        defaults.setVolatileDomain([
+            AppLocalization.preferenceKey: AppLanguage.simplifiedChinese.rawValue,
+            "qa.unrelated-launch-option": "preserved"
+        ], forName: UserDefaults.argumentDomain)
+        let settings = AppLanguageSettings(defaults: defaults)
+        XCTAssertEqual(settings.language, .simplifiedChinese)
+
+        settings.language = .english
+        try await Task.sleep(nanoseconds: 30_000_000)
+        XCTAssertEqual(settings.language, .english, "Preference notifications must retain the manual selection")
+        XCTAssertEqual(AppLocalization.language, .english)
+        XCTAssertEqual(defaults.string(forKey: AppLocalization.preferenceKey), "en")
+        XCTAssertEqual(defaults.string(forKey: "qa.unrelated-launch-option"), "preserved")
+        defaults.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+        XCTAssertEqual(AppLanguageSettings(defaults: defaults).language, .english, "The selection must survive relaunch without arguments")
     }
 }

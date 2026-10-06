@@ -2,6 +2,51 @@ import Foundation
 
 /// Encodes client-to-server messages according to the RFB 3.8 specification.
 public enum RFBEncoder {
+    /// Keep negotiation tied to implemented decoders. Apple image encodings
+    /// 1000...1002 and 1011 have IANA assignments, but that registration does not
+    /// describe their payloads or provide a decoder. In particular, advertising
+    /// display-layout metadata does not enable progressive image refinement.
+    static func sessionEncodings(supportsAppleDisplayMetadata: Bool) -> [RFBConstants.EncodingType] {
+        var encodings: [RFBConstants.EncodingType] = [
+            .zrle, .zlib, .copyRect, .desktopSize, .extendedDesktopSize, .raw
+        ]
+        if supportsAppleDisplayMetadata { encodings += [.appleDisplayInfo, .appleDisplayLayout] }
+        return encodings
+    }
+
+    /// Apple scales the encoded desktop; physical display settings stay intact.
+    static func encodeAppleServerScaling(_ factor: Double) -> Data? {
+        guard factor.isFinite, factor > 0, factor <= 1 else { return nil }
+        var message = Data([8, 0])
+        withUnsafeBytes(of: factor.bitPattern.bigEndian) { message.append(contentsOf: $0) }
+        return message
+    }
+
+    static func encodeAppleSetDisplay(_ id: UInt32?) -> Data {
+        var message = Data([0x0D, id == nil ? 1 : 0, 0, 0])
+        withUnsafeBytes(of: (id ?? 0).bigEndian) { message.append(contentsOf: $0) }
+        return message
+    }
+
+    /// Apple session visibility: 0 hides the console, 1 restores it. An empty
+    /// UTF-8 note avoids sending user/account information to the physical screen.
+    /// Protocol reference and physical-display limitations: docs/curtain-protocol.md.
+    static func encodeAppleCurtain(hidden: Bool) -> Data {
+        Data([12, 0, 0, hidden ? 0 : 1, 0, 0])
+    }
+
+    /// Apple's interval is in microseconds, not a display identifier. All ones
+    /// disables push. Pace capture at 60 Hz rather than allowing unbounded pushes
+    /// to hold the server's input reader behind a slow framebuffer transfer.
+    static func encodeAppleAutoFramebufferUpdate(width: UInt16, height: UInt16,
+                                                 intervalMicroseconds: UInt32 = 16_667) -> Data {
+        var data = Data([9, 0, 0, 1])
+        withUnsafeBytes(of: intervalMicroseconds.bigEndian) { data.append(contentsOf: $0) }
+        data.append(contentsOf: [0, 0, 0, 0])
+        withUnsafeBytes(of: width.bigEndian) { data.append(contentsOf: $0) }
+        withUnsafeBytes(of: height.bigEndian) { data.append(contentsOf: $0) }
+        return data
+    }
 
     /// Encode `SetPixelFormat` (message-type 0)
     public static func encodeSetPixelFormat(_ format: RFBPixelFormat) -> Data {

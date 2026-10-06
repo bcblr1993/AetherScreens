@@ -1,0 +1,17 @@
+"Computer" = "Computer";
+"Open Computer" = "Open Computer";
+"Open a saved computer that you enabled in AetherScreens." = "Open a saved computer that you enabled in AetherScreens.";
+"Open ${target}" = "Open ${target}";
+"Open request submitted. Return to the library if a session or editor is already open." = "Open request submitted. Return to the library if a session or editor is already open.";
+
+// Apple Curtain console visibility
+"Hide Remote Console" = "Hide Remote Console";
+"Restore Remote Console" = "Restore Remote Console";
+"Hiding remote console…" = "Hiding remote console…";
+"Restoring remote console…" = "Restoring remote console…";
+"Remote console hidden. Check the Mac’s display before relying on privacy." = "Remote console hidden. Check the Mac’s display before relying on privacy.";
+"The remote console change timed out. Its state is unconfirmed." = "The remote console change timed out. Its state is unconfirmed.";
+"The remote console change failed. Its state is unconfirmed." = "The remote console change failed. Its state is unconfirmed.";
+"Remote console visibility is unconfirmed." = "Remote console visibility is unconfirmed.";
+"Remote console restoration is unconfirmed. Check the Mac before leaving it unattended." = "Remote console restoration is unconfirmed. Check the Mac before leaving it unattended.";
+"Requires an available Remote Management session outside the login window." = "Requires an available Remote Management session outside the login window.";

@@ -1,4 +1,5 @@
 import Foundation
+import AetherScreensSSH
 
 /// App-level representation of a remote computer configured for screen sharing.
 public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
@@ -35,6 +36,20 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
     public var lastConnected: Date?
     public var isTailscaleNode: Bool
     public var macAddress: String?
+    public var disconnectAction: RemoteDisconnectAction?
+    public var cursorSpeed: Double?
+    public var sharedClipboard: Bool?
+    public var imageCompression: RemoteImageCompressionPolicy?
+    /// Server screen ID; nil means the complete desktop. Wire ID zero is valid.
+    public var preferredDisplayID: UInt32?
+    public var sshConfiguration: SSHConfiguration?
+    public var effectiveSharedClipboard: Bool { sharedClipboard ?? true }
+    /// Preserve the full resolution of connections saved by earlier versions.
+    public var effectiveImageCompression: RemoteImageCompressionPolicy { imageCompression ?? .never }
+    public static func validatedCursorSpeed(_ value: Double) -> Double {
+        value.isFinite ? min(2, max(0.25, value)) : 1
+    }
+    public var effectiveCursorSpeed: Double { Self.validatedCursorSpeed(cursorSpeed ?? 1) }
 
     public init(
         id: UUID = UUID(),
@@ -47,7 +62,13 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         isOnline: Bool = true,
         lastConnected: Date? = nil,
         isTailscaleNode: Bool = false,
-        macAddress: String? = nil
+        macAddress: String? = nil,
+        disconnectAction: RemoteDisconnectAction? = nil,
+        cursorSpeed: Double? = nil,
+        sharedClipboard: Bool? = nil,
+        imageCompression: RemoteImageCompressionPolicy? = nil,
+        preferredDisplayID: UInt32? = nil,
+        sshConfiguration: SSHConfiguration? = nil
     ) {
         self.id = id
         self.name = name
@@ -60,6 +81,12 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.lastConnected = lastConnected
         self.isTailscaleNode = isTailscaleNode
         self.macAddress = macAddress
+        self.disconnectAction = disconnectAction
+        self.cursorSpeed = cursorSpeed
+        self.sharedClipboard = sharedClipboard
+        self.imageCompression = imageCompression
+        self.preferredDisplayID = preferredDisplayID
+        self.sshConfiguration = sshConfiguration
     }
 
     /// Creates a RemoteDevice from a Tailscale node

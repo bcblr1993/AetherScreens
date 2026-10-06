@@ -1,1 +1,5 @@
 "NSLocalNetworkUsageDescription" = "Discover nearby computers and connect to their shared screens.";
+"NSMicrophoneUsageDescription" = "Use the microphone for on-device dictation. Review text before sending it to the remote computer.";
+"NSSpeechRecognitionUsageDescription" = "Recognize dictation on this device before you choose to send the text to the remote computer.";
+
+"NSFaceIDUsageDescription" = "Authenticate before typing your saved user password on the remote Mac.";
