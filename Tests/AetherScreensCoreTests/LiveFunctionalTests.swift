@@ -39,15 +39,24 @@ final class LiveFunctionalTests: XCTestCase {
 
     func testLivePointerDeliveryToControlledFixture() throws {
         let env = ProcessInfo.processInfo.environment
-        guard let host = env["AETHERSCREENS_LIVE_HOST"], let password = env["AETHERSCREENS_LIVE_PASSWORD"],
+        guard let host = env["AETHERSCREENS_LIVE_HOST"],
               let x = env["AETHERSCREENS_QA_CLICK_X"].flatMap(UInt16.init),
               let y = env["AETHERSCREENS_QA_CLICK_Y"].flatMap(UInt16.init) else {
             throw XCTSkip("Requires explicit live credentials and controlled fixture coordinates")
+        }
+        let savedDevices = UserDefaults(suiteName: "com.aethernative.aetherscreens")?
+            .data(forKey: DeviceStore.storageKey)
+            .flatMap { try? JSONDecoder().decode([RemoteDevice].self, from: $0) } ?? []
+        let savedDevice = savedDevices.first { $0.host == host && $0.username == env["AETHERSCREENS_LIVE_USERNAME"] }
+        guard let password = env["AETHERSCREENS_LIVE_PASSWORD"] ?? savedDevice.flatMap({ DeviceStore.shared.getPassword(for: $0) }),
+              !password.isEmpty else {
+            throw XCTSkip("Requires supplied credentials or a matching saved Keychain account")
         }
         let frame = expectation(description: "Real frame received")
         frame.assertForOverFulfill = false
         let account = try XCTUnwrap(env["AETHERSCREENS_QA_SSH_USER"], "Specify the fixture SSH account")
         let client = RFBClient(host: host, password: password, username: env["AETHERSCREENS_LIVE_USERNAME"])
+        defer { client.disconnect() }
         client.onFrameUpdated = { frame.fulfill() }
         client.onStateChanged = { state in if case .failed = state { frame.fulfill() } }
         client.connect()
@@ -61,6 +70,16 @@ final class LiveFunctionalTests: XCTestCase {
         let settled = expectation(description: "Initial desktop update completed")
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { settled.fulfill() }
         wait(for: [settled], timeout: 6)
+        func backgroundPixel() -> [UInt8] {
+            var pixel: [UInt8] = []
+            client.framebuffer.withPixelBytes { bytes, width, height in
+                guard width > 3500, height > 2000 else { return }
+                let offset = (2000 * width + 3500) * 4
+                pixel = Array(bytes[offset..<(offset + 3)])
+            }
+            return pixel
+        }
+        let initialMarker = env["AETHERSCREENS_QA_LATENCY"] == "1" ? backgroundPixel() : []
         let before = try fixtureEvents(host: host, account: account)
         client.sendPointerEvent(buttonMask: .left, x: x, y: y)
         client.sendPointerEvent(buttonMask: [], x: x, y: y)
@@ -71,6 +90,34 @@ final class LiveFunctionalTests: XCTestCase {
         XCTAssertGreaterThan(after.filter { $0["type"] as? String == "click" }.count,
                              before.filter { $0["type"] as? String == "click" }.count,
                              "The controlled remote page must observe the actual click")
+        if env["AETHERSCREENS_QA_LATENCY"] == "1" {
+            // A fixture click changes the otherwise static background. Moving animation
+            // elsewhere cannot satisfy this specific input-to-frame response check.
+            // The initial functional click must have appeared before the next
+            // toggle is measured. Otherwise two pending toggles can coalesce
+            // into the baseline color and create a false timeout.
+            XCTAssertEqual(initialMarker.count, 3)
+            let initialDeadline = ProcessInfo.processInfo.systemUptime + 2
+            while backgroundPixel() == initialMarker && ProcessInfo.processInfo.systemUptime < initialDeadline {
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+            }
+            XCTAssertNotEqual(backgroundPixel(), initialMarker, "Initial click response must be decoded before measuring another")
+            var samples: [Double] = []
+            for _ in 0..<10 {
+                let original = backgroundPixel()
+                XCTAssertEqual(original.count, 3)
+                let start = ProcessInfo.processInfo.systemUptime
+                client.sendPointerEvent(buttonMask: .left, x: x, y: y)
+                client.sendPointerEvent(buttonMask: [], x: x, y: y)
+                while backgroundPixel() == original && ProcessInfo.processInfo.systemUptime - start < 2 {
+                    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
+                }
+                XCTAssertNotEqual(backgroundPixel(), original, "The click-specific background change must return")
+                samples.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+            }
+            let sorted = samples.sorted()
+            print("Input-to-decoded-frame milliseconds: median=\(sorted[5]), p95/max=\(sorted[9]), samples=\(samples)")
+        }
         if env["AETHERSCREENS_QA_OBSERVE"] == "1" {
             client.sendKeyEvent(down: true, keySym: MacKeyMap.shiftLeft)
             client.setInputEnabled(false)
@@ -106,40 +153,14 @@ final class LiveFunctionalTests: XCTestCase {
             }
             client.sendPointerEvent(buttonMask: .left, x: x, y: y)
             client.sendPointerEvent(buttonMask: [], x: x, y: y)
-            let resumed = expectation(description: "Control resumes")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { resumed.fulfill() }
-            wait(for: [resumed], timeout: 2)
-            let resumedEvents = try fixtureEvents(host: host, account: account)
+            // Wait for the receiver's acknowledgement rather than assume the
+            // server has dispatched a restored click after a fixed half second.
+            let resumedEvents = try waitForFixtureEvents(host: host, account: account) {
+                $0.filter { $0["type"] as? String == "click" }.count >
+                observed.filter { $0["type"] as? String == "click" }.count
+            }
             XCTAssertGreaterThan(resumedEvents.filter { $0["type"] as? String == "click" }.count,
                                  observed.filter { $0["type"] as? String == "click" }.count)
-        }
-        if env["AETHERSCREENS_QA_LATENCY"] == "1" {
-            // A fixture click changes the otherwise static background. Moving animation
-            // elsewhere cannot satisfy this specific input-to-frame response check.
-            func backgroundPixel() -> [UInt8] {
-                var pixel: [UInt8] = []
-                client.framebuffer.withPixelBytes { bytes, width, height in
-                    guard width > 3500, height > 2000 else { return }
-                    let offset = (2000 * width + 3500) * 4
-                    pixel = Array(bytes[offset..<(offset + 3)])
-                }
-                return pixel
-            }
-            var samples: [Double] = []
-            for _ in 0..<10 {
-                let original = backgroundPixel()
-                XCTAssertEqual(original.count, 3)
-                let start = ProcessInfo.processInfo.systemUptime
-                client.sendPointerEvent(buttonMask: .left, x: x, y: y)
-                client.sendPointerEvent(buttonMask: [], x: x, y: y)
-                while backgroundPixel() == original && ProcessInfo.processInfo.systemUptime - start < 2 {
-                    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.01))
-                }
-                XCTAssertNotEqual(backgroundPixel(), original, "The click-specific background change must return")
-                samples.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
-            }
-            let sorted = samples.sorted()
-            print("Input-to-decoded-frame milliseconds: median=\(sorted[5]), p95/max=\(sorted[9]), samples=\(samples)")
         }
         if let text = env["AETHERSCREENS_QA_TYPE_TEXT"] {
             client.sendPointerEvent(buttonMask: .left, x: 720, y: 804)
@@ -203,15 +224,26 @@ final class LiveFunctionalTests: XCTestCase {
                 client.sendPointerEvent(buttonMask: .scrollDown, x: scrollX, y: scrollY)
                 client.sendPointerEvent(buttonMask: [], x: scrollX, y: scrollY)
             }
-            let scrolled = expectation(description: "Allow remote wheel delivery")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { scrolled.fulfill() }
-            wait(for: [scrolled], timeout: 3)
-            let events = try fixtureEvents(host: host, account: account)
+            let events = try waitForFixtureEvents(host: host, account: account) {
+                $0.filter { $0["type"] as? String == "scroll" }.count >
+                after.filter { $0["type"] as? String == "scroll" }.count
+            }
             XCTAssertGreaterThan(events.filter { $0["type"] as? String == "scroll" }.count,
                                  after.filter { $0["type"] as? String == "scroll" }.count,
                                  "The controlled remote page must observe actual scrolling")
         }
         client.disconnect()
+    }
+
+    private func waitForFixtureEvents(host: String, account: String,
+                                      matching predicate: ([[String: Any]]) -> Bool) throws -> [[String: Any]] {
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        var events = try fixtureEvents(host: host, account: account)
+        while !predicate(events) && ProcessInfo.processInfo.systemUptime < deadline {
+            RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+            events = try fixtureEvents(host: host, account: account)
+        }
+        return events
     }
 
     private func fixtureEvents(host: String, account: String) throws -> [[String: Any]] {

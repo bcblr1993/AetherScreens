@@ -1,5 +1,42 @@
 # Controlled remote input acceptance
 
+## Physical Mac release-candidate UI gate (2026-10-06)
+
+The Mac runner accepts an explicitly authorized macOS 27 host via `--host`.
+The default mode retains isolated `.vmqa` identification and runs the two
+English/Chinese Quick Connect cases. `--release-candidate` instead accepts only
+the production AetherScreens identifier, after strict signature and Gatekeeper
+validation, and tests that unmodified candidate. It does not replace Applications.
+
+For native input acceptance, copy `scripts/qa/gesture_rfb_fixture.py` to the test
+Mac and start it there with `--rfb-port 6399 --display-rfb-port 6400 --http-port 8868`.
+It binds to loopback by default and serves only synthetic pixels, without an
+account or password. Add `--native-input` to the runner to require three passing
+tests, with no skips or runtime warnings. The third case verifies actual received
+click, right-click, held drag with changed coordinates, keyboard press/release
+and wheel packets from the installed native window. It retains packet attachments
+and a synthetic-desktop screenshot. Real Apple-server input is a separate gate.
+
+```sh
+python3 scripts/qa/run_macos_vm_ui_qa.py \
+  --host <authorized-Mac-host> \
+  --developer-dir /Applications/Xcode.app/Contents/Developer \
+  --app build/release/AetherScreens.app --release-candidate --native-input \
+  --output build/mac-release-candidate-ui
+```
+
+Stop only the fixture process started for this run after reviewing the report.
+
+The separate Apple-server protocol run on the authorized Mac mini passed real
+Mac-account authentication with a 3840x2160 desktop, new clicks and wheel-driven
+scrolls recorded by the browser, exact `中文 QA 20261006 verified` committed text,
+Observe suppression and restored control. Ten click-specific decoded-marker
+changes had median 235 ms and max 1396 ms. The test acknowledges the initial
+marker before sending subsequent toggles; otherwise a previous pending update
+can merge with the next toggle. This does not measure display presentation or
+physical iPhone responsiveness. Source log:
+`/tmp/aetherscreens-macmini-live-input-acknowledged.log`.
+
 ## Native iOS gesture delivery (2026-10-01)
 
 The English and Chinese simulator flows both passed (two tests, no skips,
@@ -75,6 +112,22 @@ real desktop content are used. The current physical phones retain the previous
 installed performance candidate pending the user's hand-feel trial.
 
 ## iOS local viewport navigation (2026-10-01)
+
+### Zoomed trackpad edge-follow repair (2026-10-06)
+
+The UIKit trackpad input layer now pans the local viewport when the pointer
+moves outward within 32 points of a visible edge. Held-button trackpad drags
+use the same path. Each axis clamps to the remote canvas bounds; fitted and
+letterboxed axes remain fixed. Pan/Observe and direct-touch navigation do not
+enable automatic following. A pointer already clamped at the remote desktop
+edge can still reveal that edge on an outward finger movement.
+
+Four geometry regression tests passed, and the full suite passed 181 tests
+with five external-environment skips. Signed iOS Release build and signature
+verification passed. Installed on iPhone 16 Pro Max; actual zoom/follow/drag
+acceptance against the physical Mac mini remains pending because iOS refused
+application launch while the phone was locked. Installation is not gesture
+acceptance.
 
 The old simulator build failed a new acceptance test because zoomed iOS
 sessions offered no Pan View control. Observe also removed the native input
@@ -218,7 +271,7 @@ Use an unlocked test session. No real documents or clipboard contents are needed
 
 Set these environment variables in your shell without storing secrets in files:
 
-- `AETHERSCREENS_LIVE_HOST`, `AETHERSCREENS_LIVE_PASSWORD`
+- `AETHERSCREENS_LIVE_HOST`; supply `AETHERSCREENS_LIVE_PASSWORD` or use a matching saved Keychain account
 - `AETHERSCREENS_LIVE_USERNAME` for Mac account authentication; omit for VNC
 - `AETHERSCREENS_QA_SSH_USER` for an existing SSH key-authenticated account
 - `AETHERSCREENS_QA_CLICK_X`, `AETHERSCREENS_QA_CLICK_Y`: framebuffer coordinates of Click test
@@ -228,6 +281,10 @@ Set these environment variables in your shell without storing secrets in files:
 Run `swift test --filter LiveFunctionalTests`.
 The test asserts new remote click and scroll events. Wrong coordinates, a locked
 session, missing fixture, or failed authentication must fail rather than pass.
+Restored click and scroll checks poll receiver events for at most five seconds,
+instead of assuming delivery after a fixed delay. Wheel records retain the DOM
+target and coordinates to distinguish delivery to the wrong region from actual
+scrolling. This delivery timeout is not a responsiveness benchmark.
 
 GUI acceptance additionally checks native keyboard shortcuts, typing, context
 menus, dragging, clipboard directions, reconnect, zoom, and toolbar controls.

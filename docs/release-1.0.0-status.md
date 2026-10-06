@@ -1,39 +1,52 @@
 # 1.0.0 release preparation — 2026-10-06
 
-Candidate build: 2026100601. Public distribution scope: Apple silicon macOS 14+.
-The user selected original logo concept C and authorized the first public release.
-iOS/iPadOS distribution remains a separate step.
+Public distribution scope: Apple silicon macOS 14+. The user selected original
+logo concept C and authorized the first public release. iOS/iPadOS distribution
+remains separate. The removed Tart environment was explicitly replaced by the
+authorized physical Mac mini.
 
-## Current evidence
+## Verified evidence
 
-- Current base `5368e3c` matches `origin/master`; its CI run `36859988746` passed.
-- Release core suite: 177 tests, 5 explicit live-environment skips, 0 failures.
-  Local log: `/tmp/aetherscreens-first-release-core.log`.
-- iOS Release device compilation with signing disabled passed. This verifies
-  compilation and icon catalog processing, not installation or physical input.
-  Local log: `/tmp/aetherscreens-first-release-ios-build.log`.
-- Website final full build passed: 165 tests, 326 pages and 8732 valid internal
-  links. These checks validate the prepared source, not a live deployment.
-- Mac release packaging passed its 177-test Debug suite (5 live skips), arm64
-  Release build, strict signature verification, Apple notarization (Accepted),
-  stapling and Gatekeeper assessment. The mounted volume `AetherScreens 1.0.0`
-  contains exactly `AetherScreens.app` and the `Applications` link; the mounted
-  app reports build 2026100601 and arm64. DMG and ZIP checksums both verify.
-  Local log: `/tmp/aetherscreens-first-release-package.log`.
-- The existing GitHub release is a draft on old commit `2eea898`, not a public
-  release of this candidate. Its assets must not be relabeled as current proof.
+- Pushed base commit `4f2e43f` passed GitHub CI run `37430653075`.
+- Current core suite: 181 tests, five explicit external-environment skips,
+  zero failures (`/tmp/aetherscreens-final-core-tests.log`).
+- iOS arrow pointer and zoomed trackpad edge-follow compile in a signed Release
+  build. Strict signature verification and installation on iPhone 16 Pro Max
+  passed. The phone is locked; launch and actual gesture acceptance remain open.
+- Physical Mac mini runs macOS 27.0.1 arm64. English and Chinese Quick Connect
+  validation passed: two tests, zero failures/skips. Result:
+  `aetherscreens-ui-qa.zztyp2/retest.xcresult` in the test account's home directory.
+  The first attempt found macOS 27 grouped Forms' unlabeled editable fields;
+  tests now select the host and port fields within the sheet. A duplicate QA
+  registration blocked the second attempt; reuse of the original path passed.
+- The expanded Mac suite passed three tests, including received native click,
+  right-click, drag, keyboard press/release and wheel packets on a synthetic
+  loopback desktop. Latest source result: `aetherscreens-ui-qa.zztyp2/native-final.xcresult`
+  on the physical Mac. A separate application launch-confirmation dialog blocked
+  the first expanded run; cancelling that pending launch allowed the tests to
+  run. The signed production candidate must still pass the same suite.
+- Real Mac account authentication, 3840x2160 framebuffer, a sustained 60-second
+  connection and clean disconnect passed with the saved Keychain account
+  (`/tmp/aetherscreens-resume-saved-live.log`). This does not prove input.
+- A separate live input run passed click delivery, exact Chinese committed text,
+  scrolling, Observe suppression and restored control against the controlled
+  browser page. Ten click-to-decoded-marker samples had median 235 ms and max
+  1396 ms (`/tmp/aetherscreens-macmini-live-input-acknowledged.log`). The test
+  waits for the initial marker before further toggles to avoid coalescing two
+  pending changes. It does not establish presented-frame latency, installed-app
+  native input acceptance or equivalence to Screens.
+- Previous build 2026100601 passed signing, notarization, stapling, Gatekeeper,
+  mounted-DMG contents and asset checksums. Changes after `4f2e43f` require a
+  newly packaged candidate; do not publish the previous package as current.
+- Prepared website source passed 165 tests, 326 pages and 8720
+  internal links. The AetherScreens updates have not yet been deployed.
+- GitHub release remains a draft; no first public release is claimed.
 
-## Required remaining gates
+## Remaining gates
 
-- Installed-candidate acceptance of the newly signed Mac package.
-- Current `macos27` VM UI acceptance. `tart list --format json` returned an empty
-  list on this host; no replacement host UI test was run.
-- Real Mac Screen Sharing authentication, framebuffer, input and sustained
-  connection. No live test variables are configured on this host.
-- Physical iPhone acceptance remains separate. The 12 Pro is unavailable and
-  the 16 Pro Max is paired; neither status proves interaction acceptance.
-- Scoped commit/push, current-commit CI, matching GitHub release assets, website
-  deployment and public download/version verification.
-
-The required environments have been requested from the user. Do not mark their
-absence as a passed test or publish solely from compile/unit-test evidence.
+- Installed final signed candidate native input verification and Paste Text
+  acceptance. Bidirectional Mac clipboard is not included in this release.
+- Physical iPhone input acceptance, including zoom, edge-follow and drag.
+- Scoped commit/push, exact-commit CI, final signed/notarized package and
+  matching GitHub assets.
+- Public release, website deployment, download/version/checksum verification.

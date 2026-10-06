@@ -58,10 +58,21 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         accessibilityIdentifier = "remote-desktop-input"
         isAccessibilityElement = true
         accessibilityLabel = AppLocalization.string("Remote desktop canvas")
-        cursor.path = UIBezierPath(ovalIn: CGRect(x: -7, y: -7, width: 14, height: 14)).cgPath
+        // The tip is the remote pointer hotspot; keep it at the layer origin.
+        let arrow = UIBezierPath()
+        arrow.move(to: .zero)
+        arrow.addLine(to: CGPoint(x: 0, y: 23))
+        arrow.addLine(to: CGPoint(x: 6, y: 17))
+        arrow.addLine(to: CGPoint(x: 11, y: 27))
+        arrow.addLine(to: CGPoint(x: 15, y: 25))
+        arrow.addLine(to: CGPoint(x: 10, y: 15))
+        arrow.addLine(to: CGPoint(x: 19, y: 15))
+        arrow.close()
+        cursor.path = arrow.cgPath
         cursor.fillColor = UIColor.white.cgColor
         cursor.strokeColor = UIColor.black.cgColor
         cursor.lineWidth = 1.5
+        cursor.lineJoin = .round
         layer.addSublayer(cursor)
         let fullscreen = UITapGestureRecognizer(target: self, action: #selector(fullscreenTapped(_:)))
         fullscreen.numberOfTouchesRequired = 2
@@ -123,6 +134,17 @@ final class RemoteTouchView: UIView, UIGestureRecognizerDelegate {
         guard let engine, canvas.width > 0 else { return }
         // Finger translation is measured in screen points, not remote pixels.
         engine.handlePanDelta(dx: dx, dy: dy, coordinateScale: engine.remoteWidth / canvas.width)
+        guard !isLocalNavigation, engine.mode == .trackpad else { return }
+        let pointer = CGPoint(x: canvas.minX + engine.cursorX * canvas.width / max(1, engine.remoteWidth),
+                              y: canvas.minY + engine.cursorY * canvas.height / max(1, engine.remoteHeight))
+        let delta = ViewportTracking.panDelta(
+            canvas: canvas, viewport: bounds, pointer: pointer,
+            movement: CGSize(width: dx, height: dy))
+        guard delta != .zero else { return }
+        // Update the local geometry immediately, before SwiftUI supplies the
+        // next viewport, so consecutive touch samples use the new origin.
+        canvas = canvas.offsetBy(dx: delta.width, dy: delta.height)
+        onPan?(delta.width, delta.height)
     }
 
     @objc private func fullscreenTapped(_ gesture: UITapGestureRecognizer) {
