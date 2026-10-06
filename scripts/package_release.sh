@@ -7,7 +7,7 @@ if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
 VERSION="${AETHERSCREENS_VERSION:-1.0.0}"
-BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-1}"
+BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-2026100601}"
 SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
 NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
 OUTPUT="$DIR/build/release"
@@ -21,7 +21,7 @@ RELEASE_BIN="$(swift build -c release --arch arm64 --show-bin-path)/AetherScreen
 APP_DIR="$STAGE/AetherScreens.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$RELEASE_BIN" "$APP_DIR/Contents/MacOS/AetherScreens"
-cp assets/branding/AppIcon-v1.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+cp assets/branding/AppIcon-v2.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp assets/licenses/BigInt-MIT.txt "$APP_DIR/Contents/Resources/BigInt-MIT.txt"
 ditto "$(dirname "$RELEASE_BIN")/AetherScreens_AetherScreensCore.bundle" "$APP_DIR/Contents/Resources/AetherScreens_AetherScreensCore.bundle"
 cp -R assets/localization/*.lproj "$APP_DIR/Contents/Resources/"

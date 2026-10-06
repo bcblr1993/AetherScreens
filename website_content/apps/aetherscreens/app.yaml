@@ -2,7 +2,7 @@
 name: AetherScreens
 order: 6
 repo: https://github.com/bcblr1993/AetherScreens
-icon: ./media/icon-v1.png
+icon: ./media/icon-v2.png
 minimumSystemVersion: "14.0"
 tech: [Swift, SwiftUI, Metal, Network.framework, RFB 3.8]
 
@@ -60,13 +60,13 @@ features:
         - { zh: 支持向睡眠中的 Mac 发送网络唤醒（Wake-on-LAN）数据包。, en: Sends Wake-on-LAN packets to sleeping Macs. }
         - { zh: 设备密码保存在系统钥匙串中。, en: Device passwords are stored in the system Keychain. }
     - kicker: { zh: 画面, en: Display }
-      title: { zh: Metal 渲染，双击切换缩放, en: Metal rendering with double-tap zoom }
+      title: { zh: Metal 渲染与缩放平移, en: Metal rendering with zoom and pan }
       body:
-        zh: 远端画面直接上传为 GPU 纹理渲染；iPhone / iPad 双击切换缩放；Mac 提供适合窗口、实际尺寸、缩放和平移菜单。
-        en: Remote frames are uploaded straight to GPU textures; double-tap zooms on iPhone and iPad; Mac offers fit, actual size, zoom and pan controls.
+        zh: 远端画面直接上传为 GPU 纹理渲染；iPhone / iPad 支持双指缩放与本地平移；Mac 提供适合窗口、实际尺寸、缩放和平移菜单。
+        en: Remote frames are uploaded straight to GPU textures; pinch zoom and local pan on iPhone and iPad; Mac offers fit, actual size, zoom and pan controls.
       details:
-        - { zh: 性能面板显示本地绘制帧率与带宽；尚未测得的延迟显示为 —。, en: The HUD shows local draw rate and bandwidth; unmeasured latency is shown as —. }
-        - { zh: 支持 Zlib、CopyRect 与 Raw 编码。, en: Supports Zlib, CopyRect and Raw encodings. }
+        - { zh: 性能面板显示本地绘制帧率、带宽与测得的 TCP 往返延迟；尚未测得时显示为 —。, en: The HUD shows local draw rate, bandwidth and measured TCP round-trip time; unmeasured latency is shown as —. }
+        - { zh: 支持 ZRLE、Zlib、CopyRect 与 Raw 编码。, en: Supports ZRLE, Zlib, CopyRect and Raw encodings. }
     - kicker: { zh: 输入, en: Input }
       title: { zh: 虚拟触控板与 Mac 快捷键工具栏, en: Virtual trackpad and Mac shortcut toolbar }
       body:

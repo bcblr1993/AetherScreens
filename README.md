@@ -7,7 +7,7 @@ A native remote desktop client for Apple silicon Mac, iPhone and iPad, using mac
 - macOS 14+ on Apple silicon; iOS / iPadOS 17+.
 - Mac account authentication: enter your Mac username and account password. A username selects Apple ARD authentication.
 - VNC password authentication: leave Username empty and enable “VNC viewers may control screen with password” in the remote Mac’s Screen Sharing settings.
-- Metal rendering with Raw, CopyRect and Zlib decoding.
+- Metal rendering with Raw, CopyRect, Zlib and ZRLE decoding.
 - Native Mac keyboard / mouse input; touch and virtual trackpad input on iOS.
 - Keyboard toolbar, sticky modifiers, common Mac shortcuts and insertion of local clipboard text into remote fields.
 - Bonjour discovery, Tailscale device import, saved computers and Keychain passwords.
@@ -20,7 +20,7 @@ A native remote desktop client for Apple silicon Mac, iPhone and iPad, using mac
 
 Bidirectional clipboard synchronization and supplementary-plane emoji input are not supported by the tested Mac server.
 
-“Lock Remote Mac” sends the system lock shortcut. It does not hide the physical display while leaving the desktop unlocked. Display regions are inferred from framebuffer dimensions; physical monitor enumeration is not implemented. Performance depends on the remote server, network and device.
+“Lock Remote Mac” sends the system lock shortcut. It does not hide the physical display while leaving the desktop unlocked. Display selection uses server-reported layouts when available; physical Apple multi-display acceptance remains pending. Performance depends on the remote server, network and device.
 
 LAN VNC traffic is not encrypted by this app. For connections outside a trusted LAN, run Tailscale on both devices and use the remote Mac’s Tailscale address.
 
@@ -52,7 +52,7 @@ AETHERSCREENS_NOTARY_PROFILE='your-keychain-profile' \
 ./scripts/package_release.sh
 ```
 
-The script tests, builds arm64, signs with hardened runtime, notarizes and staples the app, then creates a DMG, ZIP and SHA-256 checksums under `build/release/`. It does not replace an installed app. Version defaults to 1.0.0 (build 1); override with `AETHERSCREENS_VERSION` and `AETHERSCREENS_BUILD_NUMBER`.
+The script tests, builds arm64, signs with hardened runtime, notarizes and staples the app, then creates a DMG, ZIP and SHA-256 checksums under `build/release/`. It does not replace an installed app. Version defaults to 1.0.0 (build 2026100601); override with `AETHERSCREENS_VERSION` and `AETHERSCREENS_BUILD_NUMBER`.
 
 The first public downloadable package is for macOS. iOS requires a signed Xcode installation; an App Store / TestFlight release is a separate distribution step.
 
