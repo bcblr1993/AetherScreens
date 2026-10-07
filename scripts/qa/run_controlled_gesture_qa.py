@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the ten controlled iOS display/gesture/recovery scenarios and reject omissions.
+"""Run the controlled iOS display/gesture/recovery scenarios and reject omissions.
 
 Start gesture_rfb_fixture.py separately. This is a controlled
 simulator/physical-input sub-gate, not actual Apple-server or complete-release
@@ -15,6 +15,8 @@ import subprocess
 import sys
 import urllib.request
 from uuid import uuid4
+
+from usb_fixture_relay import USBFixtureRelay
 
 REPO = Path(__file__).resolve().parents[2]
 CASES = (
@@ -33,9 +35,9 @@ CASES = (
 )
 
 
-def run(command, log):
+def run(command, log, check=True):
     with log.open('x') as output:
-        subprocess.run(command, cwd=REPO, stdout=output, stderr=subprocess.STDOUT, check=True)
+        return subprocess.run(command, cwd=REPO, stdout=output, stderr=subprocess.STDOUT, check=check).returncode
 
 
 def tcp_port(value):
@@ -73,6 +75,8 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     derived = args.derived_data.resolve()
     is_simulator = args.simulator_id is not None
+    cases = CASES if is_simulator else CASES + ('testPhysicalZoomedTrackpadEdgeFollow',)
+    relay = None if is_simulator else USBFixtureRelay(args.device_id, fixture_host, args.http_port, output)
     destination = ('platform=iOS Simulator,id=' + args.simulator_id) if is_simulator else ('platform=iOS,arch=arm64,id=' + args.device_id)
     print('Artifacts: ' + str(output), flush=True)
     if is_simulator:
@@ -95,6 +99,9 @@ def main():
             target['EnvironmentVariables']['AETHERSCREENS_GESTURE_RFB_PORT'] = str(args.rfb_port)
             target['EnvironmentVariables']['AETHERSCREENS_GESTURE_DISPLAY_PORT'] = str(args.display_rfb_port)
             target['EnvironmentVariables']['AETHERSCREENS_GESTURE_HTTP_PORT'] = str(args.http_port)
+            if relay:
+                target['EnvironmentVariables']['AETHERSCREENS_QA_USB_RELAY'] = '1'
+                target['EnvironmentVariables']['AETHERSCREENS_QA_USB_RELAY_DIR'] = relay.directory
     # Keep __TESTROOT__ valid, use a new path to avoid reusing discovery metadata,
     # and never replace the generated plan or any existing opt-in configuration.
     fresh = products / f'CONTROLLED_GESTURE_{token}.xctestrun'
@@ -103,19 +110,23 @@ def main():
     result = output / 'result.xcresult'
     command = ['xcodebuild', 'test-without-building', '-xctestrun', str(fresh),
                '-destination', destination, '-parallel-testing-enabled', 'NO',
-               *['-only-testing:AetherScreensIOSUITests/AetherScreensIOSUITests/' + case for case in CASES]]
+               *['-only-testing:AetherScreensIOSUITests/AetherScreensIOSUITests/' + case for case in cases]]
     try:
+        if relay:
+            relay.start()
         enumeration = output / 'enumeration.json'
         run([*command, '-enumerate-tests', '-test-enumeration-style', 'flat',
              '-test-enumeration-format', 'json', '-test-enumeration-output-path', str(enumeration)], output / 'enumeration.log')
         discovered = json.loads(enumeration.read_text())
         enabled = {test['identifier'] for group in discovered.get('values', [])
                    for test in group.get('enabledTests', [])}
-        expected_discovery = {'AetherScreensIOSUITests/AetherScreensIOSUITests/' + case + '()' for case in CASES}
+        expected_discovery = {'AetherScreensIOSUITests/AetherScreensIOSUITests/' + case + '()' for case in cases}
         if discovered.get('errors') or enabled != expected_discovery:
             raise RuntimeError(f'Controlled test discovery incomplete: missing={sorted(expected_discovery - enabled)}, unexpected={sorted(enabled - expected_discovery)}; inspect {output}')
-        run([*command, '-resultBundlePath', str(result)], output / 'tests.log')
+        test_exit = run([*command, '-resultBundlePath', str(result)], output / 'tests.log', check=False)
     finally:
+        if relay:
+            relay.stop()
         fresh.unlink()
     reports = {}
     for name in ('summary', 'tests'):
@@ -130,14 +141,14 @@ def main():
             visit(child)
     for node in reports['tests']['testNodes']:
         visit(node)
-    expected = {'AetherScreensIOSUITests/' + case + '()' for case in CASES}
+    expected = {'AetherScreensIOSUITests/' + case + '()' for case in cases}
     summary = reports['summary']
-    if (actual != expected or summary.get('totalTestCount') != len(CASES)
-            or summary.get('passedTests') != len(CASES)
+    if (test_exit != 0 or actual != expected or summary.get('totalTestCount') != len(cases)
+            or summary.get('passedTests') != len(cases)
             or summary.get('failedTests') != 0 or summary.get('skippedTests') != 0
             or summary.get('runtimeWarnings') != []):
         raise RuntimeError(f'Controlled QA incomplete: missing={sorted(expected - actual)}, unexpected={sorted(actual - expected)}; inspect {output}')
-    print(f'PASS: all {len(CASES)} requested cases executed, no skips/failures/runtime warnings', flush=True)
+    print(f'PASS: all {len(cases)} requested cases executed, no skips/failures/runtime warnings', flush=True)
 
 
 if __name__ == '__main__':

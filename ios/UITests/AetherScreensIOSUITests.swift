@@ -1,6 +1,73 @@
 import XCTest
 
 final class AetherScreensIOSUITests: XCTestCase {
+    func testPhysicalZoomedTrackpadEdgeFollow() throws {
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires controlled physical fixture") }
+        continueAfterFailure = false
+        let app = makeApp()
+        app.launch()
+        defer { app.terminate() }
+        app.buttons["Quick Connect"].tap()
+        let host = app.textFields["Tailscale IP / Host (e.g. 100.80.1.25)"]
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.tap(); host.typeText(gestureFixtureHost)
+        replacePort(app.textFields["Port"], with: gestureFixturePort)
+        app.buttons["Connect"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["remote-desktop-frame"].firstMatch.waitForExistence(timeout: 15))
+        let input = app.descendants(matching: .any)["remote-desktop-input"].firstMatch
+        func mode(_ value: String) {
+            app.buttons["Input Mode"].tap()
+            app.buttons[value].tap()
+        }
+        func centerX() throws -> Int {
+            try resetGestureFixture()
+            input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            return try XCTUnwrap(try waitForGesturePointers { $0.contains { $0["mask"] == 1 } }.first { $0["mask"] == 1 }?["x"])
+        }
+        func resetView() {
+            app.buttons["Session Options"].tap()
+            app.buttons["Fit to Window"].tap()
+            mode("Touch")
+            input.pinch(withScale: 2, velocity: 1)
+        }
+        // A direct touch at the same visible location measures the displayed
+        // viewport independently from the trackpad pointer's remote position.
+        for right in [true, false] {
+            resetView()
+            let baseline = try centerX()
+            mode("Trackpad")
+            try resetGestureFixture()
+            let start = input.coordinate(withNormalizedOffset: CGVector(dx: right ? 0.15 : 0.85, dy: 0.5))
+            let end = input.coordinate(withNormalizedOffset: CGVector(dx: right ? 0.85 : 0.15, dy: 0.5))
+            for _ in 0..<2 { start.press(forDuration: 0.05, thenDragTo: end) }
+            let moved = try waitForGesturePointers { !$0.isEmpty }
+            XCTAssertTrue(moved.allSatisfy { $0["mask"] == 0 }, "Moving pointer must not hold a mouse button")
+            try attachGesturePackets(moved, name: right ? "Physical edge follow right" : "Physical edge follow left")
+            attachScreenshot(app, name: right ? "Physical zoomed viewport right" : "Physical zoomed viewport left")
+            mode("Touch")
+            let shifted = try centerX()
+            if right { XCTAssertGreaterThan(shifted, baseline + 40) }
+            else { XCTAssertLessThan(shifted, baseline - 40) }
+        }
+        resetView()
+        let baseline = try centerX()
+        mode("Trackpad")
+        try resetGestureFixture()
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).press(forDuration: 0.4,
+            thenDragTo: input.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)))
+        let dragged = try waitForGesturePointers {
+            $0.filter { $0["mask"] == 1 }.count > 1 && $0.last?["mask"] == 0
+        }
+        let held = dragged.filter { $0["mask"] == 1 }
+        XCTAssertGreaterThan(held.count, 1)
+        XCTAssertNotEqual(held.first?["x"], held.last?["x"])
+        try attachGesturePackets(dragged, name: "Physical held drag edge follow")
+        attachScreenshot(app, name: "Physical zoomed held drag viewport")
+        mode("Touch")
+        XCTAssertGreaterThan(try centerX(), baseline + 40, "Held-button dragging must move the viewport too")
+        app.buttons["Disconnect"].tap()
+    }
+
     func testControlledMobileSessionSelection() throws { try verifyMobileSessionSelection(language: "en") }
     func testChineseControlledMobileSessionSelection() throws { try verifyMobileSessionSelection(language: "zh-Hans") }
 
@@ -470,6 +537,28 @@ final class AetherScreensIOSUITests: XCTestCase {
     }
 
     private func gestureFixtureData(path: String) throws -> Data {
+        if ProcessInfo.processInfo.environment["AETHERSCREENS_QA_USB_RELAY"] == "1" {
+            let relayDirectory = try XCTUnwrap(ProcessInfo.processInfo.environment["AETHERSCREENS_QA_USB_RELAY_DIR"])
+            let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(relayDirectory, isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let id = UUID().uuidString
+            try JSONSerialization.data(withJSONObject: ["id": id, "path": path])
+                .write(to: directory.appendingPathComponent("request.json"), options: .atomic)
+            let deadline = Date().addingTimeInterval(15)
+            repeat {
+                if let data = try? Data(contentsOf: directory.appendingPathComponent("response-" + id + ".json")),
+                   let response = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+                   response["id"] == id {
+                    guard let encoded = response["payload"], let payload = Data(base64Encoded: encoded) else {
+                        throw NSError(domain: "QAUSBRelay", code: 1, userInfo: [NSLocalizedDescriptionKey: "Controlled fixture relay failed"])
+                    }
+                    return payload
+                }
+                RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.05))
+            } while Date() < deadline
+            throw NSError(domain: "QAUSBRelay", code: 2, userInfo: [NSLocalizedDescriptionKey: "Controlled USB relay timed out"])
+        }
         let received = expectation(description: "Gesture fixture response")
         let response = GestureFixtureResponse()
         let task = URLSession.shared.dataTask(with: URL(string: "http://" + gestureFixtureHost + ":" + gestureInspectionPort + "/" + path)!) { data, http, error in

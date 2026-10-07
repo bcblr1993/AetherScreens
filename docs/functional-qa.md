@@ -412,3 +412,35 @@ runner exited 74 after the IDE peer refused
 `build/ios-physical-localization.xcresult` and its exported runner diagnostics.
 This is not physical functional acceptance. The user connected USB; the current
 USB test is waiting for the device to unlock after automatic locking.
+
+### iPhone 12 Pro USB fixture inspection — 2026-10-07
+
+The connected iPhone 12 Pro executed `testPhysicalZoomedTrackpadEdgeFollow`
+in `build/iphone12pro-physical-20261007/usb-edge2.xcresult`: one pass, zero
+failures/skips. The test pinches to 2×, moves left/right in Trackpad mode,
+then measures the viewport independently by touching the same visible center.
+It also verifies held-button drag movement and release from received RFB
+packets. Screenshots and packets are retained as private XCTest attachments.
+
+The test runner's LAN inspection requests returned `-1009` without a visible
+permission prompt. This alone does not prove the user rejected permission.
+Physical fixture inspection now exchanges UUID-correlated files in the test
+runner's own Documents directory over USB; the Mac reads the synthetic fixture.
+The application still makes its normal VNC connection. Simulator inspection
+continues to use HTTP. No product permission or network behavior is changed.
+
+The canonical runner selects the twelve bilingual controlled scenarios plus
+this edge-follow case for physical devices. It rejects missing cases, skips,
+failures and runtime warnings. Use a new output directory for each run:
+
+```sh
+python3 scripts/qa/run_controlled_gesture_qa.py \
+  --device-id <connected-device-UDID> --development-team <signing-team> \
+  --fixture-host <Mac-LAN-IPv4> --rfb-port 6499 \
+  --display-rfb-port 6500 --http-port 8968
+```
+
+The first full USB suite encountered an English fullscreen double-tap failure;
+its result is not acceptance. The persisted runner and full suite still require
+verification. These controlled tests do not establish physical IME, real
+Apple-server behavior or App Store availability.
