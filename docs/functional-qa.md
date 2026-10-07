@@ -441,6 +441,9 @@ python3 scripts/qa/run_controlled_gesture_qa.py \
 ```
 
 The first full USB suite encountered an English fullscreen double-tap failure;
-its result is not acceptance. The persisted runner and full suite still require
-verification. These controlled tests do not establish physical IME, real
+its result is not acceptance. The persisted runner subsequently executed all thirteen requested cases: thirteen
+passed, zero failed/skipped, and no runtime warnings. Evidence is in
+`build/iphone12pro-physical-20261007/canonical-suite1/summary.json`,
+`tests.json`, `enumeration.json`, and `result.xcresult`. The first fullscreen
+failure did not recur; its cause is not claimed to be identified. These controlled tests do not establish physical IME, real
 Apple-server behavior or App Store availability.

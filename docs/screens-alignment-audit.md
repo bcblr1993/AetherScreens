@@ -3,7 +3,10 @@
 Audit date: 2026-10-01. Existing notarized candidate: `2eea898`. Reference: [Screens 5 official feature index](https://help.edovia.com/en/screens-5/features/).
 This is a completion checklist, not a claim of parity. Unit tests, simulator
 screenshots and signed builds do not replace physical input/gesture acceptance.
-The release remains a draft until the user has reviewed the completed acceptance.
+This October 1 matrix is historical implementation evidence and the subsequent
+Screens-parity backlog. Current first-release gates and publication evidence
+are in `release-1.0.0-status.md`; the user later authorized publication and
+selected the physical Mac mini and connected iPhone 12 Pro for acceptance.
 
 | Requirement | Current implementation and evidence | Remaining work |
 | --- | --- | --- |

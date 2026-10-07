@@ -1,6 +1,6 @@
 # First release acceptance
 
-Current candidate: 1.0.0 (build 2026100602), Apple silicon macOS 14+.
+Published version: 1.0.0 (build 2026100602), Apple silicon macOS 14+.
 Current gate evidence is tracked in `release-1.0.0-status.md`; historical results
 below do not establish acceptance of a newly packaged candidate.
 

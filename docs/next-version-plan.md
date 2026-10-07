@@ -1,13 +1,16 @@
 # Priorities after the first public release
 
 The first public download targets Apple silicon macOS 14+. iOS/iPadOS remain
-source-install clients until physical acceptance and separate distribution are
-complete. Shipping this version does not establish parity with Screens.
+source-install clients pending broader real-server interaction acceptance and
+separate distribution. Thirteen controlled physical iPhone 12 Pro cases now
+pass; this does not establish App Store availability or equivalence to Screens. Shipping this version does not establish parity with Screens.
 
-1. Align the core iPhone/iPad interaction flow before adding large features:
-   arrow pointer, zoomed trackpad edge-follow (including held-button dragging),
-   accurate clicks after pan/zoom, two-finger scrolling, pinch zoom, and
-   fullscreen/keyboard transitions. Edge-follow uses a 32-point safety margin,
+1. Continue real-device interaction acceptance before adding large features.
+   The arrow pointer, zoomed trackpad edge-follow (including held-button
+   dragging), accurate clicks after pan/zoom, pinch zoom and fullscreen/keyboard
+   transitions now have controlled physical-device evidence. Measure real
+   Apple-server scrolling/dragging, physical IME, long sessions and perceived
+   responsiveness next. Edge-follow uses a 32-point safety margin,
    clamps to the desktop bounds, and stays disabled in Pan/Observe modes.
    Screens' device-edge swipes and Hot Corner gestures are a separate remaining
    gap; they are not the same behavior as following a zoomed pointer.

@@ -1,6 +1,6 @@
-# 1.0.0 release preparation — 2026-10-07
+# 1.0.0 first public release — 2026-10-07
 
-Candidate: 1.0.0 (2026100602), Apple silicon macOS 14+, original C icon.
+Release: 1.0.0 (2026100602), Apple silicon macOS 14+, original C icon.
 Production source commit: `a4c8418e97279b58a75b5dd1293b58041594c235`.
 Public distribution is macOS only. iOS remains a signed Xcode source install;
 there is no App Store or TestFlight release.
@@ -26,8 +26,10 @@ there is no App Store or TestFlight release.
   controlled page on the Apple Screen Sharing server. Median/max of ten
   click-to-decoded-marker samples were 235/1396 ms; these are not presented-frame
   latency or proof of equivalence to Screens.
-- Draft release `400587239` retains the matching candidate; downloaded draft
-  assets were checked against local hashes. It is still unpublished.
+- Public release `400587239`, tag `v1.0.0`, targets the exact production source
+  commit above. Anonymous public downloads of both DMG and ZIP pass the
+  published SHA-256 checksum file. Public URL:
+  https://github.com/bcblr1993/AetherScreens/releases/tag/v1.0.0
 - Physical iPhone 12 Pro edge-follow test passed: left/right viewport movement
   after 2× zoom and held-button dragging verified from received packets and
   same-location direct-touch coordinates. Result:
@@ -41,16 +43,28 @@ there is no App Store or TestFlight release.
 - ZIP: `233927091b459ae5c6436659ea63acd709361d04a5378b6d65788fb1c3feba77`
 - App executable: `d20007ea3da08305b479a763d2e90fcd6b2d1bc938824448892fa1e447bae82d`
 
-## Remaining gates
+## Physical acceptance and publication status
 
-- Complete physical iPhone controlled gestures and verify the persisted USB
-  inspection runner. A full-suite English two-finger fullscreen test failed;
-  retain that failure and investigate before claiming acceptance.
-- Commit/push scoped QA changes and verify their CI. The existing binary was
-  built from the production source commit above; any production code change
-  requires a newly signed/notarized package and matching asset verification.
-- Publish the matching first release, synchronize/deploy the website, and check
-  public download, version and checksums. No public release is claimed yet.
+- Canonical USB runner passed all thirteen physical iPhone 12 Pro cases, with
+  zero failures/skips/runtime warnings and exact test discovery/membership.
+  Result: `build/iphone12pro-physical-20261007/canonical-suite1/result.xcresult`.
+  It covers bilingual gestures, fullscreen/keyboard transitions, recovery,
+  display selection, retained sessions, viewport navigation and edge-follow.
+- The first twelve-case run had one English fullscreen synthetic-gesture
+  failure. The canonical suite did not reproduce it; retain the historical
+  failure and do not claim its cause was identified.
+- Test/documentation commit `4b707da` passed CI `37588947942`. Production source,
+  package inputs and app icons are unchanged from `a4c8418`; the v1.0.0 tag
+  points to the commit actually used for the signed/notarized package.
+- Website source includes matching release metadata and the approved C icon.
+  Final build: 165 tests, 336 pages, 8990 internal links. Website commit
+  `8ccc6e7` passed Cloudflare Pages deployment. Both language home/version pages
+  expose 1.0.0, build 2026100602, the matching public DMG and SHA-256. The live
+  optimized icon matches the built C asset; English release notes are intact.
+  Mac is available and iOS remains in development. Browser screenshots and
+  independent public verification are retained in
+  `build/release-public-v1-20261007/verified.json` and `website-zh.jpg` /
+  `website-en.jpg`. No first-release publication gate remains open.
 
 The user replaced the removed Tart `macos27` environment with the physical
 Mac mini. Private addresses, credentials and real desktop screenshots remain
