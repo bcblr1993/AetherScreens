@@ -31,8 +31,6 @@ public struct SavedComputerQuery: EntityQuery {
 public struct ConnectSavedComputerIntent: AppIntent {
     public static var title: LocalizedStringResource = "Connect to Computer"
     public static var openAppWhenRun: Bool = true
-    @available(iOS 26.0, macOS 26.0, *)
-    public static var supportedModes: IntentModes { .foreground }
     @Parameter(title: "Computer") public var computer: SavedComputerEntity
     public static var parameterSummary: some ParameterSummary { Summary("Connect to \(\.$computer)") }
     public init() {}
