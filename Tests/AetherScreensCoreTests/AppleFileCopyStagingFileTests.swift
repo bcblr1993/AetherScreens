@@ -13,7 +13,9 @@ final class AppleFileCopyStagingFileTests: XCTestCase {
         let attributeValue = Data([0, 255, 7, 0])
         let key = Data(attributeName.utf8) + Data([0])
         var table = Data()
-        for number in [UInt32(8 + 8 + key.count + attributeValue.count), 1, UInt32(key.count), UInt32(attributeValue.count)] {
+        let tableByteCount = UInt32(16 + key.count + attributeValue.count)
+        let tableFields: [UInt32] = [tableByteCount, 1, UInt32(key.count), UInt32(attributeValue.count)]
+        for number in tableFields {
             withUnsafeBytes(of: number.bigEndian) { table.append(contentsOf: $0) }
         }
         table.append(key)
