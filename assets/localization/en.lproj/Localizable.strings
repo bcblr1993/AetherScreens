@@ -1,0 +1,19 @@
+"Connect to Computer" = "Connect to Computer";
+"Computer" = "Computer";
+"Connect to ${computer}" = "Connect to ${computer}";
+
+"Connect to a computer to show its desktop here." = "Connect to a computer to show its desktop here.";
+
+"No desktop preview" = "No desktop preview";
+"Desktop preview available" = "Desktop preview available";
+
+"Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app." = "Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app.";
+
+"This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app." = "This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app.";
+"Dismiss" = "Dismiss";
+
+"Close this notice and continue the connection." = "Close this notice and continue the connection.";
+
+"Automatic Compression" = "Automatic Compression";
+
+"Adjusts compression for active transfers without reconnecting. Servers may ignore quality hints. Native Apple sessions use their own display configuration." = "Adjusts compression for active transfers without reconnecting. Servers may ignore quality hints. Native Apple sessions use their own display configuration.";

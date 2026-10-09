@@ -9,6 +9,7 @@ public final class SessionRegistry: ObservableObject {
         public let id: UUID
         public let viewModel: SessionViewModel
         public let number: Int
+        public let allowsSavedReuse: Bool
         public var title: String { "\(viewModel.device.name) · \(number)" }
     }
 
@@ -21,17 +22,21 @@ public final class SessionRegistry: ObservableObject {
 
     @discardableResult
     public func register(_ session: SessionViewModel, reuseExisting: Bool = true) -> UUID {
-        if reuseExisting, let existing = sessions.first(where: { $0.viewModel.device.id == session.device.id }) {
+        if reuseExisting, let existing = reusableEntry(for: session.device.id) {
             return existing.id
         }
         let id = UUID()
-        sessions.append(Entry(id: id, viewModel: session, number: nextNumber))
+        sessions.append(Entry(id: id, viewModel: session, number: nextNumber, allowsSavedReuse: reuseExisting))
         nextNumber += 1
         return id
     }
 
     public func session(for id: UUID) -> SessionViewModel? {
         sessions.first(where: { $0.id == id })?.viewModel
+    }
+
+    public func reusableEntry(for deviceID: UUID) -> Entry? {
+        sessions.first { $0.allowsSavedReuse && $0.viewModel.device.id == deviceID }
     }
 
     /// Select one foreground session without reconnecting or discarding another viewport.
@@ -50,7 +55,7 @@ public final class SessionRegistry: ObservableObject {
 
     public func close(_ id: UUID) {
         guard let session = remove(id) else { return }
-        session.endSession()
+        session.requestDisconnect()
     }
 
     @discardableResult

@@ -1,5 +1,6 @@
 import XCTest
 import Combine
+import Security
 @testable import AetherScreensCore
 
 final class DeviceStoreTests: XCTestCase {
@@ -32,6 +33,22 @@ final class DeviceStoreTests: XCTestCase {
 
     private func makeStore(legacySources: [UserDefaults] = []) -> DeviceStore {
         DeviceStore(userDefaults: tempDefaults, legacySources: legacySources, keychain: keychain)
+    }
+
+    @MainActor
+    func testTailscaleSyncRejectsReentryAndCancelledRequestsBeforeValidation() async {
+        let model = DeviceListViewModel(store: makeStore())
+        model.errorMessage = "Existing notice"
+        model.isSyncingTailscale = true
+        await model.syncTailscale()
+        XCTAssertTrue(model.isSyncingTailscale, "A second request must not clear the first request's busy state")
+        XCTAssertEqual(model.errorMessage, "Existing notice")
+        model.isSyncingTailscale = false
+        let task = Task { @MainActor in await model.syncTailscale() }
+        task.cancel()
+        await task.value
+        XCTAssertFalse(model.isSyncingTailscale)
+        XCTAssertEqual(model.errorMessage, "Existing notice")
     }
 
     @MainActor
@@ -209,7 +226,8 @@ final class DeviceStoreTests: XCTestCase {
             } else {
                 XCTAssertEqual(store.devices.first { $0.id == device.id }?.username, "qa-account")
                 XCTAssertEqual(store.devices.first { $0.id == device.id }?.authMethod, .macAccount)
-                XCTAssertEqual(store.getPassword(for: device), "test-secret")
+                XCTAssertNil(store.getPassword(for: device), "Prior account configuration cannot retrieve the rebound password")
+                XCTAssertEqual(store.getPassword(for: try XCTUnwrap(store.devices.first { $0.id == device.id })), "test-secret")
                 store.deleteDevice(device)
             }
             subscription.cancel()
@@ -258,7 +276,7 @@ final class DeviceStoreTests: XCTestCase {
         defer { discovery.stopDiscovery() }
         let vm = DeviceListViewModel(store: store, bonjourService: discovery)
         let request = try XCTUnwrap(ConnectionRequest(host: "qa.invalid", password: "temporary-only"))
-        let session = vm.prepareQuickSession(request, saveComputer: false)
+        let session = try vm.prepareQuickSession(request, saveComputer: false)
         XCTAssertTrue(session.isTemporary)
         XCTAssertFalse(session.canRememberPassword)
         session.submitPassword("retry-only", rememberInKeychain: true)
@@ -276,7 +294,7 @@ final class DeviceStoreTests: XCTestCase {
         let vm = DeviceListViewModel(store: store, bonjourService: discovery)
         let request = try XCTUnwrap(ConnectionRequest(host: "qa.invalid", username: "qa-user", password: "initial-only"))
         defer { store.deleteDevice(request.device) }
-        let session = vm.prepareQuickSession(request, saveComputer: true)
+        let session = try vm.prepareQuickSession(request, saveComputer: true)
         XCTAssertTrue(session.canRememberPassword)
         XCTAssertFalse(session.isTemporary)
         XCTAssertEqual(store.devices.first?.id, request.device.id)
@@ -284,6 +302,39 @@ final class DeviceStoreTests: XCTestCase {
         XCTAssertEqual(store.getPassword(for: request.device), "initial-only")
         session.submitPassword("retry-only", rememberInKeychain: true)
         XCTAssertEqual(store.getPassword(for: request.device), "retry-only")
+    }
+
+    @MainActor
+    func testEndingSessionWithoutAFramePreservesPreviousDesktopPreview() throws {
+        let device = RemoteDevice(name: "Unreceived frame QA", host: "qa.invalid")
+        let session = SessionViewModel(device: device, password: nil, deviceStore: makeStore())
+        defer { ThumbnailStore.shared.removeThumbnail(for: device.id) }
+        session.client.framebuffer.resize(newWidth: 8, newHeight: 8)
+        let previous = try XCTUnwrap(session.client.framebuffer.makeCGImage())
+        ThumbnailStore.shared.saveThumbnail(previous, for: device.id)
+        session.client.framebuffer.resize(newWidth: 2, newHeight: 2)
+        XCTAssertFalse(session.hasReceivedFirstFrame)
+        session.endSession()
+        let drained = expectation(description: "Allow asynchronous snapshot work to finish")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+        XCTAssertEqual(ThumbnailStore.shared.getThumbnail(for: device.id)?.width, 8)
+        XCTAssertEqual(ThumbnailStore.shared.getThumbnail(for: device.id)?.height, 8)
+    }
+
+    @MainActor
+    func testLibraryModelIsReleasedWhileDiscoveryServiceRemainsAlive() {
+        let store = makeStore()
+        let discovery = BonjourDiscoveryService()
+        defer { discovery.stopDiscovery() }
+        weak var released: DeviceListViewModel?
+        autoreleasepool {
+            let model = DeviceListViewModel(store: store, bonjourService: discovery)
+            released = model
+            XCTAssertNotNil(released)
+        }
+        XCTAssertNil(released, "Discovery subscriptions must not keep a closed library alive")
+        withExtendedLifetime(discovery) {}
     }
 
     @MainActor
@@ -326,6 +377,27 @@ final class DeviceStoreTests: XCTestCase {
 
         store.deleteDevice(device)
         XCTAssertEqual(store.devices.count, 0)
+    }
+
+    func testDeletingComputerRemovesOnlyItsDisplayQualityPreference() {
+        let store = makeStore()
+        let first = RemoteDevice(name: "First", host: "first.invalid")
+        let second = RemoteDevice(name: "Second", host: "second.invalid")
+        store.addDevice(first)
+        store.addDevice(second)
+        let quality = DisplayQualityStore(defaults: tempDefaults)
+        quality.save(.rgb565, for: first.id)
+        quality.save(.rgb565, for: second.id)
+        let disconnect = DisconnectActionStore(defaults: tempDefaults)
+        disconnect.save(.lockScreen, for: first.id)
+        disconnect.save(.topRight, for: second.id)
+        store.deleteDevice(first)
+        XCTAssertEqual(quality.load(for: first.id), .fullColor)
+        XCTAssertEqual(quality.load(for: second.id), .rgb565)
+        XCTAssertEqual(disconnect.load(for: first.id, type: .mac), .none)
+        XCTAssertEqual(disconnect.load(for: second.id, type: .mac), .topRight)
+        XCTAssertEqual(store.devices.map(\.id), [second.id])
+        store.deleteDevice(second)
     }
 
     func testMergeTailscaleNodes() {
@@ -379,20 +451,158 @@ final class DeviceStoreTests: XCTestCase {
         XCTAssertTrue(makeStore(legacySources: [legacyDefaults]).devices.isEmpty)
     }
 
-    func testMigratesLegacyKeychainPasswordOnRead() {
+    @MainActor
+    func testLibrarySearchTrimsPastedWhitespaceAndPreservesDeviceOrder() {
+        let store = makeStore()
+        let first = RemoteDevice(name: "工作 Mac", host: "100.64.0.3")
+        let second = RemoteDevice(name: "Studio", host: "192.168.50.226")
+        store.addDevice(first)
+        store.addDevice(second)
+        let discovery = BonjourDiscoveryService()
+        defer { discovery.stopDiscovery() }
+        let model = DeviceListViewModel(store: store, bonjourService: discovery)
+        let originalIDs = model.devices.map(\.id)
+        model.searchText = " \nmac\t "
+        XCTAssertEqual(model.filteredDevices.map(\.id), [first.id])
+        model.searchText = " 192.168.50.226\n"
+        XCTAssertEqual(model.filteredDevices.map(\.id), [second.id])
+        model.searchText = "\t\n "
+        XCTAssertEqual(model.filteredDevices.map(\.id), originalIDs)
+        let nearby = DiscoveredMac(name: "Nearby Studio", host: "192.168.50.10")
+        model.discoveredNearbyMacs = [nearby]
+        model.searchText = "  studio\n"
+        XCTAssertEqual(model.filteredNearbyMacs, [nearby])
+        model.searchText = " 192.168.50.10 "
+        XCTAssertEqual(model.filteredNearbyMacs, [nearby])
+        model.searchText = "\t\n"
+        XCTAssertEqual(model.filteredNearbyMacs, [nearby])
+        XCTAssertTrue(model.normalizedSearchQuery.isEmpty)
+        model.searchText = "does-not-exist"
+        XCTAssertTrue(model.filteredNearbyMacs.isEmpty)
+        XCTAssertEqual(model.discoveredNearbyMacs, [nearby])
+        XCTAssertTrue(model.filteredDevices.isEmpty)
+        XCTAssertEqual(model.devices.map(\.id), originalIDs)
+    }
+
+    func testDevicePasswordRemainsUsableWhenLegacyMigrationCannotPersist() {
+        let device = RemoteDevice(name: "Migration denied QA", host: "qa.invalid")
+        let payload = Data("synthetic-migration-password".utf8)
+        var attemptedWrites = 0
+        var deletedKeys: [String] = []
+        let isolatedKeychain = KeychainStore(serviceName: "current-qa", legacyServiceName: "legacy-qa",
+            readOverride: { service, key in
+                service == "legacy-qa" && key == device.id.uuidString ? payload : nil
+            },
+            deleteOverride: { service, key in
+                deletedKeys.append(service + ":" + key)
+                return 0
+            },
+            writeOverride: { _, service, key in
+                XCTAssertEqual(service, "current-qa")
+                XCTAssertEqual(key, device.id.uuidString)
+                attemptedWrites += 1
+                return false
+            })
+        let store = DeviceStore(userDefaults: tempDefaults, keychain: isolatedKeychain)
+        store.addDevice(device)
+        XCTAssertEqual(store.getPassword(for: device), "synthetic-migration-password")
+        XCTAssertEqual(store.getPassword(for: device), "synthetic-migration-password")
+        XCTAssertEqual(attemptedWrites, 1)
+        XCTAssertTrue(deletedKeys.isEmpty)
+        XCTAssertEqual(store.devices.map(\.id), [device.id])
+    }
+
+    func testMigratesLegacyKeychainPasswordOnRead() throws {
+        #if os(macOS)
+        let fixture = try IsolatedMigrationKeychain()
+        defer {
+            do { try fixture.close() }
+            catch { XCTFail("Could not remove owned migration Keychain: \(error)") }
+        }
+        keychain = fixture.store(service: currentServiceName, legacy: legacyServiceName)
+        legacyKeychain = fixture.store(service: legacyServiceName)
+        #endif
         let device = RemoteDevice(name: "Old Mac", host: "100.80.1.41")
         let key = device.id.uuidString
         XCTAssertTrue(legacyKeychain.savePassword("legacySecret", forKey: key))
 
         let store = makeStore()
+        store.addDevice(device)
         XCTAssertEqual(store.getPassword(for: device), "legacySecret")
 
         // Moved to the current service and removed from the legacy one
+        #if os(macOS)
+        let legacyReader = fixture.store(service: legacyServiceName)
+        let currentReader = fixture.store(service: currentServiceName)
+        #else
         let legacyReader = KeychainStore(serviceName: legacyServiceName, legacyServiceName: nil)
-        XCTAssertNil(legacyReader.loadPassword(forKey: key))
         let currentReader = KeychainStore(serviceName: currentServiceName, legacyServiceName: nil)
+        #endif
+        XCTAssertNil(legacyReader.loadPassword(forKey: key))
         XCTAssertEqual(currentReader.loadPassword(forKey: key), "legacySecret")
 
         store.deleteDevice(device)
     }
 }
+
+#if os(macOS)
+/// Real Security storage without depending on an unlocked login Keychain.
+private final class IsolatedMigrationKeychain {
+    private let root: URL
+    private let keychain: SecKeychain
+    private struct Failure: Error { let status: OSStatus }
+
+    init() throws {
+        let ownedRoot = FileManager.default.temporaryDirectory.appendingPathComponent("migration-keychain-qa-" + UUID().uuidString)
+        root = ownedRoot
+        try FileManager.default.createDirectory(at: ownedRoot, withIntermediateDirectories: false)
+        var created: SecKeychain?
+        let password = Array(UUID().uuidString.utf8)
+        let status = password.withUnsafeBytes {
+            SecKeychainCreate(ownedRoot.appendingPathComponent("fixture.keychain").path,
+                              UInt32(password.count), $0.baseAddress, false, nil, &created)
+        }
+        guard status == errSecSuccess, let created else {
+            try? FileManager.default.removeItem(at: root)
+            throw Failure(status: status)
+        }
+        keychain = created
+    }
+
+    func store(service: String, legacy: String? = nil) -> KeychainStore {
+        KeychainStore(serviceName: service, legacyServiceName: legacy,
+            readOverride: { [self] service, account in
+                var query = self.query(service: service, account: account)
+                query[kSecReturnData as String] = true
+                query[kSecMatchLimit as String] = kSecMatchLimitOne
+                var result: CFTypeRef?
+                let status = SecItemCopyMatching(query as CFDictionary, &result)
+                return status == errSecSuccess ? result as? Data : nil
+            }, deleteOverride: { [self] service, account in
+                SecItemDelete(query(service: service, account: account) as CFDictionary)
+            }, writeOverride: { [self] data, service, account in
+                let attributes = [kSecValueData as String: data]
+                return KeychainStore.upsert(update: {
+                    SecItemUpdate(query(service: service, account: account) as CFDictionary, attributes as CFDictionary)
+                }, add: {
+                    let add: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                        kSecAttrService as String: service, kSecAttrAccount as String: account,
+                        kSecValueData as String: data, kSecUseKeychain as String: keychain,
+                        kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+                    return SecItemAdd(add as CFDictionary, nil)
+                }) == errSecSuccess
+            })
+    }
+
+    private func query(service: String, account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+         kSecAttrAccount as String: account, kSecMatchSearchList as String: [keychain]]
+    }
+
+    func close() throws {
+        let status = SecKeychainDelete(keychain)
+        guard status == errSecSuccess else { throw Failure(status: status) }
+        try FileManager.default.removeItem(at: root)
+    }
+}
+#endif

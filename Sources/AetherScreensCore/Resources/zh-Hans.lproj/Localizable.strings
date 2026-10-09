@@ -30,6 +30,9 @@
 "Close Window" = "关闭窗口";
 "Connect" = "连接";
 "Connect to %@" = "连接到 %@";
+"Connect to Computer" = "连接电脑";
+"Computer" = "电脑";
+"Connect to ${computer}" = "连接到 ${computer}";
 "Connect to your computers from anywhere." = "随时随地连接你的电脑。";
 "Connected" = "已连接";
 "Connected. Waiting for remote frames…" = "已连接，等待远端画面…";
@@ -267,3 +270,250 @@
 "Invalid Zlib compressed length" = "远端压缩画面数据长度无效";
 "Invalid Zlib pixel data" = "远端压缩画面数据无效";
 "Return to Computers" = "返回电脑列表";
+
+// Connection-stage timeout guidance
+"Network connection timed out. Check the address, LAN or Tailscale connection, and Local Network permission." = "网络连接超时。请检查地址、局域网或 Tailscale 连接，以及本地网络权限。";
+"The server did not respond with a remote desktop protocol. Check Screen Sharing and the port." = "服务器未响应远程桌面协议。请检查屏幕共享是否开启及端口是否正确。";
+"Authentication timed out. Complete the account or password prompt and check the Mac's sharing permissions." = "认证超时。请完成账户或密码输入，并检查 Mac 的共享访问权限。";
+"The server did not initialize the desktop. Check Screen Sharing on the remote Mac and retry." = "服务器未完成桌面初始化。请检查远程 Mac 的屏幕共享后重试。";
+"Connected, but no desktop image arrived. Check the remote Mac's Screen Sharing session and retry." = "已连接，但未收到桌面画面。请检查远程 Mac 的屏幕共享会话后重试。";
+"The remote port refused the connection. Enable Screen Sharing and check the port and firewall." = "远程端口拒绝连接。请开启屏幕共享，并检查端口和防火墙。";
+"The remote network is unreachable. Check your LAN or Tailscale connection and the device address." = "无法到达远程网络。请检查局域网或 Tailscale 连接及设备地址。";
+
+"Send to Remote Clipboard" = "发送到远程剪贴板";
+"Clipboard" = "剪贴板";
+"Clipboard transfer requires an active control session." = "请在已连接且允许控制的会话中传送剪贴板。";
+"The local clipboard contains no plain text." = "本地剪贴板中没有纯文本。";
+"Clipboard transfer requested. Paste on the remote computer to check." = "已请求传送剪贴板，请在远程电脑粘贴确认。";
+"Clipboard transfer is unavailable for this text. Use Paste Text instead." = "无法传送这段剪贴板文本，请改用“粘贴文本”。";
+
+"Close Text Input" = "关闭文字输入";
+"Modifier Inactive" = "未启用";
+"Modifier Once" = "下一次操作";
+"Modifier Locked" = "已锁定";
+"Home" = "Home";
+"End" = "End";
+"Page Up" = "向上翻页";
+"Page Down" = "向下翻页";
+"PgUp" = "上页";
+"PgDn" = "下页";
+
+"Floating" = "浮动";
+
+"Move Keyboard Toolbar" = "移动键盘工具栏";
+
+"Collapse Keyboard Toolbar" = "收起键盘工具栏";
+
+"Expand Keyboard Toolbar" = "展开键盘工具栏";
+
+"Key Repeat" = "按键重复";
+
+"Slow" = "慢速";
+
+"Normal" = "标准";
+
+"Fast" = "快速";
+
+"Off" = "关闭";
+
+"Carousel" = "环形";
+
+"Function Keys" = "功能键";
+
+"Modifier Keys" = "修饰键";
+
+"Navigation Keys" = "导航按键";
+
+"Shortcuts" = "快捷键";
+
+"Edit" = "编辑";
+
+"Display Quality" = "画质";
+
+"Colors" = "色彩";
+
+"Full Color" = "全彩";
+
+"Reduced Colors" = "减少色彩";
+
+"Reduced colors use less data but may show color banding. Changing this setting reconnects. Desktop size stays the same." = "减少色彩可降低数据量，但可能出现色带。更改后将重新连接，桌面尺寸保持不变。";
+
+"On Disconnect" = "断开连接时";
+"Perform Action" = "执行动作";
+"No Action" = "不执行动作";
+"Log Out Remote User" = "退出远端用户";
+"Send Ctrl-Alt-Delete" = "发送 Ctrl-Alt-Delete";
+"Top Left Hot Corner" = "左上热角";
+"Top Right Hot Corner" = "右上热角";
+"Bottom Left Hot Corner" = "左下热角";
+"Bottom Right Hot Corner" = "右下热角";
+"Logs out the remote user immediately when you disconnect. Save your work first." = "断开时立即退出远端用户，请先保存工作。";
+"Runs only when you choose Disconnect. Hot corners use the remote Mac's configured actions." = "仅在主动断开时执行。热角使用远端 Mac 已配置的动作。";
+"SSH Authentication" = "SSH 身份验证";
+"SSH Server Identity" = "SSH 服务器身份";
+"Trust and Connect" = "信任并连接";
+"Previous fingerprint" = "原指纹";
+"SHA256 fingerprint" = "SHA256 指纹";
+"Verify this fingerprint before trusting the SSH server." = "请核实此指纹后再信任 SSH 服务器。";
+"The SSH host key has changed. Verify the new fingerprint with the server administrator before continuing." = "SSH 主机密钥已变化。请与服务器管理员核实新指纹后再继续。";
+"Could not save the SSH password to Keychain." = "无法将 SSH 密码保存到钥匙串。";
+"SSH private key authentication is not available yet." = "SSH 私钥验证尚未接入。";
+"SSH connection failed. Check the server, credentials and host identity." = "SSH 连接失败，请检查服务器、登录凭据和主机身份。";
+"Remember in Keychain" = "保存到钥匙串";
+"Secure Connection" = "安全连接";
+"Use SSH Tunnel" = "使用 SSH 隧道";
+"SSH Server" = "SSH 服务器";
+"SSH Port" = "SSH 端口";
+"SSH Username" = "SSH 用户名";
+"SSH Password (Optional)" = "SSH 密码（可选）";
+"Desktop Host from SSH Server" = "SSH 服务器访问的桌面地址";
+"SSH encrypts the connection. The SSH account is separate from the remote desktop account. Leave the password empty to keep a saved password or enter it when connecting." = "SSH 会加密连接。SSH 账户与远程桌面账户分别配置，密码留空可保留已存密码，或在连接时输入。";
+"Could not save the SSH credentials to Keychain. The computer was not saved." = "无法将 SSH 凭据保存到钥匙串，电脑配置未保存。";
+"Could not remove the SSH password from Keychain. The computer was kept." = "无法从钥匙串移除 SSH 密码，电脑配置已保留。";
+
+"The SSH private key is invalid or damaged." = "SSH 私钥无效或已损坏。";
+"Encrypted SSH key files are not supported yet." = "暂不支持加密的 SSH 密钥文件。";
+"Use an Ed25519 or ECDSA SSH private key." = "请使用 Ed25519 或 ECDSA SSH 私钥。";
+"The SSH key file exceeds 64 KB." = "SSH 密钥文件超过 64 KB。";
+"The SSH private key is missing. Import it again." = "SSH 私钥缺失，请重新导入。";
+"Private Key" = "私钥";
+"Import Private Key" = "导入私钥";
+"Replace Private Key" = "替换私钥";
+"Saved private key" = "已保存的私钥";
+"Import an unencrypted Ed25519 or ECDSA key. Saved keys stay in Keychain; temporary keys remain in this session." = "导入未加密的 Ed25519 或 ECDSA 密钥。保存的密钥存储在钥匙串中；临时密钥仅用于本次会话。";
+"Could not read the SSH key file." = "无法读取 SSH 密钥文件。";
+
+"Could not read the saved SSH key from Keychain." = "无法从钥匙串读取已保存的 SSH 密钥。";
+
+"Password" = "密码";
+
+"Use Saved Private Key" = "使用已保存的私钥";
+
+"Paste Private Key" = "粘贴私钥";
+
+"SSH Keys" = "SSH 密钥";
+
+"Saved Private Keys" = "已保存的私钥";
+
+"No saved private keys" = "暂无已保存的私钥";
+
+"Not used by a saved computer" = "未被已保存的电脑使用";
+
+"Delete Private Key?" = "删除私钥？";
+
+"Import an unencrypted Ed25519 or ECDSA key. Private keys stay in Keychain." = "导入未加密的 Ed25519 或 ECDSA 密钥。私钥保存在钥匙串中。";
+
+"This private key is used by a saved computer or an open session." = "此私钥正在被已保存的电脑或打开的会话使用。";
+
+"Retry" = "重试";
+
+"%d computer" = "%d 台电脑";
+
+"Rename" = "重命名";
+
+"Key Name" = "密钥名称";
+
+"Connect to a computer to show its desktop here." = "连接一台电脑，在此显示远程桌面。";
+
+"No desktop preview" = "暂无桌面预览";
+"Desktop preview available" = "桌面预览已就绪";
+
+"Export Private Key" = "导出私钥";
+
+"Export Private Key?" = "导出私钥？";
+
+"Export" = "导出";
+
+"The exported file contains your unencrypted private key. Choose a trusted destination." = "导出的文件包含未加密私钥，请选择可信的保存位置。";
+
+"This private key changed. Reload the key library and try again." = "私钥已发生变化，请刷新密钥库后重试。";
+
+"Could not export the private key. Try another destination." = "无法导出私钥，请尝试其他保存位置。";
+
+"Private Key Passphrase" = "私钥口令";
+
+"Unlock Private Key" = "解锁私钥";
+
+"Unlock" = "解锁";
+
+"Unlocking Private Key" = "正在解锁私钥";
+
+"The passphrase is used only to unlock this import. The unlocked key stays in Keychain or this session." = "口令仅用于本次导入解密。解密后的私钥保存在钥匙串或当前会话中。";
+
+"This encrypted key uses an unsupported encryption profile. Use PBKDF2 and AES-CBC with an ECDSA PKCS#8 key." = "此私钥的加密配置尚不支持。请使用 PBKDF2 和 AES-CBC 加密的 ECDSA PKCS#8 私钥。";
+
+"Could not unlock the private key. Check the passphrase and key file." = "无法解锁私钥，请检查口令和私钥文件。";
+
+"Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Saved keys stay in Keychain; temporary keys remain in this session." = "导入 Ed25519 或 ECDSA 私钥，也支持加密的 ECDSA PKCS#8。保存的私钥保留在钥匙串中，临时私钥仅保留在当前会话。";
+
+"Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain." = "导入 Ed25519 或 ECDSA 私钥，也支持加密的 ECDSA PKCS#8。私钥保留在钥匙串中。";
+
+"Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app." = "电脑配置已保存，但密码未能写入钥匙串。重启应用后需要重新输入密码。";
+
+"This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app." = "本次连接可以继续，但密码未能写入钥匙串。重启应用后需要重新输入密码。";
+
+"Close this notice and continue the connection." = "关闭此提示并继续连接。";
+
+"Cancel transfer" = "取消传输";
+
+"Transfer complete" = "传输完成";
+
+"Transfer stopped. Check the remote folder for partial files." = "传输已停止，请检查远端文件夹中是否有未完成文件。";
+
+"Transfer stopped" = "传输已停止";
+
+"Transfer paused" = "传输已暂停";
+
+"Transferring" = "正在传输";
+
+"File transfer failed" = "文件传输失败";
+
+"Send File or Folder" = "发送文件或文件夹";
+
+"Choose File or Folder" = "选择文件或文件夹";
+
+"Remote Folder" = "远端文件夹";
+
+"Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files." = "请使用已存在的远端文件夹。同名文件可能自动改名，停止后可能保留部分文件。";
+
+"Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported." = "每次最多 1 GB、1,024 项，不支持符号链接。";
+
+"Preparing Files…" = "正在准备文件…";
+
+"Could not open the file picker." = "无法打开文件选择器。";
+
+"Enter an absolute remote folder or a path starting with ~/." = "请输入远端文件夹的绝对路径或以 ~/ 开头的路径。";
+
+"Cannot start file transfer on this connection." = "当前连接无法开始文件传输。";
+
+"Could not prepare the selected file or folder. Check access and transfer limits." = "无法准备所选文件或文件夹，请检查访问权限和传输限制。";
+
+"Download failed. Check the destination folder for saved files." = "下载失败，请检查目标文件夹中是否已保存文件。";
+
+"Transfer stopped. Check the destination folder for saved files." = "传输已停止，请检查目标文件夹中是否已保存文件。";
+
+"Receive File or Folder" = "接收文件或文件夹";
+
+"Remote File or Folder" = "远端文件或文件夹";
+
+"Choose Save Folder" = "选择保存文件夹";
+
+"Choose an existing local folder. Existing files are never replaced; choose another folder if a name already exists." = "请选择已存在的本地文件夹，不会替换已有文件；如果存在同名文件，请选择其他保存目录。";
+
+"Receive" = "接收";
+
+"Enter an absolute remote path or a path starting with ~/." = "请输入远端绝对路径或以 ~/ 开头的路径。";
+
+"Could not start download. Check the remote path and destination access." = "无法开始下载，请检查远端路径和本地目录访问权限。";
+
+"Not enough space in the save folder. Free space or choose another folder." = "保存目录空间不足，请释放空间或选择其他目录。";
+
+"Not enough temporary storage to prepare this upload. Free space and try again." = "临时存储空间不足，无法准备上传。请释放空间后重试。";
+
+"Drop a file or folder to choose where to send it" = "拖入文件或目录，选择发送位置";
+
+"Show in Finder" = "在 Finder 中显示";
+
+"Share" = "分享";
+
+"Connection lost. Retrying automatically…" = "连接已中断，正在等待自动重连…";

@@ -30,6 +30,9 @@
 "Close Window" = "Close Window";
 "Connect" = "Connect";
 "Connect to %@" = "Connect to %@";
+"Connect to Computer" = "Connect to Computer";
+"Computer" = "Computer";
+"Connect to ${computer}" = "Connect to ${computer}";
 "Connect to your computers from anywhere." = "Connect to your computers from anywhere.";
 "Connected" = "Connected";
 "Connected. Waiting for remote frames…" = "Connected. Waiting for remote frames…";
@@ -267,3 +270,250 @@
 "Invalid Zlib compressed length" = "Invalid Zlib compressed length";
 "Invalid Zlib pixel data" = "Invalid Zlib pixel data";
 "Return to Computers" = "Return to Computers";
+
+// Connection-stage timeout guidance
+"Network connection timed out. Check the address, LAN or Tailscale connection, and Local Network permission." = "Network connection timed out. Check the address, LAN or Tailscale connection, and Local Network permission.";
+"The server did not respond with a remote desktop protocol. Check Screen Sharing and the port." = "The server did not respond with a remote desktop protocol. Check Screen Sharing and the port.";
+"Authentication timed out. Complete the account or password prompt and check the Mac's sharing permissions." = "Authentication timed out. Complete the account or password prompt and check the Mac's sharing permissions.";
+"The server did not initialize the desktop. Check Screen Sharing on the remote Mac and retry." = "The server did not initialize the desktop. Check Screen Sharing on the remote Mac and retry.";
+"Connected, but no desktop image arrived. Check the remote Mac's Screen Sharing session and retry." = "Connected, but no desktop image arrived. Check the remote Mac's Screen Sharing session and retry.";
+"The remote port refused the connection. Enable Screen Sharing and check the port and firewall." = "The remote port refused the connection. Enable Screen Sharing and check the port and firewall.";
+"The remote network is unreachable. Check your LAN or Tailscale connection and the device address." = "The remote network is unreachable. Check your LAN or Tailscale connection and the device address.";
+
+"Send to Remote Clipboard" = "Send to Remote Clipboard";
+"Clipboard" = "Clipboard";
+"Clipboard transfer requires an active control session." = "Clipboard transfer requires an active control session.";
+"The local clipboard contains no plain text." = "The local clipboard contains no plain text.";
+"Clipboard transfer requested. Paste on the remote computer to check." = "Clipboard transfer requested. Paste on the remote computer to check.";
+"Clipboard transfer is unavailable for this text. Use Paste Text instead." = "Clipboard transfer is unavailable for this text. Use Paste Text instead.";
+
+"Close Text Input" = "Close Text Input";
+"Modifier Inactive" = "Inactive";
+"Modifier Once" = "Next action";
+"Modifier Locked" = "Locked";
+"Home" = "Home";
+"End" = "End";
+"Page Up" = "Page Up";
+"Page Down" = "Page Down";
+"PgUp" = "PgUp";
+"PgDn" = "PgDn";
+
+"Floating" = "Floating";
+
+"Move Keyboard Toolbar" = "Move Keyboard Toolbar";
+
+"Collapse Keyboard Toolbar" = "Collapse Keyboard Toolbar";
+
+"Expand Keyboard Toolbar" = "Expand Keyboard Toolbar";
+
+"Key Repeat" = "Key Repeat";
+
+"Slow" = "Slow";
+
+"Normal" = "Normal";
+
+"Fast" = "Fast";
+
+"Off" = "Off";
+
+"Carousel" = "Carousel";
+
+"Function Keys" = "Function Keys";
+
+"Modifier Keys" = "Modifier Keys";
+
+"Navigation Keys" = "Navigation Keys";
+
+"Shortcuts" = "Shortcuts";
+
+"Edit" = "Edit";
+
+"Display Quality" = "Display Quality";
+
+"Colors" = "Colors";
+
+"Full Color" = "Full Color";
+
+"Reduced Colors" = "Reduced Colors";
+
+"Reduced colors use less data but may show color banding. Changing this setting reconnects. Desktop size stays the same." = "Reduced colors use less data but may show color banding. Changing this setting reconnects. Desktop size stays the same.";
+
+"On Disconnect" = "On Disconnect";
+"Perform Action" = "Perform Action";
+"No Action" = "No Action";
+"Log Out Remote User" = "Log Out Remote User";
+"Send Ctrl-Alt-Delete" = "Send Ctrl-Alt-Delete";
+"Top Left Hot Corner" = "Top Left Hot Corner";
+"Top Right Hot Corner" = "Top Right Hot Corner";
+"Bottom Left Hot Corner" = "Bottom Left Hot Corner";
+"Bottom Right Hot Corner" = "Bottom Right Hot Corner";
+"Logs out the remote user immediately when you disconnect. Save your work first." = "Logs out the remote user immediately when you disconnect. Save your work first.";
+"Runs only when you choose Disconnect. Hot corners use the remote Mac's configured actions." = "Runs only when you choose Disconnect. Hot corners use the remote Mac's configured actions.";
+"SSH Authentication" = "SSH Authentication";
+"SSH Server Identity" = "SSH Server Identity";
+"Trust and Connect" = "Trust and Connect";
+"Previous fingerprint" = "Previous fingerprint";
+"SHA256 fingerprint" = "SHA256 fingerprint";
+"Verify this fingerprint before trusting the SSH server." = "Verify this fingerprint before trusting the SSH server.";
+"The SSH host key has changed. Verify the new fingerprint with the server administrator before continuing." = "The SSH host key has changed. Verify the new fingerprint with the server administrator before continuing.";
+"Could not save the SSH password to Keychain." = "Could not save the SSH password to Keychain.";
+"SSH private key authentication is not available yet." = "SSH private key authentication is not available yet.";
+"SSH connection failed. Check the server, credentials and host identity." = "SSH connection failed. Check the server, credentials and host identity.";
+"Remember in Keychain" = "Remember in Keychain";
+"Secure Connection" = "Secure Connection";
+"Use SSH Tunnel" = "Use SSH Tunnel";
+"SSH Server" = "SSH Server";
+"SSH Port" = "SSH Port";
+"SSH Username" = "SSH Username";
+"SSH Password (Optional)" = "SSH Password (Optional)";
+"Desktop Host from SSH Server" = "Desktop Host from SSH Server";
+"SSH encrypts the connection. The SSH account is separate from the remote desktop account. Leave the password empty to keep a saved password or enter it when connecting." = "SSH encrypts the connection. The SSH account is separate from the remote desktop account. Leave the password empty to keep a saved password or enter it when connecting.";
+"Could not save the SSH credentials to Keychain. The computer was not saved." = "Could not save the SSH credentials to Keychain. The computer was not saved.";
+"Could not remove the SSH password from Keychain. The computer was kept." = "Could not remove the SSH password from Keychain. The computer was kept.";
+
+"The SSH private key is invalid or damaged." = "The SSH private key is invalid or damaged.";
+"Encrypted SSH key files are not supported yet." = "Encrypted SSH key files are not supported yet.";
+"Use an Ed25519 or ECDSA SSH private key." = "Use an Ed25519 or ECDSA SSH private key.";
+"The SSH key file exceeds 64 KB." = "The SSH key file exceeds 64 KB.";
+"The SSH private key is missing. Import it again." = "The SSH private key is missing. Import it again.";
+"Private Key" = "Private Key";
+"Import Private Key" = "Import Private Key";
+"Replace Private Key" = "Replace Private Key";
+"Saved private key" = "Saved private key";
+"Import an unencrypted Ed25519 or ECDSA key. Saved keys stay in Keychain; temporary keys remain in this session." = "Import an unencrypted Ed25519 or ECDSA key. Saved keys stay in Keychain; temporary keys remain in this session.";
+"Could not read the SSH key file." = "Could not read the SSH key file.";
+
+"Could not read the saved SSH key from Keychain." = "Could not read the saved SSH key from Keychain.";
+
+"Password" = "Password";
+
+"Use Saved Private Key" = "Use Saved Private Key";
+
+"Paste Private Key" = "Paste Private Key";
+
+"SSH Keys" = "SSH Keys";
+
+"Saved Private Keys" = "Saved Private Keys";
+
+"No saved private keys" = "No saved private keys";
+
+"Not used by a saved computer" = "Not used by a saved computer";
+
+"Delete Private Key?" = "Delete Private Key?";
+
+"Import an unencrypted Ed25519 or ECDSA key. Private keys stay in Keychain." = "Import an unencrypted Ed25519 or ECDSA key. Private keys stay in Keychain.";
+
+"This private key is used by a saved computer or an open session." = "This private key is used by a saved computer or an open session.";
+
+"Retry" = "Retry";
+
+"%d computer" = "%d computer";
+
+"Rename" = "Rename";
+
+"Key Name" = "Key Name";
+
+"Connect to a computer to show its desktop here." = "Connect to a computer to show its desktop here.";
+
+"No desktop preview" = "No desktop preview";
+"Desktop preview available" = "Desktop preview available";
+
+"Export Private Key" = "Export Private Key";
+
+"Export Private Key?" = "Export Private Key?";
+
+"Export" = "Export";
+
+"The exported file contains your unencrypted private key. Choose a trusted destination." = "The exported file contains your unencrypted private key. Choose a trusted destination.";
+
+"This private key changed. Reload the key library and try again." = "This private key changed. Reload the key library and try again.";
+
+"Could not export the private key. Try another destination." = "Could not export the private key. Try another destination.";
+
+"Private Key Passphrase" = "Private Key Passphrase";
+
+"Unlock Private Key" = "Unlock Private Key";
+
+"Unlock" = "Unlock";
+
+"Unlocking Private Key" = "Unlocking Private Key";
+
+"The passphrase is used only to unlock this import. The unlocked key stays in Keychain or this session." = "The passphrase is used only to unlock this import. The unlocked key stays in Keychain or this session.";
+
+"This encrypted key uses an unsupported encryption profile. Use PBKDF2 and AES-CBC with an ECDSA PKCS#8 key." = "This encrypted key uses an unsupported encryption profile. Use PBKDF2 and AES-CBC with an ECDSA PKCS#8 key.";
+
+"Could not unlock the private key. Check the passphrase and key file." = "Could not unlock the private key. Check the passphrase and key file.";
+
+"Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Saved keys stay in Keychain; temporary keys remain in this session." = "Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Saved keys stay in Keychain; temporary keys remain in this session.";
+
+"Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain." = "Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain.";
+
+"Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app." = "Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app.";
+
+"This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app." = "This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app.";
+
+"Close this notice and continue the connection." = "Close this notice and continue the connection.";
+
+"Cancel transfer" = "Cancel transfer";
+
+"Transfer complete" = "Transfer complete";
+
+"Transfer stopped. Check the remote folder for partial files." = "Transfer stopped. Check the remote folder for partial files.";
+
+"Transfer stopped" = "Transfer stopped";
+
+"Transfer paused" = "Transfer paused";
+
+"Transferring" = "Transferring";
+
+"File transfer failed" = "File transfer failed";
+
+"Send File or Folder" = "Send File or Folder";
+
+"Choose File or Folder" = "Choose File or Folder";
+
+"Remote Folder" = "Remote Folder";
+
+"Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files." = "Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files.";
+
+"Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported." = "Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported.";
+
+"Preparing Files…" = "Preparing Files…";
+
+"Could not open the file picker." = "Could not open the file picker.";
+
+"Enter an absolute remote folder or a path starting with ~/." = "Enter an absolute remote folder or a path starting with ~/.";
+
+"Cannot start file transfer on this connection." = "Cannot start file transfer on this connection.";
+
+"Could not prepare the selected file or folder. Check access and transfer limits." = "Could not prepare the selected file or folder. Check access and transfer limits.";
+
+"Download failed. Check the destination folder for saved files." = "Download failed. Check the destination folder for saved files.";
+
+"Transfer stopped. Check the destination folder for saved files." = "Transfer stopped. Check the destination folder for saved files.";
+
+"Receive File or Folder" = "Receive File or Folder";
+
+"Remote File or Folder" = "Remote File or Folder";
+
+"Choose Save Folder" = "Choose Save Folder";
+
+"Choose an existing local folder. Existing files are never replaced; choose another folder if a name already exists." = "Choose an existing local folder. Existing files are never replaced; choose another folder if a name already exists.";
+
+"Receive" = "Receive";
+
+"Enter an absolute remote path or a path starting with ~/." = "Enter an absolute remote path or a path starting with ~/.";
+
+"Could not start download. Check the remote path and destination access." = "Could not start download. Check the remote path and destination access.";
+
+"Not enough space in the save folder. Free space or choose another folder." = "Not enough space in the save folder. Free space or choose another folder.";
+
+"Not enough temporary storage to prepare this upload. Free space and try again." = "Not enough temporary storage to prepare this upload. Free space and try again.";
+
+"Drop a file or folder to choose where to send it" = "Drop a file or folder to choose where to send it";
+
+"Show in Finder" = "Show in Finder";
+
+"Share" = "Share";
+
+"Connection lost. Retrying automatically…" = "Connection lost. Retrying automatically…";

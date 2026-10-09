@@ -3,9 +3,21 @@ import CoreGraphics
 @testable import AetherScreensCore
 
 final class ThumbnailStoreTests: XCTestCase {
+    private var directory: URL!
+
+    override func setUp() {
+        super.setUp()
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent("thumbnail-qa-\(UUID())")
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: directory)
+        directory = nil
+        super.tearDown()
+    }
 
     func testThumbnailSaveAndRetrieve() {
-        let store = ThumbnailStore.shared
+        let store = ThumbnailStore(cacheDirectory: directory)
         let testId = UUID()
 
         // Create a 100x100 dummy test CGImage
@@ -56,8 +68,9 @@ final class ThumbnailStoreTests: XCTestCase {
         )!
         let id = UUID()
 
-        ThumbnailStore.shared.saveThumbnail(image, for: id)
-        let preview = ThumbnailStore.shared.getThumbnail(for: id)
+        let store = ThumbnailStore(cacheDirectory: directory)
+        store.saveThumbnail(image, for: id)
+        let preview = store.getThumbnail(for: id)
         XCTAssertEqual(preview?.width, 480)
         XCTAssertEqual(preview?.height, 270)
     }

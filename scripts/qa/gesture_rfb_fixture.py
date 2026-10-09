@@ -20,6 +20,7 @@ CONNECTIONS = {}
 SEND_LOCKS = {}
 DISPLAY_CONNECTIONS = set()
 NEXT_CONNECTION_ID = 0
+STALL_NEXT_CONNECTION = False
 WIDTH, HEIGHT = 640, 360
 
 
@@ -31,6 +32,7 @@ def record(event):
 class Desktop(socketserver.BaseRequestHandler):
     reports_layout = False
     encoding = 'raw'
+    cursor_shape = False
     def send(self, data):
         with self.send_lock:
             self.request.sendall(data)
@@ -59,6 +61,12 @@ class Desktop(socketserver.BaseRequestHandler):
                               for y in range(height) for x in range(width))
         else:
             pixels = bytes((120, 100, 45, 255))
+        if self.bits_per_pixel == 16:
+            pixels = b''.join(struct.pack('<H', ((pixels[i + 2] >> 3) << 11) |
+                                           ((pixels[i + 1] >> 2) << 5) | (pixels[i] >> 3))
+                              for i in range(0, len(pixels), 4))
+        stride = self.bits_per_pixel // 8
+        compact_stride = 2 if stride == 2 else 3
         if encoding == 16:
             tiles = bytearray()
             if full:
@@ -66,11 +74,11 @@ class Desktop(socketserver.BaseRequestHandler):
                     for left in range(0, width, 64):
                         tiles.append(0)
                         for y in range(top, min(top + 64, height)):
-                            start = (y * width + left) * 4
+                            start = (y * width + left) * stride
                             for x in range(min(64, width - left)):
-                                tiles.extend(pixels[start + x * 4:start + x * 4 + 3])
+                                tiles.extend(pixels[start + x * stride:start + x * stride + compact_stride])
             else:
-                tiles.extend(bytes((1, 120, 100, 45)))
+                tiles.extend(bytes((1,)) + pixels[:compact_stride])
             compressed = self.compressor.compress(tiles) + self.compressor.flush(zlib.Z_SYNC_FLUSH)
             payload = struct.pack('>I', len(compressed)) + compressed
         else:
@@ -81,15 +89,33 @@ class Desktop(socketserver.BaseRequestHandler):
             screens += struct.pack('>IHHHHI', 20, WIDTH // 2, 0, WIDTH // 2, HEIGHT, 0)
             self.send(layout_header + bytes((2, 0, 0, 0)) + screens)
             self.record({'type': 'layout', 'screens': 2})
+        if full and self.cursor_shape:
+            if -239 not in self.offered_encodings:
+                raise RuntimeError('RichCursor not advertised')
+            cursor_pixels = bytearray()
+            mask = bytearray()
+            for y in range(24):
+                bits = 0
+                for x in range(24):
+                    visible = x in range(10, 14) or y in range(10, 14)
+                    bits = (bits << 1) | visible
+                    cursor_pixels.extend(struct.pack('<H', 0x07e0) if self.bits_per_pixel == 16 else bytes((0, 255, 0, 0)))
+                mask.extend(bits.to_bytes(3, 'big'))
+            self.send(struct.pack('>BBHHHHHi', 0, 0, 1, 12, 12, 24, 24, -239) + cursor_pixels + mask)
+            self.record({'type': 'cursor', 'hotspot': [12, 12], 'size': [24, 24]})
         self.send(header + payload)
         self.record({'type': 'frame', 'full': full, 'encoding': self.encoding,
-                     'payloadBytes': len(payload), 'rawPixelBytes': len(pixels)})
+                     'payloadBytes': len(payload), 'rawPixelBytes': len(pixels),
+                     'bitsPerPixel': self.bits_per_pixel})
 
     def handle(self):
-        global NEXT_CONNECTION_ID
+        global NEXT_CONNECTION_ID, STALL_NEXT_CONNECTION
         self.compressor = zlib.compressobj() if self.encoding == 'zrle' else None
         self.offered_encodings = []
+        self.bits_per_pixel = 32
         with LOCK:
+            self.stall_pixels = STALL_NEXT_CONNECTION
+            STALL_NEXT_CONNECTION = False
             NEXT_CONNECTION_ID += 1
             self.connection_id = NEXT_CONNECTION_ID
             CONNECTIONS[self.connection_id] = self.request
@@ -114,7 +140,15 @@ class Desktop(socketserver.BaseRequestHandler):
             while True:
                 message = self.read(1)[0]
                 if message == 0:
-                    self.read(19)
+                    packet = self.read(19)
+                    format_bytes = packet[3:]
+                    values = struct.unpack('>BBBBHHHBBBxxx', format_bytes)
+                    if values not in ((32, 24, 0, 1, 255, 255, 255, 16, 8, 0),
+                                      (16, 16, 0, 1, 31, 63, 31, 11, 5, 0)):
+                        self.record({'type': 'protocol-error', 'reason': 'Unsupported pixel format'})
+                        return
+                    self.bits_per_pixel = values[0]
+                    self.record({'type': 'pixel-format', 'bitsPerPixel': self.bits_per_pixel})
                 elif message == 2:
                     header = self.read(3)
                     count = struct.unpack('>H', header[1:])[0]
@@ -123,7 +157,9 @@ class Desktop(socketserver.BaseRequestHandler):
                     self.record({'type': 'encodings', 'values': self.offered_encodings})
                 elif message == 3:
                     header = self.read(9)
-                    if header[0] == 0:
+                    if self.stall_pixels:
+                        self.record({'type': 'frame-withheld'})
+                    elif header[0] == 0:
                         self.frame(full=True)
                     else:
                         pending_update = True
@@ -133,7 +169,7 @@ class Desktop(socketserver.BaseRequestHandler):
                 elif message == 5:
                     mask, x, y = struct.unpack('>BHH', self.read(5))
                     self.record({'type': 'pointer', 'mask': mask, 'x': x, 'y': y})
-                    if pending_update:
+                    if pending_update and not self.stall_pixels:
                         self.frame()
                         pending_update = False
                 elif message == 6:
@@ -163,7 +199,11 @@ class Inspection(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path not in ('/events', '/reset', '/drop', '/three-displays'):
+        global STALL_NEXT_CONNECTION
+        if self.path == '/stall-next':
+            with LOCK:
+                STALL_NEXT_CONNECTION = True
+        if self.path not in ('/events', '/reset', '/drop', '/three-displays', '/stall-next'):
             self.send_error(404)
             return
         if self.path == '/three-displays':
@@ -190,6 +230,7 @@ class Inspection(BaseHTTPRequestHandler):
                     pass
         with LOCK:
             if self.path == '/reset':
+                STALL_NEXT_CONNECTION = False
                 EVENTS.clear()
             payload = json.dumps(EVENTS).encode()
         self.send_response(200)
@@ -211,8 +252,10 @@ def main():
     parser.add_argument('--http-port', type=int, default=8768)
     parser.add_argument('--display-rfb-port', type=int, default=6000)
     parser.add_argument('--encoding', choices=('raw', 'zrle'), default='raw', help='ZRLE validates negotiated, continuous compressed rendering')
+    parser.add_argument('--cursor', action='store_true', help='Advertise a visible standard RichCursor fixture')
     args = parser.parse_args()
     Desktop.encoding = args.encoding
+    Desktop.cursor_shape = args.cursor
     with RFBServer((args.listen_host, args.rfb_port), Desktop) as desktop, RFBServer((args.listen_host, args.display_rfb_port), DualDisplayDesktop) as displays:
         threading.Thread(target=desktop.serve_forever, daemon=True).start()
         threading.Thread(target=displays.serve_forever, daemon=True).start()

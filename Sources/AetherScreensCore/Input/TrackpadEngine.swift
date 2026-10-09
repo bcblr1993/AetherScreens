@@ -64,7 +64,13 @@ public final class TrackpadEngine: @unchecked Sendable {
 
     /// Direct touch mode mapping (view point -> remote point)
     public func handleDirectTouch(point: CGPoint, viewSize: CGSize) {
-        guard mode == .touch, viewSize.width > 0, viewSize.height > 0 else { return }
+        guard mode == .touch else { return }
+        handleAbsolutePointer(point: point, viewSize: viewSize)
+    }
+
+    /// Hardware pointers use absolute canvas coordinates in either finger mode.
+    public func handleAbsolutePointer(point: CGPoint, viewSize: CGSize) {
+        guard viewSize.width > 0, viewSize.height > 0 else { return }
 
         let scaleX = remoteWidth / viewSize.width
         let scaleY = remoteHeight / viewSize.height
@@ -88,8 +94,8 @@ public final class TrackpadEngine: @unchecked Sendable {
     }
 
     public func click(button: RFBConstants.ButtonMask) {
-        onPointerEvent?(activeButtons.union(button), UInt16(cursorX), UInt16(cursorY))
-        onPointerEvent?(activeButtons, UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons.union(button), pointerCoordinate(cursorX, dimension: remoteWidth), pointerCoordinate(cursorY, dimension: remoteHeight))
+        onPointerEvent?(activeButtons, pointerCoordinate(cursorX, dimension: remoteWidth), pointerCoordinate(cursorY, dimension: remoteHeight))
     }
 
     /// Begin dragging (hold left button)
@@ -116,22 +122,30 @@ public final class TrackpadEngine: @unchecked Sendable {
         let mask: RFBConstants.ButtonMask = (deltaY > 0) ? .scrollUp : .scrollDown
         
         // Emit scroll wheel event
-        onPointerEvent?(activeButtons.union(mask), UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons.union(mask), pointerCoordinate(cursorX, dimension: remoteWidth), pointerCoordinate(cursorY, dimension: remoteHeight))
         
         // Immediately release wheel button mask
-        onPointerEvent?(activeButtons, UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons, pointerCoordinate(cursorX, dimension: remoteWidth), pointerCoordinate(cursorY, dimension: remoteHeight))
     }
 
     public func handleHorizontalScroll(deltaX: CGFloat) {
         guard deltaX != 0 else { return }
         let mask: RFBConstants.ButtonMask = deltaX > 0 ? .scrollLeft : .scrollRight
-        onPointerEvent?(activeButtons.union(mask), UInt16(cursorX), UInt16(cursorY))
-        onPointerEvent?(activeButtons, UInt16(cursorX), UInt16(cursorY))
+        onPointerEvent?(activeButtons.union(mask), pointerCoordinate(cursorX, dimension: remoteWidth), pointerCoordinate(cursorY, dimension: remoteHeight))
+        onPointerEvent?(activeButtons, pointerCoordinate(cursorX, dimension: remoteWidth), pointerCoordinate(cursorY, dimension: remoteHeight))
+    }
+
+    // RFB coordinates address pixels, so the last pixel is dimension - 1.
+    // Invalid geometry must never trap while converting to the wire's UInt16.
+    private func pointerCoordinate(_ value: CGFloat, dimension: CGFloat) -> UInt16 {
+        guard value.isFinite, dimension.isFinite, dimension > 0 else { return 0 }
+        let maximum = min(CGFloat(UInt16.max), max(0, dimension - 1))
+        return UInt16(min(max(0, value), maximum))
     }
 
     private func emitPointerEvent() {
-        let x = UInt16(min(max(0, cursorX), remoteWidth))
-        let y = UInt16(min(max(0, cursorY), remoteHeight))
+        let x = pointerCoordinate(cursorX, dimension: remoteWidth)
+        let y = pointerCoordinate(cursorY, dimension: remoteHeight)
         onPointerEvent?(activeButtons, x, y)
     }
 }

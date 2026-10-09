@@ -3,40 +3,110 @@ import CoreGraphics
 
 #if canImport(AppKit)
 import AppKit
-
-struct NativeScrollAccumulator {
-    private var remainderX: CGFloat = 0
-    private var remainderY: CGFloat = 0
-
-    mutating func consume(dx: CGFloat, dy: CGFloat, precise: Bool) -> [RFBConstants.ButtonMask] {
-        let divisor: CGFloat = precise ? 10 : 1
-        remainderX += dx / divisor
-        remainderY += dy / divisor
-        let ticksX = max(-64, min(64, Int(abs(remainderX) + 1e-9) * (remainderX >= 0 ? 1 : -1)))
-        let ticksY = max(-64, min(64, Int(abs(remainderY) + 1e-9) * (remainderY >= 0 ? 1 : -1)))
-        remainderX -= CGFloat(ticksX)
-        remainderY -= CGFloat(ticksY)
-        return Array(repeating: ticksY > 0 ? .scrollUp : .scrollDown, count: abs(ticksY))
-            + Array(repeating: ticksX > 0 ? .scrollLeft : .scrollRight, count: abs(ticksX))
-    }
-}
+import Combine
 
 /// macOS Native Input View capturing mouse tracking, hover, scroll wheel with momentum, and keyboard events.
 public final class MacNativeInputView: NSView, NSTextInputClient {
     public var onPointerEvent: ((RFBConstants.ButtonMask, UInt16, UInt16) -> Void)?
     public var onKeyEvent: ((Bool, UInt32) -> Void)?
     public var onTextEvent: ((String) -> Void)?
-    public var isPanning = false
+    public var isPanning = false {
+        didSet {
+            guard oldValue != isPanning else { return }
+            if isPanning, !remoteButtons.isEmpty, let position = remotePointerPosition {
+                remotePointerPosition = nil
+                remoteButtons = []
+                onPointerEvent?([], position.x, position.y)
+            }
+            lastPanPosition = nil
+            lastPointerWindowLocation = nil
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+    var cursorSubscription: AnyCancellable?
+    private var windowFocusSubscription: AnyCancellable?
+    private(set) var remoteCursor: NSCursor = .arrow
+
+    func setRemoteCursor(_ shape: RFBRemoteCursor?) {
+        if let shape {
+            if let image = shape.makeCGImage() {
+                remoteCursor = NSCursor(image: NSImage(cgImage: image,
+                    size: NSSize(width: shape.width, height: shape.height)),
+                    hotSpot: NSPoint(x: shape.hotspotX, y: shape.hotspotY))
+            } else if shape.isHidden {
+                remoteCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
+            } else {
+                remoteCursor = .arrow
+            }
+        } else { remoteCursor = .arrow }
+        window?.invalidateCursorRects(for: self)
+    }
+
+    public override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(visibleRect, cursor: isPanning ? .openHand : remoteCursor)
+    }
     public var onPan: ((CGFloat, CGFloat) -> Void)?
+    public var onMagnification: ((CGFloat, CGPoint) -> Void)?
     private var lastPanPosition: NSPoint?
+    private var lastPointerWindowLocation: NSPoint?
+    var viewport: CGRect? {
+        didSet {
+            // An unrelated SwiftUI update can resend the old geometry before
+            // the requested pan reaches layout. Keep its pointer correction.
+            if viewport != oldValue { pendingViewportPan = .zero }
+        }
+    }
+    private var pendingViewportPan: CGSize = .zero
+    private var remotePointerPosition: (x: UInt16, y: UInt16)?
+    private var remoteButtons: RFBConstants.ButtonMask = []
     public var remoteSize: CGSize = CGSize(width: 1920, height: 1080)
 
     private var trackingArea: NSTrackingArea?
-    private var scrollAccumulator = NativeScrollAccumulator()
+    private var scrollAccumulator = ScrollWheelAccumulator()
     private var markedText = NSAttributedString(string: "")
     private var pressedKeySyms: [UInt16: UInt32] = [:]
 
     public override var acceptsFirstResponder: Bool { true }
+
+    func releaseRemoteInput() {
+        var keys = Set(pressedKeySyms.values)
+        for (flag, key) in [(NSEvent.ModifierFlags.command, MacKeyMap.commandLeft),
+                            (.option, MacKeyMap.optionLeft), (.control, MacKeyMap.controlLeft),
+                            (.shift, MacKeyMap.shiftLeft)] where lastModifierFlags.contains(flag) {
+            keys.insert(key)
+        }
+        let drag = remoteButtons.isEmpty ? nil : remotePointerPosition
+        // Clear first: outgoing callbacks may synchronously change focus again.
+        pressedKeySyms.removeAll()
+        lastModifierFlags = []
+        remotePointerPosition = nil
+        remoteButtons = []
+        lastPanPosition = nil
+        lastPointerWindowLocation = nil
+        scrollAccumulator = ScrollWheelAccumulator()
+        markedText = NSAttributedString(string: "")
+        for key in keys.sorted() { onKeyEvent?(false, key) }
+        if let drag { onPointerEvent?([], drag.x, drag.y) }
+    }
+
+    public override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { releaseRemoteInput() }
+        return resigned
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        releaseRemoteInput()
+        windowFocusSubscription = nil
+        if let window {
+            windowFocusSubscription = NotificationCenter.default.publisher(
+                for: NSWindow.didResignKeyNotification, object: window)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.releaseRemoteInput() }
+        }
+    }
 
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -68,10 +138,51 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
 
     // MARK: - Mouse Events
 
+    public override func magnify(with event: NSEvent) {
+        guard !event.phase.contains(.cancelled) else { return }
+        magnify(delta: event.magnification, at: convert(event.locationInWindow, from: nil))
+    }
+
+    func magnify(delta: CGFloat, at point: NSPoint) {
+        guard delta.isFinite, delta > -1, delta != 0, remoteButtons.isEmpty else { return }
+        let visible = viewport ?? bounds
+        let anchor = CGPoint(x: point.x - visible.minX,
+                             y: bounds.height - point.y - visible.minY)
+        onMagnification?(1 + delta, anchor)
+    }
+
+    func followPointer(_ point: NSPoint, movement: CGSize) -> NSPoint {
+        guard let viewport, !isPanning else { return point }
+        // Account for pan requests not yet reflected in the SwiftUI layout.
+        let projectedPoint = NSPoint(x: point.x - pendingViewportPan.width,
+                                     y: point.y + pendingViewportPan.height)
+        let projectedViewport = viewport.offsetBy(dx: -pendingViewportPan.width,
+                                                   dy: -pendingViewportPan.height)
+        let delta = ViewportTracking.panDelta(canvas: bounds, viewport: projectedViewport,
+            pointer: CGPoint(x: projectedPoint.x, y: bounds.height - projectedPoint.y), movement: movement)
+        pendingViewportPan.width += delta.width
+        pendingViewportPan.height += delta.height
+        if delta != .zero { onPan?(delta.width, delta.height) }
+        return NSPoint(x: projectedPoint.x - delta.width, y: projectedPoint.y + delta.height)
+    }
+
+    private func sendPointer(with event: NSEvent) {
+        let windowPoint = event.locationInWindow
+        let movement = lastPointerWindowLocation.map {
+            CGSize(width: windowPoint.x - $0.x, height: $0.y - windowPoint.y)
+        } ?? .zero
+        lastPointerWindowLocation = windowPoint
+        let follows = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged].contains(event.type)
+        let point = convert(windowPoint, from: nil)
+        let mapped = followPointer(point, movement: follows ? movement : .zero)
+        let (x, y) = translatePoint(mapped)
+        remotePointerPosition = (x, y)
+        onPointerEvent?(remoteButtons, x, y)
+    }
+
     public override func mouseMoved(with event: NSEvent) {
         guard !isPanning else { return }
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        sendPointer(with: event)
     }
 
     public override func mouseDown(with event: NSEvent) {
@@ -80,14 +191,14 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
             lastPanPosition = convert(event.locationInWindow, from: nil)
             return
         }
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.left], x, y)
+        remoteButtons.insert(.left)
+        sendPointer(with: event)
     }
 
     public override func mouseUp(with event: NSEvent) {
         if isPanning { lastPanPosition = nil; return }
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        remoteButtons.remove(.left)
+        sendPointer(with: event)
     }
 
     public override func mouseDragged(with event: NSEvent) {
@@ -97,35 +208,57 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
             lastPanPosition = point
             return
         }
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.left], x, y)
+        sendPointer(with: event)
     }
 
     public override func rightMouseDown(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.right], x, y)
+        guard !isPanning else { return }
+        window?.makeFirstResponder(self)
+        remoteButtons.insert(.right)
+        sendPointer(with: event)
     }
 
     public override func rightMouseUp(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        guard !isPanning else { return }
+        remoteButtons.remove(.right)
+        sendPointer(with: event)
+    }
+
+    public override func rightMouseDragged(with event: NSEvent) {
+        guard !isPanning else { return }
+        sendPointer(with: event)
     }
 
     public override func otherMouseDown(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([.middle], x, y)
+        guard !isPanning, event.buttonNumber == 2 else { return }
+        window?.makeFirstResponder(self)
+        remoteButtons.insert(.middle)
+        sendPointer(with: event)
     }
 
     public override func otherMouseUp(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
-        onPointerEvent?([], x, y)
+        guard !isPanning, event.buttonNumber == 2 else { return }
+        remoteButtons.remove(.middle)
+        sendPointer(with: event)
+    }
+
+    public override func otherMouseDragged(with event: NSEvent) {
+        guard !isPanning, event.buttonNumber == 2 else { return }
+        sendPointer(with: event)
     }
 
     public override func scrollWheel(with event: NSEvent) {
-        let (x, y) = translatePoint(convert(event.locationInWindow, from: nil))
+        guard !isPanning else { return }
+        if event.phase.contains(.began) || event.phase.contains(.cancelled) {
+            scrollAccumulator = ScrollWheelAccumulator()
+        }
+        guard !event.phase.contains(.cancelled) else { return }
+        let point = followPointer(convert(event.locationInWindow, from: nil), movement: .zero)
+        let (x, y) = translatePoint(point)
+        remotePointerPosition = (x, y)
         for mask in scrollAccumulator.consume(dx: event.scrollingDeltaX, dy: event.scrollingDeltaY, precise: event.hasPreciseScrollingDeltas) {
-            onPointerEvent?(mask, x, y)
-            onPointerEvent?([], x, y)
+            onPointerEvent?(remoteButtons.union(mask), x, y)
+            onPointerEvent?(remoteButtons, x, y)
         }
     }
 
@@ -266,27 +399,36 @@ import SwiftUI
 
 /// SwiftUI representable wrapper for native mouse and keyboard input on macOS
 public struct MacNativeInputRepresentable: NSViewRepresentable {
+    public let cursorUpdates: CurrentValueSubject<RFBRemoteCursor?, Never>?
     public let onPointerEvent: (RFBConstants.ButtonMask, UInt16, UInt16) -> Void
     public let onKeyEvent: (Bool, UInt32) -> Void
     public let remoteWidth: CGFloat
     public let remoteHeight: CGFloat
+    public let viewport: CGRect?
     public let isPanning: Bool
     public let onPan: (CGFloat, CGFloat) -> Void
+    public let onMagnification: ((CGFloat, CGPoint) -> Void)?
     public let onTextEvent: ((String) -> Void)?
 
     public init(
+        cursorUpdates: CurrentValueSubject<RFBRemoteCursor?, Never>? = nil,
         remoteWidth: CGFloat,
         remoteHeight: CGFloat,
+        viewport: CGRect? = nil,
         isPanning: Bool = false,
         onPan: @escaping (CGFloat, CGFloat) -> Void = { _, _ in },
+        onMagnification: ((CGFloat, CGPoint) -> Void)? = nil,
         onTextEvent: ((String) -> Void)? = nil,
         onPointerEvent: @escaping (RFBConstants.ButtonMask, UInt16, UInt16) -> Void,
         onKeyEvent: @escaping (Bool, UInt32) -> Void
     ) {
+        self.cursorUpdates = cursorUpdates
         self.remoteWidth = remoteWidth
         self.remoteHeight = remoteHeight
+        self.viewport = viewport
         self.isPanning = isPanning
         self.onPan = onPan
+        self.onMagnification = onMagnification
         self.onTextEvent = onTextEvent
         self.onPointerEvent = onPointerEvent
         self.onKeyEvent = onKeyEvent
@@ -294,11 +436,16 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
 
     public func makeNSView(context: Context) -> MacNativeInputView {
         let view = MacNativeInputView()
+        view.cursorSubscription = cursorUpdates?.sink { [weak view] shape in
+            view?.setRemoteCursor(shape)
+        }
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.group)
         view.setAccessibilityLabel("Remote desktop input")
         view.isPanning = isPanning
+        view.viewport = viewport
         view.onPan = onPan
+        view.onMagnification = onMagnification
         view.onTextEvent = onTextEvent
         view.remoteSize = CGSize(width: remoteWidth, height: remoteHeight)
         view.onPointerEvent = onPointerEvent
@@ -310,9 +457,16 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         return view
     }
 
+    public static func dismantleNSView(_ nsView: MacNativeInputView, coordinator: ()) {
+        nsView.releaseRemoteInput()
+        nsView.cursorSubscription = nil
+    }
+
     public func updateNSView(_ nsView: MacNativeInputView, context: Context) {
         nsView.isPanning = isPanning
+        nsView.viewport = viewport
         nsView.onPan = onPan
+        nsView.onMagnification = onMagnification
         nsView.onTextEvent = onTextEvent
         nsView.remoteSize = CGSize(width: remoteWidth, height: remoteHeight)
         nsView.onPointerEvent = onPointerEvent

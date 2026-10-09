@@ -1,6 +1,6 @@
 import Foundation
 
-/// Manages Curtain Mode (幕帘模式) - prevents physical onlookers at the remote Mac from viewing session activity.
+/// Tracks the local Lock Screen shortcut notice; it does not implement remote Curtain mode.
 public final class CurtainModeManager: ObservableObject, @unchecked Sendable {
     @Published public private(set) var isCurtainActive: Bool = false
     private let lock = NSLock()
@@ -9,7 +9,7 @@ public final class CurtainModeManager: ObservableObject, @unchecked Sendable {
 
     public init() {}
 
-    /// Toggle curtain mode on remote Mac
+    /// Toggle the local shortcut notice.
     public func toggleCurtain() {
         lock.lock()
         isCurtainActive.toggle()

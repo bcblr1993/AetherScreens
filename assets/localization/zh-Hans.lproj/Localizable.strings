@@ -1,0 +1,19 @@
+"Connect to Computer" = "连接电脑";
+"Computer" = "电脑";
+"Connect to ${computer}" = "连接到 ${computer}";
+
+"Connect to a computer to show its desktop here." = "连接一台电脑，在此显示远程桌面。";
+
+"No desktop preview" = "暂无桌面预览";
+"Desktop preview available" = "桌面预览已就绪";
+
+"Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app." = "电脑配置已保存，但密码未能写入钥匙串。重启应用后需要重新输入密码。";
+
+"This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app." = "本次连接可以继续，但密码未能写入钥匙串。重启应用后需要重新输入密码。";
+"Dismiss" = "关闭";
+
+"Close this notice and continue the connection." = "关闭此提示并继续连接。";
+
+"Automatic Compression" = "自动调整压缩质量";
+
+"Adjusts compression for active transfers without reconnecting. Servers may ignore quality hints. Native Apple sessions use their own display configuration." = "根据实际画面传输调整压缩质量，无需重新连接。服务器可能忽略质量提示；原生 Apple 会话使用自身显示配置。";

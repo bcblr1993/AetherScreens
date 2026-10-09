@@ -3,6 +3,47 @@ import XCTest
 
 final class TrackpadEngineTests: XCTestCase {
 
+    func testCompleteChordReleaseIsImmediateAndReentrantSafe() {
+        let engine = TrackpadEngine(remoteWidth: 800, remoteHeight: 450)
+        let collector = EventCollector()
+        engine.beginDrag(button: [.left, .right, .middle])
+        engine.onPointerEvent = { mask, x, y in
+            collector.addEvent(mask: mask, x: x, y: y)
+            if mask.isEmpty { engine.releaseAllButtons() }
+        }
+        engine.releaseAllButtons()
+        engine.releaseAllButtons()
+        XCTAssertTrue(engine.activeButtons.isEmpty)
+        XCTAssertEqual(collector.events.count, 1)
+        XCTAssertEqual(collector.events.first?.mask, [])
+        XCTAssertEqual(collector.events.first?.x, 400)
+        XCTAssertEqual(collector.events.first?.y, 225)
+    }
+
+    func testWireCoordinatesStayInsideLastPixelAcrossButtonsAndScroll() {
+        let engine = TrackpadEngine(remoteWidth: 1000, remoteHeight: 500)
+        let collector = EventCollector()
+        engine.onPointerEvent = { collector.addEvent(mask: $0, x: $1, y: $2) }
+        engine.handlePanDelta(dx: 10000, dy: 10000)
+        engine.click(button: .right)
+        engine.handleScroll(deltaY: 1)
+        engine.handleHorizontalScroll(deltaX: 1)
+        XCTAssertEqual(collector.events.count, 7)
+        XCTAssertTrue(collector.events.allSatisfy { $0.x == 999 && $0.y == 499 })
+        engine.remoteWidth = 100000
+        engine.remoteHeight = 100000
+        engine.resetCursor()
+        engine.handlePanDelta(dx: 100000, dy: 100000)
+        XCTAssertEqual(collector.events.last?.x, UInt16.max)
+        XCTAssertEqual(collector.events.last?.y, UInt16.max)
+        engine.remoteWidth = .nan
+        engine.remoteHeight = .infinity
+        engine.resetCursor()
+        engine.click(button: .left)
+        XCTAssertEqual(collector.events.last?.x, 0)
+        XCTAssertEqual(collector.events.last?.y, 0)
+    }
+
     func testCursorInitAndReset() {
         let engine = TrackpadEngine(remoteWidth: 1920, remoteHeight: 1080)
         XCTAssertEqual(engine.cursorX, 960)
@@ -74,6 +115,26 @@ final class TrackpadEngineTests: XCTestCase {
             lock.lock()
             defer { lock.unlock() }
             masks.append(mask)
+        }
+    }
+
+    func testHardwarePointerIgnoresFingerModeAndPreservesHeldButtons() {
+        let engine = TrackpadEngine(remoteWidth: 1920, remoteHeight: 1080)
+        let collector = EventCollector()
+        engine.onPointerEvent = { collector.addEvent(mask: $0, x: $1, y: $2) }
+        for mode in [TrackpadEngine.Mode.trackpad, .touch] {
+            engine.mode = mode
+            engine.handleAbsolutePointer(point: CGPoint(x: 100, y: 50), viewSize: CGSize(width: 400, height: 200))
+            engine.beginDrag(button: .right)
+            engine.handleAbsolutePointer(point: CGPoint(x: 300, y: 150), viewSize: CGSize(width: 400, height: 200))
+            XCTAssertEqual(collector.events.last?.mask, .right)
+            XCTAssertEqual(collector.events.last?.x, 1440)
+            XCTAssertEqual(collector.events.last?.y, 810)
+            engine.endDrag(button: .right)
+            XCTAssertEqual(collector.events.last?.mask, [])
+            let count = collector.events.count
+            engine.handleAbsolutePointer(point: .zero, viewSize: .zero)
+            XCTAssertEqual(collector.events.count, count, "An empty canvas must not move the pointer")
         }
     }
 

@@ -24,6 +24,47 @@ final class KeyboardToolbarConfigurationTests: XCTestCase {
         XCTAssertEqual(relaunched.load(for: second).position, .bottom)
         XCTAssertEqual(configuration.items.filter { $0.action == .spacer }.count, 4)
     }
+    func testFloatingPositionPersistsWithoutChangingOtherComputerPreferences() {
+        let (store, defaults) = makeStore()
+        let first = UUID(), second = UUID()
+        var configuration = KeyboardToolbarConfiguration()
+        configuration.position = .floating
+        store.save(configuration, for: first)
+        XCTAssertEqual(KeyboardToolbarStore(defaults: defaults).load(for: first), configuration)
+        XCTAssertEqual(store.load(for: second).position, .bottom)
+    }
+
+    func testRepeatSettingsPersistPerComputerAndLegacySettingsRetainLayout() throws {
+        let (store, defaults) = makeStore()
+        let first = UUID(), second = UUID()
+        var configuration = KeyboardToolbarConfiguration()
+        configuration.size = .small
+        configuration.position = .top
+        configuration.items[0].isVisible = false
+        for mode in KeyboardToolbarConfiguration.KeyRepeat.allCases {
+            configuration.keyRepeat = mode
+            store.save(configuration, for: first)
+            XCTAssertEqual(KeyboardToolbarStore(defaults: defaults).load(for: first), configuration)
+            XCTAssertEqual(store.load(for: second).keyRepeat, .normal)
+        }
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(configuration)) as? [String: Any])
+        legacy.removeValue(forKey: "keyRepeat")
+        defaults.set(try JSONSerialization.data(withJSONObject: legacy), forKey: KeyboardToolbarStore.keyPrefix + first.uuidString)
+        configuration.keyRepeat = .normal
+        XCTAssertEqual(store.load(for: first), configuration, "Adding repeat must preserve existing order, IDs, hidden controls, size and position")
+    }
+
+    func testCarouselPositionPersistsWithoutChangingOtherComputerPreferences() {
+        let (store, defaults) = makeStore()
+        let first = UUID(), second = UUID()
+        var configuration = KeyboardToolbarConfiguration()
+        configuration.position = .carousel
+        configuration.keyRepeat = .fast
+        store.save(configuration, for: first)
+        XCTAssertEqual(KeyboardToolbarStore(defaults: defaults).load(for: first), configuration)
+        XCTAssertEqual(store.load(for: second).position, .bottom)
+    }
+
     func testCorruptConfigurationFallsBackAndDuplicateButtonsAreNormalized() {
         let (store, defaults) = makeStore()
         let id = UUID()
@@ -41,6 +82,32 @@ final class KeyboardToolbarConfigurationTests: XCTestCase {
         config.move(UUID(), by: 1)
         XCTAssertEqual(config, original)
     }
+    func testLegacyConfigurationGainsOptionalNavigationKeysWithoutChangingExistingLayout() throws {
+        let (store, defaults) = makeStore()
+        let id = UUID()
+        let navigation: Set<KeyboardToolbarConfiguration.Action> = [.home, .end, .pageUp, .pageDown]
+        var legacy = KeyboardToolbarConfiguration()
+        legacy.items.removeAll { navigation.contains($0.action) }
+        legacy.position = .top
+        legacy.size = .small
+        legacy.items[0].isVisible = false
+        legacy.move(legacy.items[1].id, by: -1)
+        defaults.set(try JSONEncoder().encode(legacy), forKey: KeyboardToolbarStore.keyPrefix + id.uuidString)
+        var upgraded = store.load(for: id)
+        XCTAssertEqual(Array(upgraded.items.prefix(legacy.items.count)), legacy.items)
+        XCTAssertEqual(upgraded.position, .top)
+        XCTAssertEqual(upgraded.size, .small)
+        XCTAssertEqual(Set(upgraded.items.suffix(4).map(\.action)), navigation)
+        XCTAssertTrue(upgraded.items.suffix(4).allSatisfy { !$0.isVisible })
+        XCTAssertTrue(KeyboardToolbarConfiguration().items.filter { navigation.contains($0.action) }.allSatisfy { !$0.isVisible })
+        let pageDown = try XCTUnwrap(upgraded.items.firstIndex { $0.action == .pageDown })
+        upgraded.items[pageDown].isVisible = true
+        let pageID = upgraded.items[pageDown].id
+        upgraded.move(pageID, by: -1)
+        store.save(upgraded, for: id)
+        XCTAssertEqual(store.load(for: id), upgraded, "Selected navigation keys and their order must survive relaunch")
+    }
+
     func testTemporarySessionCustomizationDoesNotPersist() {
         let (store, _) = makeStore()
         let device = RemoteDevice(name: "Temporary", host: "127.0.0.1")

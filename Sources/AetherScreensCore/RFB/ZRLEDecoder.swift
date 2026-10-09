@@ -1,11 +1,19 @@
 import Foundation
+import Accelerate
 
-/// RFC 6143 section 7.7.6, for the 32-bit little-endian BGRA format requested by RFBClient.
-/// Tile data uses three-byte BGR pixels; decoded output is opaque four-byte BGRA.
-/// RFBClient confines dictionary access and reset to its serial connection queue.
+/// Decodes negotiated full-color BGR or RGB565 tiles to opaque four-byte BGRA.
+/// RFBClient confines dictionary access to its serial decode worker and replaces
+/// the entire context on reconnect.
 final class ZRLEDecoder {
     private let decompressor = ZlibDecompressor()
+    private let colorDepth: RFBColorDepth
+    init(colorDepth: RFBColorDepth = .fullColor) { self.colorDepth = colorDepth }
     static let maximumPixelBytes = 256 * 1024 * 1024
+    // RGB565 has a fixed 16-bit domain. Lazy immutable lookup avoids three
+    // channel divisions per pixel; costs 256 KiB only when this format is used.
+    private static let rgb565Colors: [UInt32] = (0..<65536).map {
+        RFBColorDepth.bgra565(UInt16($0)).littleEndian
+    }
 
     func reset() { decompressor.reset() }
 
@@ -26,7 +34,7 @@ final class ZRLEDecoder {
         let output = UnsafeMutableBufferPointer<UInt32>.allocate(capacity: width * height)
         output.initialize(repeating: 0)
         let valid = tiles.withUnsafeBytes { source -> Bool in
-            var reader = TileReader(bytes: source.bindMemory(to: UInt8.self))
+            var reader = TileReader(colorDepth: colorDepth, bytes: source.bindMemory(to: UInt8.self))
             do {
                 for y in stride(from: 0, to: height, by: 64) {
                     for x in stride(from: 0, to: width, by: 64) {
@@ -49,14 +57,30 @@ final class ZRLEDecoder {
                         case 0:
                             // Validate a complete compact-pixel tile once, then expand it
                             // without three throwing byte reads for every pixel.
-                            let compact = try reader.take(count * 3)
-                            for row in 0..<tileHeight {
-                                let start = (y + row) * width + x
-                                for column in 0..<tileWidth {
-                                    let index = (row * tileWidth + column) * 3
-                                    let color = UInt32(compact[index]) | UInt32(compact[index + 1]) << 8
-                                        | UInt32(compact[index + 2]) << 16 | 0xff000000
-                                    output[start + column] = color.littleEndian
+                            let compact = try reader.take(count * colorDepth.compactBytesPerPixel)
+                            if colorDepth == .rgb565 {
+                                let colors = Self.rgb565Colors
+                                for row in 0..<tileHeight {
+                                    let start = (y + row) * width + x
+                                    for column in 0..<tileWidth {
+                                        let index = (row * tileWidth + column) * 2
+                                        let value = UInt16(compact[index]) | UInt16(compact[index + 1]) << 8
+                                        output[start + column] = colors[Int(value)]
+                                    }
+                                }
+                            } else {
+                                // RFB compact pixels are BGR. This byte-preserving
+                                // RGB->RGBA operation therefore produces BGRA directly.
+                                // Disable internal tiling for these already-small tiles.
+                                var source = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: compact.baseAddress!),
+                                    height: vImagePixelCount(tileHeight), width: vImagePixelCount(tileWidth),
+                                    rowBytes: tileWidth * 3)
+                                var destination = vImage_Buffer(data: output.baseAddress!.advanced(by: y * width + x),
+                                    height: vImagePixelCount(tileHeight), width: vImagePixelCount(tileWidth),
+                                    rowBytes: width * 4)
+                                guard vImageConvert_RGB888toRGBA8888(&source, nil, 255, &destination,
+                                    false, vImage_Flags(kvImageDoNotTile)) == kvImageNoError else {
+                                    throw TileError.invalid
                                 }
                             }
                         case 1:
@@ -104,6 +128,7 @@ final class ZRLEDecoder {
 
     private enum TileError: Error { case invalid }
     private struct TileReader {
+        let colorDepth: RFBColorDepth
         let bytes: UnsafeBufferPointer<UInt8>
         var offset = 0
         mutating func take(_ count: Int) throws -> UnsafeBufferPointer<UInt8> {
@@ -118,6 +143,10 @@ final class ZRLEDecoder {
             return bytes[offset]
         }
         mutating func pixel() throws -> UInt32 {
+            if colorDepth == .rgb565 {
+                let low = UInt16(try byte()), high = UInt16(try byte())
+                return UInt32(littleEndian: ZRLEDecoder.rgb565Colors[Int(low | high << 8)])
+            }
             let blue = UInt32(try byte()), green = UInt32(try byte()), red = UInt32(try byte())
             return blue | green << 8 | red << 16 | 0xff000000
         }

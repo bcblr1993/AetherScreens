@@ -64,8 +64,11 @@ final class MetalScreenRendererTests: XCTestCase {
             encoder.endEncoding(); command.commit()
             snapshots.append(buffer); last = command
         }
+        XCTAssertEqual(renderer.cachedUploadBufferBytes, 0, "A blocked GPU must retain exclusive staging leases")
         event.signaledValue = 1
         try XCTUnwrap(last).waitUntilCompleted()
+        let recycled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in renderer.cachedUploadBufferBytes > 0 }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [recycled], timeout: 3), .completed)
         XCTAssertNil(last?.error)
         for (index, buffer) in snapshots.enumerated() {
             let pixel = Array(UnsafeBufferPointer(start: buffer.contents().assumingMemoryBound(to: UInt8.self), count: 4))

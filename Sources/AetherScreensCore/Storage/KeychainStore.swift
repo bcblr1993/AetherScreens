@@ -13,11 +13,24 @@ public final class KeychainStore: @unchecked Sendable {
     private let legacyServiceName: String?
     private var inMemoryStore: [String: String] = [:]
     private let lock = NSLock()
+    private var writeOverride: ((Data, String, String) -> Bool)?
+    private var readOverride: ((String, String) -> Data?)?
+    private var deleteOverride: ((String, String) -> OSStatus)?
 
     public init(serviceName: String = KeychainStore.defaultServiceName,
                 legacyServiceName: String? = KeychainStore.legacyServiceName) {
         self.serviceName = serviceName
         self.legacyServiceName = legacyServiceName
+    }
+
+    convenience init(serviceName: String, legacyServiceName: String? = nil,
+                     readOverride: ((String, String) -> Data?)? = nil,
+                     deleteOverride: ((String, String) -> OSStatus)? = nil,
+                     writeOverride: @escaping (Data, String, String) -> Bool) {
+        self.init(serviceName: serviceName, legacyServiceName: legacyServiceName)
+        self.readOverride = readOverride
+        self.deleteOverride = deleteOverride
+        self.writeOverride = writeOverride
     }
 
     /// Save a password for a given device ID or key.
@@ -80,6 +93,7 @@ public final class KeychainStore: @unchecked Sendable {
     // MARK: - Keychain primitives (callers hold `lock`)
 
     private func readItem(service: String, key: String) -> Data? {
+        if let readOverride { return readOverride(service, key) }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -95,22 +109,38 @@ public final class KeychainStore: @unchecked Sendable {
     }
 
     private func writeItem(_ data: Data, service: String, key: String) -> Bool {
-        // Remove existing item if present
-        deleteItem(service: service, key: key)
-
-        let addQuery: [String: Any] = [
+        if let writeOverride { return writeOverride(data, service, key) }
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccount as String: key
         ]
+        let attributes: [String: Any] = [kSecValueData as String: data]
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let status = Self.upsert(
+            update: { SecItemUpdate(query as CFDictionary, attributes as CFDictionary) },
+            add: { SecItemAdd(addQuery as CFDictionary, nil) })
+        if status != errSecSuccess {
+            // Report the system failure without including credential data or identifiers.
+            AppLogger.shared.warning("Keychain password write failed (OSStatus \(status))", category: "Auth")
+        }
+        return status == errSecSuccess
+    }
 
-        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
+    /// Never delete an existing credential to replace it. An add race is resolved
+    /// by a second update, while access/lock failures stop without destructive work.
+    static func upsert(update: () -> OSStatus, add: () -> OSStatus) -> OSStatus {
+        let status = update()
+        guard status == errSecItemNotFound else { return status }
+        let added = add()
+        return added == errSecDuplicateItem ? update() : added
     }
 
     @discardableResult
     private func deleteItem(service: String, key: String) -> OSStatus {
+        if let deleteOverride { return deleteOverride(service, key) }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

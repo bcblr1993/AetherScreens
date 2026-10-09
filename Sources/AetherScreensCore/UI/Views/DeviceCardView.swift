@@ -3,6 +3,15 @@ import SwiftUI
 /// A compact desktop preview with a clear connection state and one primary action.
 public struct DeviceCardView: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var thumbnail: CGImage?
+    @State private var thumbnailRevision: UInt64 = 0
+    @State private var isVisible = false
+    private struct ThumbnailRequest: Hashable {
+        let deviceID: UUID
+        let revision: UInt64
+        let lastConnected: Date?
+    }
     public let device: RemoteDevice
     public let onConnect: () -> Void
     public var onWake: (() -> Void)? = nil
@@ -11,6 +20,7 @@ public struct DeviceCardView: View {
         self.device = device
         self.onConnect = onConnect
         self.onWake = onWake
+        _thumbnail = State(initialValue: ThumbnailStore.shared.cachedThumbnail(for: device.id))
     }
 
     public var body: some View {
@@ -20,13 +30,14 @@ public struct DeviceCardView: View {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .fill(Color(red: 0.14, green: 0.18, blue: 0.23))
 
-                    if let thumbnail = ThumbnailStore.shared.getThumbnail(for: device.id) {
+                    if let thumbnail {
                         Image(decorative: thumbnail, scale: 1.0)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(height: 154)
                             .clipped()
                             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .transition(.opacity)
                     } else {
                         VStack(spacing: 12) {
                             Image(systemName: device.deviceType.systemIcon)
@@ -94,7 +105,38 @@ public struct DeviceCardView: View {
             }
             .shadow(color: .black.opacity(0.055), radius: 14, y: 5)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ControlPressStyle(pressedScale: 0.985))
         .accessibilityLabel(AppLocalization.format("Connect to %@", device.name))
+        .accessibilityValue(AppLocalization.string(thumbnail == nil ? "No desktop preview" : "Desktop preview available"))
+        .onAppear {
+            isVisible = true
+            if let cached = ThumbnailStore.shared.cachedThumbnail(for: device.id) { thumbnail = cached }
+            thumbnailRevision &+= 1
+        }
+        .onDisappear {
+            isVisible = false
+            thumbnail = nil
+        }
+        .task(id: ThumbnailRequest(deviceID: device.id, revision: thumbnailRevision, lastConnected: device.lastConnected)) {
+            let loaded = await ThumbnailStore.shared.loadThumbnail(for: device.id)
+            guard !Task.isCancelled, isVisible else { return }
+            let current = ThumbnailStore.shared.cachedThumbnail(for: device.id) ?? loaded
+            updateThumbnail(current)
+        }
+        .onReceive(ThumbnailStore.shared.updates.receive(on: DispatchQueue.main)) { id in
+            guard isVisible, id == device.id else { return }
+            if let cached = ThumbnailStore.shared.cachedThumbnail(for: id) {
+                updateThumbnail(cached)
+            } else {
+                thumbnailRevision &+= 1
+            }
+        }
     }
+    private func updateThumbnail(_ current: CGImage?) {
+        guard thumbnail !== current else { return }
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+            thumbnail = current
+        }
+    }
+
 }

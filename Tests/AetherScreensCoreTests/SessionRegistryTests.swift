@@ -3,6 +3,20 @@ import XCTest
 
 @MainActor
 final class SessionRegistryTests: XCTestCase {
+    func testSavedRequestDoesNotReuseAnExplicitIndependentSession() {
+        let registry = SessionRegistry()
+        let device = RemoteDevice(name: "QA", host: "qa.invalid")
+        let independent = SessionViewModel(device: device, password: nil, isTemporary: true)
+        independent.isObserveOnly = true
+        let separate = registry.register(independent, reuseExisting: false)
+        let saved = SessionViewModel(device: device, password: nil, isTemporary: true)
+        let normal = registry.register(saved)
+        XCTAssertNotEqual(normal, separate)
+        XCTAssertTrue(registry.session(for: normal) === saved)
+        XCTAssertEqual(registry.register(SessionViewModel(device: device, password: nil, isTemporary: true)), normal)
+        XCTAssertEqual(registry.sessions.count, 2)
+    }
+
     func testMobileSelectionPreservesViewportsAndReleasesHiddenInput() {
         let registry = SessionRegistry()
         let first = SessionViewModel(device: RemoteDevice(name: "First", host: "127.0.0.1"), password: nil, isTemporary: true)

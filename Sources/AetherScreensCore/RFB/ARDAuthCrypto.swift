@@ -9,7 +9,18 @@ import BigInt
 enum ARDAuthCrypto {
     enum Failure: Error { case invalidChallenge, credentialTooLong, randomFailed, encryptionFailed }
 
+    /// Secret material stays with the caller's in-memory experimental handshake.
+    struct Exchange {
+        let response: Data
+        let wrapKey: Data
+    }
+
     static func response(generator: UInt16, prime: Data, peer: Data, username: String, password: String) throws -> Data {
+        try exchange(generator: generator, prime: prime, peer: peer,
+                     username: username, password: password).response
+    }
+
+    static func exchange(generator: UInt16, prime: Data, peer: Data, username: String, password: String) throws -> Exchange {
         guard (16...512).contains(prime.count), peer.count == prime.count else { throw Failure.invalidChallenge }
         let modulus = BigUInt(prime), serverKey = BigUInt(peer)
         guard modulus.bitWidth >= 127, modulus & 1 == 1, generator > 1,
@@ -43,7 +54,8 @@ enum ARDAuthCrypto {
                              CCOptions(kCCOptionECBMode), key, key.count, nil,
                              credentials, credentials.count, &encrypted, encrypted.count, &written)
         guard status == kCCSuccess, written == 128 else { throw Failure.encryptionFailed }
-        return Data(encrypted) + padded(publicKey, length: prime.count)
+        return Exchange(response: Data(encrypted) + padded(publicKey, length: prime.count),
+                        wrapKey: Data(key))
     }
 
     static func padded(_ value: BigUInt, length: Int) -> Data {

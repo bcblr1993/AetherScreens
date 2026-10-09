@@ -1,5 +1,51 @@
 # Screens alignment and full acceptance audit
 
+## 2026-10-09 correction to the historical matrix
+
+The October 8 matrix below is historical. Current verified checkpoints:
+
+- Native Apple file-copy codecs, bounded workers and public upload/download
+  sheets exist. Actual Mac mini coordinated directory downloads passed data,
+  resource-fork, permissions, modification time, source-URL attribute and
+  existing-destination preservation checks. Native upload probes also exist;
+  consult `native-file-transfer-research.md` for their exact scope. These CLI
+  results do not accept physical iOS picker/provider flows or drag/drop.
+- The inspected native sender serializes quarantine and WhereFroms attributes
+  only. Arbitrary custom-xattr fidelity is not established. The owned
+  WhereFroms gate passed without skips:
+  `/tmp/aetherscreens-wherefroms-native-live-20261009.log`.
+- Edge-follow projections preserve newer pointer samples through delayed and
+  rounded layout acknowledgements. Hardware touch cancellation no longer
+  positions a held pointer. Physical arrow/FPS/hitch acceptance remains open.
+- Upload preparation uses cancellable metadata-aware copying, a temporary
+  volume preflight and specific insufficient-space errors. Snapshot/space
+  tests passed 7/7; latest generic unsigned iOS build succeeded:
+  `/tmp/aetherscreens-upload-space-error-tests-20261009.log` and
+  `/tmp/aetherscreens-ios-upload-space-errors-20261009.log`.
+- Completed downloads retain actual save locations for Mac Finder and UIKit
+  sharing entries. Receive byte progress is gated to 0.1-second intervals;
+  repeated/regressing counts are suppressed, final commit stays exact.
+  Old terminal history makes room at 32 entries without evicting active work
+  or deleting saved files. Targeted tests and generic iOS builds passed;
+  physical presentation/access behavior remains unaccepted.
+- The latest full local Release core gate including standard Tight negotiation and automatic quality: Executed 759 tests, with 28 tests skipped and 0 failures (0 unexpected) in 200.259 (200.353) seconds.
+  `/tmp/aetherscreens-full-core-adaptive-quality-20261009.log`.
+  This covers current core result/progress/history behavior; live opt-ins and
+  physical UI/provider/fluidity requirements remain open. UIKit sharing is
+  separately build-verified, not exercised by this macOS test suite.
+
+
+Automatic reconnect now has bounded 1/2/4/8/16-second backoff after a successful desktop. Actual local TCP tests cover fresh frames, preserved zoom, input release, hidden/closed cancellation, five rejected retry sockets, fresh-password waiting/completion and user cancellation. These use a synthetic RFB server; real Mac mini, SSH interruptions and physical iPhone behavior remain unaccepted. Unknown SSH errors conservatively stop rather than retry.
+
+Unclosed requirements include physical iPhone arrow/zoom/edge-follow and
+sustained fluidity, real picker/provider save/selection and cancellation,
+bidirectional native clipboard, actual remote Curtain, CloudKit account/device
+acceptance, adaptive/scaled quality and remaining platform workflows.
+Physical device availability and exclusive test windows must be revalidated;
+older availability observations below are not current device status.
+See `next-iteration-status.md` for dated scope and evidence. No app publication
+or claim of complete Screens parity follows from these build/core results.
+
 Audit date: 2026-10-01. Existing notarized candidate: `2eea898`. Reference: [Screens 5 official feature index](https://help.edovia.com/en/screens-5/features/).
 This is a completion checklist, not a claim of parity. Unit tests, simulator
 screenshots and signed builds do not replace physical input/gesture acceptance.
@@ -8,6 +54,45 @@ Screens-parity backlog. Current first-release gates and publication evidence
 are in `release-1.0.0-status.md`; the user later authorized publication and
 selected the physical Mac mini and connected iPhone 12 Pro for acceptance.
 
+
+## Current acceptance audit — 2026-10-08
+
+The October 1 matrix below is retained as historical evidence. Current local
+build/test checkpoints are in `next-iteration-status.md`. The latest actual
+Mac mini full-core gate completed 490 tests, with 16 explicit environment skips
+and three assertion failures in one legacy-Keychain migration case, in 150.593s.
+The default Keychain remains locked and not writable; fixture saving fails
+before migration. Other completed cases reported no failures. This remains a
+failed full gate; targeted green tests and unavailable live gates do not prove
+full parity. Evidence: `/tmp/aetherscreens-macmini-full-refresh-tests-20261008.log`
+and `/tmp/aetherscreens-macmini-keychain-refresh-status-20261008.log`.
+
+The latest native streaming timing trials passed twice over owned patterns,
+but measured multi-second full-frame receive windows and roughly one-second
+pattern transitions; this is not rendered FPS or physical fluidity acceptance.
+Experimental SRP auth remains internal QA. Stable native updates, vendor cursor,
+physical fluidity and whole-flow UI acceptance remain open. Earlier UI results
+are historical evidence and do not establish complete product parity.
+
+Rechecked the [official feature index](https://help.edovia.com/en/screens-5/features/)
+and the following requirements against the current source. These are remaining
+product behaviors, not polish items that can be closed by another animation test:
+
+| Priority / requirement | Current authoritative evidence | Completion evidence required |
+| --- | --- | --- |
+| P0 actual mouse, zoom edge-follow and sustained fluidity | Controlled native input/viewport gates exist; no current physical FPS/hitch/latency gate. LAN TCP probes to 192.168.50.226:22 and :5900 timed out, but existing Tailscale discovery recovered the Mac mini at 100.64.0.3. SSH identity and macOS 27.0.1 verified; actual RFB handshake and 4K/60-second VNC connection tests passed 2/2 (`/tmp/aetherscreens-macmini-mesh-handshake-20261008.log`); explicit Mac-account session subsequently passed 1/1 (`/tmp/aetherscreens-macmini-mesh-ard-session-20261008.log`). `devicectl list devices` reports the paired physical iPhone 12 Pro unavailable; the connected 12 Pro is explicitly simulated. | Reachable target Mac and physical phone; continuous 30-minute session covering arrow rendering, zoom/pan, edge following, reconnect, gestures; measured presentation, hitch and input latency evidence. Simulator success cannot close this row. |
+| P1 actual remote Curtain | `CurtainModeManager.swift` explicitly implements a local Lock Screen shortcut notice only. [Official Curtain behavior](https://help.edovia.com/en/screens-5/features/curtain-mode) requires remote display privacy while the client keeps seeing and controlling the desktop; Remote Management is required. | Verify target Remote Management capabilities and protocol; enable/disable on a real Mac, inspect its physical display and retained client control; login-window, headless and multi-display behavior. Do not change remote system settings without concrete authorization. |
+| P1 native bidirectional file drag/drop | Historical missing implementation has been superseded by the current native file-copy workers and transfer sheets described above. Physical drag/drop and picker/provider acceptance remain open. [Official Apple-device transfers](https://help.edovia.com/en/screens-5/features/file-transfers) use drag/drop, with direction-specific server requirements: mobile download requires macOS 14+, upload macOS 10.10+. | Real server transfer negotiation and upload/download byte integrity; destination selection, progress/cancel, overwrite and interrupted/reconnected cleanup; native mobile and Mac drag/drop. SFTP alone cannot establish this behavior. |
+| P1 Apple clipboard compatibility | Native receive is now integrated for exact Apple banner plus Mac-account authentication; eight TCP cases cover Unicode/empty, metadata isolation, coalescing, size/deadline and reconnect. Actual ordinary client 4K + 60-second stability passed 1/1 after integration (`/tmp/aetherscreens-apple-native-clipboard-client-live-20261008.log`). Read-only actual archive parsing passed in both standard/encrypted profiles, but current archive had unsupported flavor; text/write acceptance remains open. Read-only VNC-password native fetch also failed on this host both without ViewerInfo (45-second deadline) and with ViewerInfo (20 status messages, no archive); native VNC compatibility remains an open parity gap. Earlier actual Mac mini Unicode and ASCII/multiline gates both failed over the recovered Tailscale path; connection remained active and original board restoration passed. ASCII packet acceptance did not produce the remote pasteboard value. Verified Mac-account rerun also failed both cases; ASCII lost QA ownership and was not restored over the changed board, while Unicode restored (`/tmp/aetherscreens-macmini-mesh-ard-clipboard-20261008.log`). Logs: `/tmp/aetherscreens-macmini-mesh-unicode-clipboard-20261008.log` and `/tmp/aetherscreens-macmini-mesh-legacy-clipboard-20261008.log`. | Reachable actual Apple server and exclusive clipboard window; both directions, Unicode/multiline, reconnect and restoration of the pre-test board without retaining private contents. |
+| P1 cloud library and credential synchronization | CloudKit reader/coordinator/library model sources exist, but no model integration was found in DeviceList UI. Actual configured container/account gate remains absent. [Official synchronization](https://help.edovia.com/en/screens-5/features/sync) separates connection/settings storage from encrypted Keychain credentials. | Approved actual container/entitlements and credential synchronization policy; connect list/settings to the sync model, then real account/two-device create/edit/delete/conflict/retry tests. Do not infer container IDs or expose key material in cloud journal records. |
+| P1 adaptive/scaled quality and interoperability | Actual encrypted RGB565 desktop stability passed 1/1 (101.075 seconds): first genuine 4K frame at 39.9575 seconds, 60 seconds connected after it, 20 pixel-frame callbacks. Native cursor gate still failed; color appearance, physical fluidity and adaptive/scaled operation remain open. Local decoder/GPU/quality gates also exist; none proves end-to-end performance. | Actual Apple server encoding/RGB565/scaling behavior and changing-network quality adaptation, plus end-to-end measured responsiveness. |
+| P2 remaining physical workflows | Pencil, external pointer/keyboard, IME/dictation, AirPlay/external displays and Siri/widget acceptance remain open in the historical matrix. | Exercise each requested platform workflow on actual hardware; existing UI controls or simulator tests are insufficient. |
+
+No new remote configuration, credentials, device installation or release was
+performed by this read-only audit. The overall goal remains active. Mac reachability was recovered through Tailscale; physical phone availability
+and missing real-server feature implementation still block complete acceptance; local work must retain these requirements rather than
+closing the goal around unit/Simulator results.
+
 | Requirement | Current implementation and evidence | Remaining work |
 | --- | --- | --- |
 | Mac account / VNC connections | ARD type 30 and VNC implemented; real Mac authentication, frame and 60-second session passed. iPhone 12 Pro received the requested target Mac's desktop; user confirmed connection. | iPhone 16 Pro Max target session; sustained physical-device interaction |
@@ -15,7 +100,7 @@ selected the physical Mac mini and connected iPhone 12 Pro for acceptance.
 | Touch / trackpad gestures | Native iOS recognizers now wire immediate clicks, secondary/middle clicks, held-button dragging, two-axis scrolling and pinch zoom. Cursor movement uses remote-pixel scaling, smooth acceleration and an immediate UIKit layer. Core tests cover click release, scaling and engine drag state. English/Chinese iOS simulator flows additionally inspect packets received for single/double/right/middle click, held-button drag, direct touch, pinch coordinate changes and Observe suppression; both flows pass without runtime warnings. Three-finger desktop shortcuts, local two-finger fullscreen and held-button colors are now implemented; their acceptance details appear below. Actual loopback TCP tests additionally verify scrolling preserves held buttons, delayed wheels use the latest released-button state/coordinates, and Observe cancels old work without delaying resumed control behind the cancelled backlog. | Physical tap, secondary click, drag, pinch, scroll and mode changes; Apple server combined scroll/drag acceptance; perceived responsiveness; native two-axis scroll and secondary/middle drag indicators; physical three-finger shortcuts and fullscreen; edge/hot-corner gestures |
 | Hardware pointing devices | Mac native mouse, drag, context menu and wheel passed | iPad pointer and hardware keyboard acceptance |
 | International keyboards / dictation | UTF-8 text drawer and Chinese keysyms passed; NSTextInputClient composition tests | Real IME; supplementary-plane characters; dictation workflow |
-| Clipboard transfers | Local clipboard insertion passed; traditional Latin-1 and negotiated compressed UTF-8 double-direction loopback TCP text, malformed message rejection and ended/reconnected session guards tested | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
+| Clipboard transfers | Native Apple receive integrated for Mac-account connections with bounded off-worker archive parsing and socket identity; outgoing Apple UTF-8 archives now queued off the interaction thread with latest-only pending coalescing and Observe/socket-generation guards; real bidirectional acceptance still pending. Local clipboard insertion passed; traditional Latin-1 and negotiated compressed UTF-8 double-direction loopback TCP text, malformed message rejection and ended/reconnected session guards tested | Actual bidirectional clipboard and rich content transfer; insertion is not parity |
 | Curtain privacy mode | System lock shortcut and password restoration passed | Actual remote display blackout while remaining unlocked; lock is not parity |
 | Display selection | ExtendedDesktopSize server layout decoding, stable screen IDs, selected-monitor crop and bounded input coordinates; no monitor-count inference from framebuffer aspect ratio. Actual TCP tests cover layout-only updates, rejected resize payloads and subsequent raw frames, plus framebuffer resizing. | Apple server layout negotiation and physical per-display acceptance; target Mac currently has one online LG HDR 4K display |
 | Adaptive image quality | Raw, Zlib, ZRLE and CopyRect decoding; Metal rendering; native presented-frame FPS and measured TCP RTT diagnostics | Network-dependent quality/compression selection and measured responsiveness. Initial-frame progress is now suppressed during streaming; regression tests prove fewer UI publications, not physical responsiveness |
@@ -785,3 +870,1258 @@ was started. Previous teardown commit `506b248` passed all steps in CI run
 result. Logs: `/tmp/aetherscreens-state-reconnect-repeat.log`,
 `/tmp/aetherscreens-state-reconnect-core-release.log`,
 `/tmp/aetherscreens-state-reconnect-ios.log` and its signature log.
+
+### Standard rich-cursor presentation checkpoint (2026-10-08)
+
+Non-Apple RFB connections now negotiate Cursor (-239). Shape pixels and mask
+expand off the transport queue, then source-checked publication updates cached
+UIKit/AppKit native cursor images. Explicit hide, hotspot placement, fallback
+arrow, external-display shape delivery and session resets are implemented.
+Seven targeted codec/native-view/TCP cases passed; held-worker transport testing
+confirms pointer sending and reconnect proceed without waiting for conversion.
+The full core run passed 412 tests with 9 explicit environment skips.
+
+Apple 003.889 cursor negotiation remains gated: the actual Mac-account session
+with Cursor offered authenticated but failed to return its first frame. Its
+previous encoding combination is retained while fallback acceptance is checked.
+This result does not establish the failure's cause, or implement Apple's separate
+0x450 cache protocol. Physical cursor rendering, edge-follow and measured
+sustained fluidity remain P0 acceptance work.
+
+Final Apple-banner fallback regression passed 1/1 (78.607 seconds), actual 4K
+frames and a continuously connected 60-second session. Twenty targeted
+cursor/clipboard cases passed after the guard. Two owned-simulator native
+viewport/edge-follow scenarios passed with zero skips/failures/runtime warnings;
+exported screenshots verify the green fixture RichCursor and shifting viewport.
+Cursor body clipping at the display edge remains visible; no physical FPS/hitch
+or Apple cursor interoperability claim follows from these gates.
+
+
+### Initial pixel request correction (2026-10-08)
+
+The next request now remains non-incremental after cursor/layout-only responses
+until actual pixels arrive. A TCP regression asserts full/full/incremental request
+ordering. Full core regression passed 413 tests, 9 explicit environment skips,
+zero failures (108.926 seconds); both builds passed. Standard Cursor is again
+advertised on Apple banners. Actual Mac-account regression passed 1/1 (80.610
+seconds), 44 4K frame callbacks and 60 seconds connected, but emitted zero Cursor
+shape callbacks. This restores the broader standard negotiation after the
+previous temporary guard without claiming Apple shape interoperability or a
+proven cause for the earlier first-frame failure. Apple's 0x450 cache remains
+future protocol work; all physical and clipboard acceptance gaps stay open.
+
+
+### Experimental Apple cursor codec (2026-10-08)
+
+Bounded 0x450 STORE/SELECT receive, session-local LRU shape cache and native
+callback delivery are implemented behind unadvertised default behavior.
+Compressed payloads cap at 2 MiB, dimensions at 512, retained pixmaps at 8 MiB
+and 64 entries. Eleven new codec/TCP/negotiation cases passed; full core 424
+tests passed with 9 explicit environment skips and zero failures. Both builds
+passed. Fractional-alpha conversion assumes straight RGB and requires actual
+packet/appearance validation before acceptance.
+
+An isolated explicit-opt-in Mac-account probe received desktop pixels but no
+vendor cursor shape within its 15-second acceptance window: 1/1 failed, 35.015
+seconds. Startup server-driven control, layout rearming and encrypted-profile
+framing remain unvalidated. This is an implementation and negative gate
+checkpoint, not an enabled or completed Apple cursor feature. Production does
+not advertise 0x450. Physical smoothness and clipboard gates remain open.
+
+
+### Experimental cursor startup message (2026-10-08)
+
+The isolated cursor probe now sends bounded 16-byte AutoFrameBufferUpdate (0x09)
+with full backing geometry before its initial full-image request. Exact wire
+and opt-in/Apple-banner gating pass in three control/TCP cases. Full core 426
+tests passed with 9 explicit environment skips and zero failures; both builds
+passed. Production does not send this experimental startup message.
+
+Actual Mac-account probe still failed the vendor cursor gate (1/1, 36.274
+seconds): desktop pixels arrived but no 0x450 shape arrived in the subsequent
+15 seconds. Viewer capability/modern-bootstrap prerequisites, server-driven
+operation and transition rearming need actual wire acceptance. No successful
+Apple cursor rendering or physical fluidity claim follows from this result.
+
+
+### Cursor image reuse and modern-bootstrap evidence (2026-10-08)
+
+Immutable cursor CGImages are constructed once with decoded models and reused
+by native presentation and cache SELECT. Value equality remains geometry/pixel
+based. Fifteen targeted tests passed; full core: 430 tests, 9 explicit environment
+skips, zero failures (110.731 seconds). One owned-simulator zoomed edge-follow
+case passed without skips/failures/runtime warnings; three screenshots reviewed.
+Hotspots reach both edges; cursor bodies are still clipped. Physical smoothness
+and measured FPS/hitch improvements remain unaccepted. BGRA cache accounting
+excludes CGImage/provider and native renderer overhead.
+
+Shared ViewerInfo bytes are regression-tested against independent wire data.
+An isolated modern version/ClientInit profile remains internal and opt-in.
+Unknown framebuffer encodings now fail before opaque bodies can be misparsed
+as subsequent rectangles; TCP regression preserves already decoded pixels.
+Actual corrected modern and Apple-only cursor probes returned desktop pixels
+but failed the vendor shape gate (36.730 and 37.017 seconds respectively).
+The earlier first-image timeout is not a proven stable failure. Independent
+actual encrypted bootstrap passed 1/1 (15.111 seconds), including rekey and
+verified control records, but full RFBClient encrypted-session integration and
+cursor/layout interoperability remain open. Production cursor profile is unchanged.
+
+Final macOS and generic iOS builds passed; git diff --check passed. The owned
+fixture was stopped and its three ports closed; the already booted owned
+simulator was preserved. No physical acceptance, commit, push or release.
+
+## Encrypted record stream checkpoint (2026-10-08)
+
+AppleRFBRecordStream now reassembles fragmented headers/bodies and coalesced
+records while retaining at most one outer record (65,522 bytes). Delivery is
+synchronous, avoiding an unbounded decoded-body queue. Invalid lengths,
+integrity failure, truncated EOF and delivery-triggered disconnect close the
+stream before further delivery. Eleven codec/stream tests passed, zero skips
+or failures, 0.014 seconds; all split boundaries of independent OpenSSL vectors
+are covered. `/tmp/aetherscreens-record-stream-final-targeted-20261008.log`.
+The earlier 430-test full suite precedes these three new stream tests; no new
+full-suite count is claimed.
+
+The actual probe now uses this stream for separated header/body delivery. Its
+first run authenticated and verified the first record but the remote socket
+closed after encrypted Observe (1 failure, 16.686 seconds). Inspection found
+the outgoing encryption transition was previously sent only by the clipboard
+variant. Every native probe now sends cleartext Observe and SetEncryption 2
+before encrypted writes. Repeat passed 1/1, zero skips/failures, 28.027 seconds:
+rekey, first record and three continuous verified status records (receive
+sequence 4). This is evidence for the corrected path, not proof the omitted
+transition alone caused the earlier close. Logs:
+`/tmp/aetherscreens-record-stream-live-20261008.log` and
+`/tmp/aetherscreens-record-stream-transition-live-20261008.log`.
+
+macOS and generic iOS builds passed; git diff --check passed. Logs:
+`/tmp/aetherscreens-record-stream-mac-build-20261008.log` and
+`/tmp/aetherscreens-record-stream-ios-build-20261008.log`. Default RFBClient
+still does not use native record encryption; the stream is exercised by the
+actual opt-in bootstrap probe. Native desktop/metadata/cursor integration,
+physical smoothness and the isolated bidirectional clipboard gate remain open.
+No commit, push or release.
+
+## Reusable native encryption prelude (2026-10-08)
+
+AppleEncryptionControl centralizes the verified receive-encryption request,
+cleartext Observe and outgoing-encryption transition. It also validates the
+exact initial single-rekey framebuffer/rectangle envelope before any key
+payload is consumed. Two independent-wire tests cover the packets and every
+modified envelope byte, plus truncated/extra rectangle framing. Together with
+the stream/codec tests, 13 cases passed, zero skips/failures (0.014 seconds);
+`/tmp/aetherscreens-encryption-control-targeted-20261008.log`.
+
+The actual probe uses the shared controls and envelope validation. Mac-account
+rekey/control regression passed 1/1, zero skips/failures (26.604 seconds), with
+four verified receive records and one encrypted Observe write;
+`/tmp/aetherscreens-encryption-control-live-20261008.log`. macOS and generic
+iOS builds passed; git diff --check passed. Build logs:
+`/tmp/aetherscreens-encryption-control-mac-build-20261008.log` and
+`/tmp/aetherscreens-encryption-control-ios-build-20261008.log`. This extracts the verified prelude for subsequent
+client integration; no production encryption, desktop metadata or cursor
+interoperability claim follows. The default RFB client remains unchanged.
+
+## Internal encrypted desktop client integration (2026-10-08)
+
+RFBClient now has a separate internal experimentalAppleEncryption opt-in,
+requiring the Apple cursor profile and Apple server banner for native startup.
+It retains the ARD exchange wrap key only for this experiment, validates the
+initial rekey envelope, installs the record codec and sends the verified
+cleartext Observe/outgoing-encryption transition before session configuration.
+Subsequent writes are bounded encrypted records; reads verify record integrity
+before feeding decoded bytes to the existing desktop parser. Final disconnect
+chords also use encryption. Teardown clears keys/decoded pending bytes while
+holding the input lock. A diagnostic callback exposes only verified fragment first byte/length;
+its callback cannot publish an old session body after disconnect/reconnect.
+Public construction and default connection behavior remain unchanged.
+
+Final targeted codec/control/standard transport regression: 43 tests, zero
+skips/failures, 10.617 seconds;
+`/tmp/aetherscreens-native-encryption-client-final-targeted-20261008.log`.
+The first actual integrated probe reached connected after rekey but failed the
+20-second first-pixel gate (1 failure, zero unexpected, 28.599 seconds);
+`/tmp/aetherscreens-native-encryption-client-live-20261008.log`. This is not
+accepted encrypted desktop/cursor interoperability. Diagnostic repeat failed 1/1 (29.290 seconds), receiving 81 integrity-verified
+records: an initial 161-byte archive record and subsequent 32,768-byte stream
+fragments. Their first bytes are not all message types. Data is arriving but
+no complete desktop frame passed the first-pixel gate. Log:
+`/tmp/aetherscreens-native-encryption-client-records-live-20261008.log`. Generic iOS build passed;
+`/tmp/aetherscreens-native-encryption-client-final-ios-build-20261008.log`.
+The earlier 430-test full suite predates these integration changes; this phase
+claims only its targeted regression and actual negative gate. Native display
+configuration/metadata/startup sequencing still needs wire evidence. No release.
+
+Final macOS build and git diff --check passed;
+`/tmp/aetherscreens-native-encryption-client-final-mac-build-20261008.log`.
+
+## Native encrypted first-frame diagnosis (2026-10-08)
+
+Internal callbacks expose verified fragment first byte/length, rectangle geometry
+and encoding, and validated ZRLE compressed payload length. They expose no pixels,
+clipboard text or credentials; source-identity guards prevent callbacks from
+continuing a replaced session. Default/public behavior remains unchanged.
+
+The rectangle probe failed 1/1 (35.945 seconds), identifying a 3840x2160 ZRLE
+rectangle (encoding 16), not Raw. The payload probe failed 1/1 (26.726 seconds):
+validated compressed length 5,001,652 bytes and 64 verified records arrived before
+the 20-second first-pixel timeout. Thus receiving data is proven; a complete frame
+is not. Logs: `/tmp/aetherscreens-native-encryption-rectangle-live-20261008.log`
+and `/tmp/aetherscreens-native-encryption-payload-live-20261008.log`. Actual
+throughput, startup sequencing, progress reporting and the bounded first-frame
+deadline need further investigation; no encrypted desktop/cursor acceptance.
+
+A new 128-record synthetic test verifies 4,194,304 bytes with equality/integrity,
+zero retained framing bytes after each record, and clean EOF. Receive processing
+measured 0.008329 seconds in this Debug run, excluding sockets, decompression and
+rendering. This does not establish actual session FPS or explain network/server
+throughput. Combined codec/control/standard transport checks: 44 tests, zero
+skips/failures (10.479 seconds);
+`/tmp/aetherscreens-native-encryption-throughput-targeted-20261008.log`.
+That run preceded only the additional payload-length diagnostic hook. Final macOS and generic iOS builds passed; git diff --check passed. Logs:
+`/tmp/aetherscreens-native-encryption-payload-mac-build-20261008.log` and
+`/tmp/aetherscreens-native-encryption-payload-ios-build-20261008.log`. Full parity remains in progress.
+
+## Native first-frame progress and bounded wait (2026-10-08)
+
+Experimental encrypted desktop reads now publish initial payload progress in
+MiB at the first fragment, MiB boundaries and completion, avoiding per-record UI
+updates. Only explicit ZRLE/Zlib/Raw pixel payload reads qualify; clipboard,
+cursor and metadata traffic cannot renew the desktop deadline or masquerade as
+its loading progress. Notifications retain codec/session identity guards.
+
+Native first-frame waiting is now bounded by 20 seconds without pixel-payload
+progress and 60 seconds total after connected. Standard sessions keep their
+existing 20-second deadline. Deterministic tests cover no progress, mid-transfer
+stalls and continuous progress reaching the hard cap. Combined initial targeted
+suite: 44 tests, zero skips/failures (10.397 seconds), excluding the later explicit
+pixel-payload classification refinement;
+`/tmp/aetherscreens-native-first-frame-targeted-20261008.log`.
+Actual bounded-transfer result and final targeted/build results are being collected.
+No first-frame/cursor, UI rendering, physical smoothness or parity acceptance
+is inferred from a longer bounded wait.
+
+Final targeted regression passed 44 tests, zero skips/failures (10.918 seconds),
+including the explicit pixel-only progress classification;
+`/tmp/aetherscreens-native-first-frame-final-targeted-20261008.log`.
+Final macOS and generic iOS builds passed; git diff --check passed. Build logs:
+`/tmp/aetherscreens-native-first-frame-final-mac-build-20261008.log` and
+`/tmp/aetherscreens-native-first-frame-final-ios-build-20261008.log`.
+
+Actual bounded-wait probe failed 1/1 (77.808 seconds): first ZRLE payload length
+5,017,846 bytes, 89 verified records, no complete first frame before the bound.
+`/tmp/aetherscreens-native-first-frame-live-20261008.log`. This run preceded only
+the explicit pixel-only classification; no default/public profile was enabled.
+A contemporaneous read-only tailscale ping reports DERP(baizhiedu), 862 ms, for
+the target. The relayed high-latency path is confirmed, but is not alone proof
+of the throughput cause. Next work must inspect transfer/path and server profile;
+further timeout extension is not accepted as a performance fix. No physical
+smoothness, cursor parity, commit, push or release acceptance.
+
+## Actual route comparison and loopback SSH QA (2026-10-08)
+
+Read-only SSH on the trusted Mac mini reports en0 192.168.50.79 and en1
+192.168.50.226; TCP 22/5900 on both addresses timed out from this host.
+The mesh addresses remain reachable. A bounded, compression-disabled SSH probe
+read/discarded 262,144 generated random bytes in 14.776 seconds including SSH
+startup, exit 0. No remote file was created or user content transferred. This
+shows a slow combined path/startup, not an isolated transport throughput result.
+
+QA now supports a saved-credential host alias only for 127.0.0.1 destinations,
+so an owned SSH forward to the already trusted target can exercise the native
+client without copying a password into files/arguments or changing saved devices.
+The alias is ignored for arbitrary remote destinations. Public app behavior and
+network configuration are unchanged. An owned compression-disabled SSH forward
+on 127.0.0.1:15941 targets the same Mac's loopback 5900. Actual native client
+first-frame/cursor result is being collected; no accepted frame claim yet.
+
+Final loopback SSH actual probe failed 1/1, zero unexpected failures (66.959
+seconds). Authentication, native rekey and connected completed; first rectangle
+3840x2160 ZRLE, compressed payload 5,017,675 bytes, 37 verified records; no complete
+first frame before the bounded deadline. Log:
+`/tmp/aetherscreens-native-ssh-forward-live-20261008.log`. This does not establish
+that forwarding fixes throughput or native desktop/cursor interoperability.
+The owned SSH process (PID 18834) was terminated after the probe; its tool session
+completed and port 15941 has no listener. No remote/network configuration changed.
+The QA alias compiled in the actual run; git diff --check passed. Existing app
+builds/44-case targeted results precede only this test-only credential alias.
+Native startup/display configuration and path-limited first-frame behavior remain
+open, alongside physical fluidity and all other full-parity gates.
+
+## Fixed native display preface (2026-10-08)
+
+Independently encoded the static 0x1d display configuration from the experimental
+protocol field description (no implementation source copied):
+https://raw.githubusercontent.com/renegadelink/iShareScreen/9ab40d3a3151524f954cff9d6239d891197c1705/docs/apple_vnc_rfc.md
+The 196-byte packet contains one fixed mode, a 192-byte post-prefix length and
+184-byte descriptor. Source/logical dimensions match ServerInit; dynamic flags,
+virtual-display type, HDR, rotation and unnamed/physical-size fields are zero.
+60 Hz is the proposed mode; actual host acceptance remains a separate gate.
+No dynamic resize or high-performance claim is made.
+
+Only the internal encrypted experiment sends display configuration followed by
+SetEncodings as its first two records; SetPixelFormat follows. Default sessions
+keep their original sequence. Two independent fixed-wire/bounds tests and the
+codec/control/standard TCP regressions passed: 46 tests, zero skips/failures,
+10.258 seconds; `/tmp/aetherscreens-native-display-preface-targeted-20261008.log`.
+Actual server and final build results are being collected. Real metadata/layout,
+cursor, startup throughput and physical fluidity still require acceptance.
+
+Actual display-preface probe failed 1/1, zero unexpected failures (79.749 seconds).
+It reached connected and received 51 integrity-verified records; first rectangle
+3840x2160 ZRLE, payload 5,001,497 bytes, no complete first frame within the bound.
+`/tmp/aetherscreens-native-display-preface-live-20261008.log`. Continued records
+are not a semantic acknowledgement of every display field, nor evidence that
+this preface solves throughput/cursor interoperability. Keep the profile internal.
+Final macOS and generic iOS builds passed; git diff --check passed. Logs:
+`/tmp/aetherscreens-native-display-preface-mac-build-20261008.log` and
+`/tmp/aetherscreens-native-display-preface-ios-build-20261008.log`.
+Next native work includes authoritative metadata/layout and actual adaptive
+quality behavior; network-path-limited acceptance and physical smoothness remain
+open. No commit, push, tag or release.
+
+## Bounded native layout wire diagnosis (2026-10-08)
+
+The experimental protocol document explicitly notes geometry-offset version skew:
+https://raw.githubusercontent.com/renegadelink/iShareScreen/9ab40d3a3151524f954cff9d6239d891197c1705/docs/apple_vnc_rfc.md
+Added a bounded 0x451 length-prefix receiver and internal payload callback. The
+UInt16 body length must include at least a version word; callbacks are guarded by
+connection identity. Until actual geometry is validated, reception fails clearly
+instead of resizing by guessed offsets or parsing later pixels against stale
+geometry. This is diagnostic framing, not supported display-layout action.
+
+A separate internal experimentalAppleLayoutDiagnostic opt-in plus active native
+record encryption is required to advertise 0x451. Default and existing cursor
+experiments do not advertise it. QA logs only payload length and the first ten
+numeric leader words, no screenshots/clipboard/credentials or display strings.
+A TCP regression verifies unvalidated layout and invalid short length preserve
+existing desktop pixels and do not manufacture a frame. Initial targeted tests:
+47 cases, zero skips/failures (10.312 seconds), before the additional diagnostic
+opt-in and explicit non-advertisement assertion. Actual diagnostic/final tests
+and builds are being collected. Full geometry application, transition rearming,
+cursor continuity and actual multi-display acceptance remain open.
+
+Actual layout diagnostic probe failed 1/1, zero unexpected failures (22.278
+seconds), but its failure classification revealed a first-frame false positive:
+a 16-byte encrypted framebuffer message containing DesktopSize (-223) triggered
+onFrameUpdated before pixels arrived. No 0x451 payload was received. The subsequent
+5,001,487-byte ZRLE body was still incomplete when the probe entered its cursor
+wait. Therefore this run does NOT prove a completed desktop image. Log:
+`/tmp/aetherscreens-native-layout-framing-live-20261008.log`.
+
+Fixed DesktopSize to mark layout-only updates and preserve pixels on same-size
+announcements. Initial empty updates also cannot count as the first desktop;
+after real pixels have arrived, existing empty-update refresh behavior remains.
+A TCP regression verifies no frame callback, unchanged seeded pixels and a full
+(non-incremental) retry after the size-only update. Initial expanded targeted
+suite passed 48 cases, zero skips/failures (10.378 seconds), preceding only an
+extra completion expectation/full-retry assertion in that test. A final full
+suite/build is collecting that assertion and all changes. The earlier actual
+negative evidence is retained; a corrected live gate remains to be rerun.
+
+Final full core regression passed 442 tests, 9 explicit environment skips, zero
+failures (108.668 seconds), covering diagnostic opt-in, non-advertisement and
+size-only full-retry assertions;
+`/tmp/aetherscreens-native-layout-frame-full-core-20261008.log`.
+Final macOS and generic iOS builds passed; git diff --check passed. Logs:
+`/tmp/aetherscreens-native-layout-frame-final-mac-build-20261008.log` and
+`/tmp/aetherscreens-native-layout-frame-final-ios-build-20261008.log`.
+No corrected actual first-pixel/0x451 geometry result is claimed in this phase.
+Layout application/rearming, native cursor, throughput and physical smoothness
+remain open. No commit, push, tag or release.
+
+## Actual reduced-color profile gate (2026-10-08)
+
+The saved-target live QA harness now accepts explicit fullColor/rgb565 wire
+profiles through AETHERSCREENS_LIVE_COLOR_DEPTH; absent configuration keeps
+fullColor. Unsupported profile values skip before creating expectations or
+connecting. The selected existing RFBColorDepth is passed to the actual client,
+without changing default saved devices or production quality policy. No secret
+is copied/logged. This enables the previously missing actual Apple RGB565 gate,
+not automatic adaptation or scaled-desktop support. An encrypted Mac-account
+RGB565 first-frame/cursor probe is being collected. No image/quality acceptance
+is claimed until the actual result and frame semantics are inspected.
+
+Actual encrypted RGB565 first-frame/cursor probe completed with one expected
+cursor-gate failure, zero unexpected failures (47.225 seconds). It delivered
+nine genuine 3840x2160 frame callbacks after the first-pixel correction; first
+ZRLE compressed body 1,385,316 bytes, followed by smaller actual updates. No
+native cursor shape arrived within 15 seconds. This proves reduced-color decode
+and ongoing desktop updates in this session, not visual color accuracy, sustained
+fluidity or complete Apple cursor parity. The earlier fullColor samples were
+collected at different times/content, so their approximately 5 MB bodies are
+not a controlled compression A/B benchmark. Log:
+`/tmp/aetherscreens-native-rgb565-live-20261008.log`.
+
+Added a separately explicit-opt-in testLiveAppleRGB565DesktopStability gate using
+the same encrypted client and forced RGB565 profile. It measures elapsed frame
+arrival and requires 60 seconds connected after the first genuine frame. Cursor
+shape acceptance remains mandatory in the existing cursor gate and remains open;
+this independent desktop gate cannot close it. Actual stability result is being
+collected. Production app code/builds are unchanged in this phase; the previous
+442-test full regression predates only QA profile support and this additional
+live test. No release.
+
+Final independent RGB565 desktop gate passed 1/1, zero skips/failures (101.075
+seconds). First genuine 3840x2160 frame arrived at 39.9575 seconds after connect
+invocation, followed by 60 seconds continuously connected and 20 total genuine
+frame callbacks. First ZRLE payload 1,385,202 bytes. Log:
+`/tmp/aetherscreens-native-rgb565-stability-live-20261008.log`.
+This verifies actual encrypted reduced-color decoding and bounded desktop
+stability on the current path. It does not prove visual color fidelity, FPS,
+hitches, input latency, adaptive/scaled quality, physical smoothness or native
+cursor shapes. Approximately 40-second startup remains unacceptable for the
+requested polished experience; neither timeout changes nor this passing
+stability gate close that requirement. Earlier raw callback totals can include
+size-only/empty messages and must not be treated as pixel-frame/FPS counts.
+
+Only QA source changed in this phase; the shared session helper keeps the
+existing cursor gate and adds independent reduced-color stability acceptance.
+Invalid-profile guard check completed: 1 explicit skip, zero failures or
+unexpected expectation failures (0.026 seconds), without opening a session;
+`/tmp/aetherscreens-native-quality-invalid-profile-20261008.log`. The session-start
+log was subsequently moved after profile validation to match that behavior. Prior full
+core 442/build results precede this QA-only additional live case. Full goal
+remains active; no user device/quality state, commit, push or release changed.
+
+## Native push scheduling (2026-10-08)
+
+Only the internally encrypted profile now sends its initial full-image request
+before AutoFrameBufferUpdate, and does not send a request after every decoded
+frame. Standard/plaintext sessions retain their existing polling behavior.
+Validated DesktopSize notifications re-arm and request a full image on the native
+profile; callback connection identity prevents an old resize continuation from
+reading a replacement session. Unvalidated 0x451 still fails diagnostically;
+its geometry/rearming is not implemented or accepted. An internal request hook
+allows actual QA to count request scheduling without retaining content.
+
+48 control/deadline/codec/standard TCP cases passed, zero skips/failures,
+10.672 seconds; `/tmp/aetherscreens-native-streaming-targeted-20261008.log`.
+Actual encrypted RGB565 cursor gate failed 1/1, zero unexpected failures,
+50.774 seconds: one full request, one genuine 4K frame at 34.9786 seconds after
+connect invocation, first compressed body 1,368,972 bytes, but no cursor shape
+in the subsequent 15 seconds. Log:
+`/tmp/aetherscreens-native-streaming-cursor-live-20261008.log`.
+The lack of further frames during this uncontrolled desktop interval cannot
+prove stopped updates or FPS; next streaming acceptance needs controlled remote
+visual changes. This run does not close native push continuity/cursor or startup
+latency requirements. Final macOS and generic iOS builds passed; git diff --check passed. Logs:
+`/tmp/aetherscreens-native-streaming-mac-build-20261008.log` and
+`/tmp/aetherscreens-native-streaming-ios-build-20261008.log`. The actual probe
+uses Observe mode and sends no pointer/keyboard input; controlling-mode shape
+changes remain unexercised. No commit, push or release.
+
+## Owned remote visual-change fixture (2026-10-08)
+
+Added scripts/qa/native_display_pattern.swift: one accessory/floating test window
+with a small moving color patch and tick label, updating once per second. It
+does not request activation/key focus, send input, capture screens, access clipboard,
+or write settings. Lifetime is explicitly bounded to 5...180 seconds; a timer
+closes its window and terminates the process. Compile passed with warnings as
+errors and main-actor AppKit execution;
+`/tmp/aetherscreens-native-display-pattern-final-build-20261008.log`.
+Invalid lifetime 0 exited 2 before NSApplication creation (no host GUI launch).
+
+Trusted Mac mini checks report UID 501, an existing gui/501 domain and Dock
+process, while physical console ownership reports root; these alone are not
+proof of the shared surface. Final five-second remote smoke exited 0 and logged
+1920x1080 logical geometry/backing scale 2, plus owned draw passes at tick 0 and
+tick 1. Log: `/tmp/aetherscreens-native-display-pattern-final-remote-smoke-20261008.log`.
+This proves helper execution/drawing/automatic exit, not RFB delivery or visible
+presentation on the sharing surface. Next gate must match this known pattern
+in actual received pixels while server push remains armed; other desktop changes
+must not substitute for that evidence. Remote owned binary removal and temp-directory cleanup completed, exit 0;
+remote absence verification also completed, exit 0. App source and prior test/build results are unchanged;
+full Screens parity and physical smoothness remain open. No release.
+
+## Received owned-pattern continuity gate (2026-10-08)
+
+Added a separately opt-in RGB565/native pattern test. The matcher reads only the
+expected fixture sample points in a 3840x2160 framebuffer, requiring opaque black
+border samples plus the known moving teal/orange patch. It stores abstract
+pattern signatures/timestamps, never image pixels or screenshots. Local tests
+reject transparent/empty/solid/unrelated colors and repeated-state inflation.
+Final local matcher test passed 1/1, zero skips/failures (see final matcher log).
+The live harness initially compiled with four explicit environment skips; these
+are not actual acceptance. Logs:
+`/tmp/aetherscreens-native-pattern-matcher-final-tests-20261008.log` and
+`/tmp/aetherscreens-native-pattern-qa-build-20261008.log`.
+
+Actual controlled probe failed 1/1, zero unexpected failures (94.841 seconds):
+one genuine 4K frame at 33.1388 seconds, one full request, zero matched states
+through the 60-second connected observation. The producer ran for its bounded
+170 seconds and exited 0, logging owned draws at tick 0/1 and logical 1920x1080,
+backing scale 2. This does not distinguish geometry/surface mismatch from missing
+push updates. No continuous-update, FPS or fluidity claim is justified. Logs:
+`/tmp/aetherscreens-native-pattern-push-live-20261008.log` and
+`/tmp/aetherscreens-native-pattern-producer-20261008.log`.
+
+After this negative run, tightened future acceptance: at least three distinct
+states, changes spanning at least 30 seconds, and last change less than 20 seconds
+old at the end. Deterministic tests prove repeated frozen frames cannot renew
+freshness; this refinement has not had a further actual run.
+
+Read-only scutil confirms console user UID 501, on-console and login complete.
+Thus /dev/console root ownership alone is insufficient to infer a locked/login
+surface. Additional lock-state query timed out; filtered extraction was
+unavailable, so lock state is unverified. No login/unlock settings changed.
+The owned binary/directory were removed and remote absence verified (exit 0);
+no producer remains after its completed session. App code/builds are unchanged
+in this QA-only phase; latest full core/build numbers predate these added QA
+cases. Actual pattern surface/geometry, native push/cursor and all physical/full
+Screens requirements remain open. No commit, push or release.
+# Ordinary-profile pattern comparison, 2026-10-08
+
+Capture timeline/byte1 trial (2026-10-08): monitor requested capture until
+disconnect; handler flag0 cannot identify successful0x09 subscription. Byte1=1
+did not change log flag0 or restore push: states2/span3.650s/age42.124s,
+61.012s failed3 assertions,zero skips:
+`/tmp/aetherscreens-srp-autoupdate-flag-pattern-live-20261008.log`.
+Reserved0 packet restored; no unsupported enable interpretation retained.
+Producer80ticks/84draws exited0; owned files removed. Next distinguish handlers
+with direct subscription evidence. No parity/fluidity/release claim.
+
+Physical+logical transition (2026-10-08): actual60.672s failed sustained gate,
+states2/span3.726s/age41.889s. Producer logged transient3840x2160 scale1 /
+window120,1120 then1920x1080 scale2/window120,40. Mapping changes confirmed;
+unmatched samples alone cannot prove capture freeze. Actual gate still fails.
+Log `/tmp/aetherscreens-srp-physical-hidpi-pattern-live-20261008.log`.
+Producer80ticks/83draws exited0, owned files removed. Static server formats show
+capture stop/inactive and reconfigure events; causality still unverified.
+Next correlate capture restart/subscription. No release or fluidity claim.
+
+Positive physical dimensions (2026-10-08): bounded finite millimeter fields,
+explicit nominal96-DPI fallback and measured QA override. Five tests passed,
+iOS build succeeded. Actual61.506s gate failed3 assertions: states0/span0/ageInf,
+`/tmp/aetherscreens-srp-physical-pattern-live-20261008.log`.
+Same-interval server query no longer showed prior physical-size/create errors,
+but agent-port/factory/zero-value errors remained. No sustained push claim.
+Two4K ZRLE plus one DesktopSize arrived; owned surface still unmatched.
+Producer80ticks/82draws exited0, owned files removed/absence verified. Full465 predates
+this source correction; current validation targeted+iOS only. No release.
+
+Server-side evidence (2026-10-08): static-format unified logs at HiDPI/combined
+trial times report Invalid size in millimeters and unable to create display
+configuration. Encoder's physical floats are zero. Actual remote CGDisplay
+physical size598.380359111388 x340.770181217549mm. No private/interpolated log
+values or capture retained. Omission trial still froze without those size errors,
+so size is a compatibility issue, not proven sole cause. Agent-port/zero-value
+errors remain unexplained; AutoFrameBufferUpdateMessage2 logs support handler
+receipt only. Next bounded physical-size correction and independent agent query.
+No app source change, push/fluidity claim or release in this diagnostic phase.
+
+Server-display omission trial (2026-10-08): actual61.103s gate failed all three
+assertions, states1/span0/age46.609s. Log:
+`/tmp/aetherscreens-srp-server-display-pattern-live-20261008.log`.
+Trial flag/branch removed; no omission solution promoted. Producer85draws
+exited0, owned files removed/absence verified. New test-thread assertion gate
+actually exercised; next gather server/startup evidence. No push/fluidity claim.
+
+Full core regression (2026-10-08):465tests/16 explicit environment skips/zero
+failures,148.722s (`/tmp/aetherscreens-srp-display-full-core-tests-20261008.log`).
+Selection iOS build completed BUILD SUCCEEDED/exit0. Subsequent QA-only fix
+moves pattern assertions to test thread and cancels observation work on cleanup;
+five pattern/display tests passed0.041s. Actual gate rerun after lifecycle change
+still pending. Neither skips nor earlier first-frame evidence prove full parity.
+Native push/cursor/physical UI fluidity remain open; no release.
+
+Combined-display comparison (2026-10-08): independent8-byte selection encoder,
+four display tests passed. Actual61.062s aggregate run failed sustained pattern:
+states1/span0/age47.477s (`/tmp/aetherscreens-srp-combined-pattern-live-20261008.log`).
+Producer80draws exited0; owned files removed. OnConsole/LoginDone true, no lock
+key supplied: unlocked state not proven. Full regression session42922 launched,
+no terminal claim (`/tmp/aetherscreens-srp-display-full-core-tests-20261008.log`).
+Native push/cursor/physical UI parity remain open; no release.
+
+HiDPI descriptor comparison (2026-10-08): backing3840x2160/logical1920x1080
+paired bounded encoder passed3/3 tests, iOS build succeeded. Actual61.461s
+run still failed sustained pattern: states1/span0/age48.242s, log
+`/tmp/aetherscreens-srp-hidpi-pattern-live-20261008.log`.
+Owned producer80draws exited0; files removed/absence verified. No push/fluidity
+acceptance; next investigate display selection. No release.
+
+SRP normal-control comparison (2026-10-08): QA mode1 still received only one
+3840x2160 ZRLE rectangle/23 status4; states0/span0/ageInfinity. Actual60.575s
+test failed three assertions, zero skips:
+`/tmp/aetherscreens-srp-control-pattern-live-20261008.log`.
+Producer85ticks/draws exited0; owned files removed/absence verified. No input
+events sent. Mode change did not restore push; no surface/cursor/fluidity claim.
+Next inspect display configuration/shared surface. No release.
+
+Native status gate fix (2026-10-08): active encrypted record sessions now parse
+0x14 independently of clipboard capability; no type33 clipboard enabled. Actual
+61.061s run avoided previous encoding failure but failed sustained pattern:
+states1/span0/last change48.778s. Status command4 remains uninterpreted. Log:
+`/tmp/aetherscreens-srp-status-separated-pattern-live-20261008.log`.
+Producer85s/85draws exited0 and owned files removed. Clipboard transport
+regression exit0 (`/tmp/aetherscreens-srp-status-regression-tests-20261008.log`).
+Subscription/push and physical fluidity remain open; no release.
+
+Type33 controlled pattern (2026-10-08): producer100s/100draws auto-exit0,
+owned fixture removed. Two actual clients failed before sustained gate; final
+failure Unsupported framebuffer encoding16778260 (17.789s), log
+`/tmp/aetherscreens-srp-controlled-pattern-diagnostic-live-20261008.log`.
+No continuous-push acceptance; unknown encoding versus offset not established.
+Internal SRP iOS build did complete successfully:
+`/tmp/aetherscreens-srp-client-ios-build-20261008.log`.
+Native push/cursor/physical smoothness remain open; no release.
+
+Internal RFBClient type33 first-pixel gate (2026-10-08): native profile now accepts
+QA-supplied fixed-target RSA SPKI, worker-computes padded SRP, verifies M2 then
+SecurityResult and uses existing encrypted record/pixel decoder. Public init
+and default type30 unchanged; key trust absent. Final actual frame test passed
+1/1, zero skips/failures,12.137s:
+`/tmp/aetherscreens-srp-client-owned-first-pixel-live-20261008.log`.
+Nine relevant SRP tests also passed15.258s. First pixel is not sustained native
+push/cursor/rendering/physical fluidity acceptance. iOS rebuild session57695
+launched, no terminal result yet. No release.
+
+Type33 ServerInit acceptance (2026-10-08): actual M2/zero SecurityResult followed
+by shared ClientInit0xc1 returned parsed3840x2160,32bpp/depth24 ServerInit.
+Test passed1/1, zero skips/failures,8.896s:
+`/tmp/aetherscreens-srp-serverinit-live-20261008.log`.
+Padded SRP iOS build also completed successfully, terminal exit0:
+`/tmp/aetherscreens-srp-padded-ios-build-20261008.log`.
+No framebuffer stream/rekey configured; no native-push/rendering acceptance.
+Production type33 integration, key trust and physical fluidity remain open.
+
+Padded SRP vector regression (2026-10-08): independent Python padded M1/M2,
+wrap key and 64 mutation refusals matched Swift. Nine relevant tests passed,
+zero failures (15.629s), `/tmp/aetherscreens-srp-padded-vector-tests-20261008.log`.
+Actual stage2 fixture rerun2/2 passed (0.003s),
+`/tmp/aetherscreens-srp-actual-stage-fixture-tests-20261008.log`.
+iOS rebuild session50045 still live at last poll; no completed-build claim.
+Production/native push/physical smoothness still open; no release.
+
+Type33 mutual proof verified (2026-10-08): QA group-width generator hash padding
+produced actual body98/stage2. Strict M2 matched; subsequent SecurityResult zero.
+Actual test passed1/1, zero skips/failures:
+`/tmp/aetherscreens-srp-actual-mutual-verified-live-20261008.log`.
+Minimal packet2 accepted on this host; no ClientInit/desktop entered. Key trust,
+independent padded vectors, iOS rebuild, production integration, native continuous
+push and physical fluidity remain open. Type30 production unchanged; no release.
+
+Type33 continuation evidence (2026-10-08): after short body u32=2/u16=0,
+server returned one more u32=1, no verified M2. Test failed 1/1, zero skips,
+13.630s (`/tmp/aetherscreens-srp-after-short-live-20261008.log`). Placement is
+unverified; this is not accepted SecurityResult/authentication. No key released,
+ClientInit or desktop session entered. Next check primary Apple SRP behavior;
+do not blame credentials or claim native-push cause. No production change/release.
+
+Type33 actual proof attempt (2026-10-08): fixed QA app-suite device/credential
+store mismatch; saved bound credentials resolved. Two real minimal packet-2
+attempts failed the expected M2 gate (one failure each, zero skips). Server body6
+contains u32=2/u16=0, semantics unverified, not expected body98. No verified M2,
+SecurityResult, released wrap key or entered desktop session. Logs:
+`/tmp/aetherscreens-srp-mutual-store-live-20261008.log`,
+`/tmp/aetherscreens-srp-mutual-short-response-live-20261008.log`.
+Earlier credential skips are inconclusive after this lookup correction. Actual
+framing/proof compatibility remains open; no native-push causal claim/release.
+
+Type33 QA wiring (2026-10-08): packet-helper iOS build succeeded, terminal exit0
+(`/tmp/aetherscreens-srp-packets-ios-build-20261008.log`). Explicit mutual-auth
+QA now requires exact saved target/account credentials, verifies M2 then zero
+SecurityResult, and closes without ClientInit. Both authorized LAN/mesh binding
+attempts skipped before connection for missing exact saved credentials; no real
+proof sent and no authentication success. Logs: `/tmp/aetherscreens-srp-mutual-live-20261008.log`,
+`/tmp/aetherscreens-srp-mutual-mesh-live-20261008.log`. Native push/physical
+fluidity remain open; production selection unchanged.
+
+Type33 final parser prototype (2026-10-08): exact 102-byte bounded profile,
+explicit expected stage, rejection of all truncated prefixes and header/reserved
+mutations. Combined SRP math/challenge/packet/final tests passed 8/8, zero failures
+(7.815s), `/tmp/aetherscreens-srp-server-proof-tests-20261008.log`.
+Final envelope and stage remain remotely unverified; no real proof attempted,
+no authentication acceptance or production integration claimed.
+
+Type33 packet-2 encoder (2026-10-08): minimal bounded RSA1 proof packet now
+has independently checked exact byte offsets/lengths and malformed-field tests,
+2/2 passed, zero failures (0.003s). macOS test build passed (8.39s), log:
+`/tmp/aetherscreens-srp-proof-packet-tests-20261008.log`.
+Research-derived framing remains live-unverified; no real proof sent, no
+production integration, server-final-proof acceptance or iOS build claim yet.
+
+Type33 proof prototype (2026-10-08): independently generated synthetic Python
+vectors now match Swift client public value, M1 and M2-gated wrap key. Every
+single-byte server-proof mutation is rejected. Actual Mac mini challenge group
+and options match the restricted profile. Eight targeted tests passed with zero
+skips/failures (9.221s); macOS build (1.58s) and generic iOS Simulator build passed.
+Logs: `/tmp/aetherscreens-srp-proof-profile-final-tests-20261008.log`,
+`/tmp/aetherscreens-srp-proof-mac-build-20261008.log`,
+`/tmp/aetherscreens-srp-proof-ios-build-20261008.log`.
+No real password or M1 was loaded/sent. Prototype remains unwired; variable-time
+BigUInt math is not hardened authentication. Actual mutual proofs, key trust,
+native continuous push and physical smoothness remain open. Earlier full448
+predates these helpers; production type30 unchanged. No release.
+
+Historical type33 challenge progress: encrypted target identity on a fresh auth connection
+successfully receives a bounded SRP challenge. Actual outer layout differs from
+the reference memo: u32 stage2/u16 nested length/u32 payload. Decoder corrected
+against real bytes; modulus512, generator1, salt32, public512 bytes, account
+iterations131578/options80 bytes. No password/proof/session was attempted.
+Six boundary/identity/envelope/actual challenge tests passed, zero skips/failures,
+1.100s (`/tmp/aetherscreens-srp-challenge-final-source-tests-20261008.log`).
+Group trust/algorithm policy/SRP math/mutual proofs and native push remain open;
+production type30 unchanged. This is challenge parsing, not authenticated type33
+or physical fluidity acceptance. Full448 evidence predates the new helpers.
+
+RSA1 continuation: actual Mac mini public SPKI now passes independent bounded
+DER/RSA-2048 validation and Security.framework import. Local identity packet
+encryption passes independent private-key decryption/UTF8/boundary checks using
+a temporary nonpersistent key. Final targeted3/3 passed, zero skips/failures,
+0.807s (`/tmp/aetherscreens-rsa1-identity-live-final-20261008.log`). No identity
+or password was sent remotely, no server-key trust or SRP mutual-authentication
+acceptance is claimed. Production type30 selection is unchanged; SRP challenges,
+proofs and full native stream/physical fluidity still remain open. Earlier
+448 full-suite result predates these new helpers.
+
+Authentication prerequisite audit: current Mac-account/native experiment always
+uses type30; type33 RSA-SRP is missing. Actual server offers33, and credential-free
+key discovery succeeds (301-byte response/294-byte DER). Independent bounded
+RSA1 envelope helper plus actual Swift TCP gate passed2/2, zero skips/failures,
+3.164 seconds (`/tmp/aetherscreens-rsa1-prelude-live-tests-20261008.log`).
+This is discovery/envelope acceptance only, not key trust, identity encryption,
+mutual SRP authentication or proof of the native push failure's cause. Type30
+defaults unchanged. Full native authentication/stream/physical gates remain open.
+
+One-time post-first-pixel native arming experiment was rejected: actual1 case,
+3 strict pattern assertions failed, zero unexpected failures,67.769s. First4K
+image6.328s, one owned state, no subsequent pixels over60s despite a queued
+post-frame arm. No periodic polling was introduced. The speculative flag/hook/
+arming branch were removed; remote owned fixture stopped/removed, absence
+verified. Log: `/tmp/aetherscreens-post-frame-arm-live-20261008.log`.
+This does not prove the server's missing prerequisite; native streaming and
+hardware fluidity remain unaccepted.
+
+Actual region-aware comparison: ordinary RGB565 passed1/1, zero skips/failures,
+67.741 seconds; first4K pixel image6.658 seconds, seven owned states,11 updates
+covering the owned window, strict span/freshness passed. Owned-region intervals
+median5.523s/max9.188s still do not demonstrate fluidity. Network was DERP132ms,
+different from earlier conditions; no controlled performance A/B claim.
+Native Observe received one owned state/image at6.606s then no new pixels over60s:
+1 case/3 assertions failed, zero unexpected failures,68.009s. Actual command
+diagnostics likewise showed only28 commands4 (unknown), no session-change11 or
+heartbeat12. A separately opt-in normal-control wire mode also produced only one
+image/state at6.590s and failed1 case/3 assertions (68.261s). No input was sent;
+public defaults are unchanged. These now-valid coordinates strengthen the native
+streaming failure evidence; they do not prove its cause.
+Logs: `/tmp/aetherscreens-pattern-regions-live-20261008.log`,
+`/tmp/aetherscreens-pattern-regions-native-live-actual-20261008.log`,
+`/tmp/aetherscreens-native-status-pattern-live-20261008.log`,
+`/tmp/aetherscreens-native-control-pattern-live-20261008.log`.
+Targeted wire/status/reconnect/matcher17/17 passed; iOS Simulator build succeeded.
+All owned remote fixtures were removed/absence verified. Final regression passed
+448 cases,12 explicit environment skips,zero failures,130.229s:
+`/tmp/aetherscreens-native-control-mode-full-core-20261008.log`.
+Skipped hardware/live gates remain unaccepted. Native push/cursor/input, layout and physical fluidity remain
+unaccepted; no release.
+
+Controlled pattern follow-up found the earlier sampler's geometry invalid:
+AppKit content x=118 with a side Dock, while samples assumed x=40. The fixture
+now explicitly uses (120,40), confirmed by an actual geometry smoke, and
+sampling positions follow that verified origin. QA also separates initialization
+and pixel waiting, and returns immediately on a failed waiter.
+The positioned ordinary probe received three owned-pattern states over at least
+30 seconds, first genuine4K frame at12.531 seconds, but failed freshness:
+last changed signature age21.488 seconds, threshold<20. Actual result1 case,
+1 assertion failure, zero unexpected failures,74.303 seconds;48 callbacks are
+not48 distinct images/FPS. Producer completed170 seconds with170 ticks/170 draws
+and exit0. Logs: `/tmp/aetherscreens-positioned-standard-pattern-live-20261008.log`,
+`/tmp/aetherscreens-positioned-pattern-producer-20261008.log`,
+`/tmp/aetherscreens-positioned-pattern-geometry-smoke-20261008.log`.
+Older zero-match probes cannot distinguish native push from wrong coordinates.
+QA-only revision/owned-region diagnostics were added for future diagnosis;
+compiled/local matcher passed1/1, but no actual diagnostic run yet. All owned
+remote fixture files removed, absence verified. Production defaults unchanged;
+continuous freshness, native cursor/push and hardware fluidity remain open.
+
+Subsequent diagnosis/repair: ordinary pixel-body progress now renews the bounded
+20-second stall deadline, capped at 60 seconds after connected. Metadata cannot
+renew it; header-prefetched pixel bytes count once. Final targeted TCP/deadline
+tests passed 6/6, zero skips/failures (42.117 seconds), including a genuine image
+completed after 22 seconds. Actual ordinary RGB565 run passed 1/1, zero skips/
+failures (89.399 seconds), first genuine 4K image at 28.3379 seconds and a further
+60-second connected observation. 23 callbacks are not necessarily distinct
+images/FPS; this run did not apply the owned-pattern matcher. Logs:
+`/tmp/aetherscreens-standard-progress-deadline-tests-final-20261008.log` and
+`/tmp/aetherscreens-standard-progress-live-final-20261008.log`.
+Startup speed, native cursor/push, pattern continuity and physical fluidity are
+still open. No release.
+
+Final source regression: 447 tests, 12 explicit environment skips, zero failures,
+150.185 seconds (`/tmp/aetherscreens-standard-progress-full-core-20261008.log`).
+Generic iOS Simulator build succeeded, terminal exit 0
+(`/tmp/aetherscreens-standard-progress-ios-build-20261008.log`). Skipped live and
+hardware gates do not count as passed acceptance.
+
+The explicit ordinary RGB565 controlled-pattern probe authenticated and connected
+but received no desktop image before the existing first-frame deadline. Actual
+result: 1 failure, zero unexpected failures, 29.883 seconds; pattern freshness
+checks were not reached. Local matcher: 1/1 passed, zero skips/failures, 0.046
+seconds. Logs: `/tmp/aetherscreens-standard-pattern-live-20261008.log` and
+`/tmp/aetherscreens-standard-pattern-matcher-tests-20261008.log`.
+This comparison does not isolate native encryption/push as the cause. Sharing
+surface identity, geometry and transport latency remain unresolved, and full
+Screens parity/physical smoothness remain unaccepted. Production defaults and
+timeout gates are unchanged; no release.
+
+
+## Target-binary evidence: auto-update flag means screen selection (2026-10-08)
+
+Read-only inspection of the authorized Mac mini's actual screensharingd arm64e
+image resolves the previously ambiguous diagnostic. Binary SHA256:
+d533d282442b6e5c8c8e1f1cced931738ed9c8e1195aadf75b68b839c1479af0.
+Local inspection only; no Apple implementation copied into the app.
+At image addresses 0x100038da0..0x100038e80 the handler reads exactly16 bytes,
+byte-swaps the screen ID at offset4 and rectangle at offsets8/10/12/14.
+It stores selected_screen != 0xffffffff into the viewer field at offset0x2c
+(0x100038e3c..0x100038e44). The diagnostic
+HandleAutoFrameBufferUpdateMessage2 flag reads this same field at
+0x10003c990 and0x10003c9cc. Thus flag0 is expected for our all/main sentinel;
+it is not a rejected/disabled automatic subscription and not evidence of
+the0x03 non-incremental handler. The earlier ambiguous log interpretation
+is superseded by this target-version evidence.
+The same path calls screen-change monitoring with argument1 at0x10003c8b8.
+Static code proves the request path and field meaning, not successful RPC,
+active capture delivery, sustained pixel changes, or UI fluidity. No live
+configuration change was made during inspection. Comment clarified in
+AppleFramebufferControl; wire bytes remain unchanged.
+Next isolate monitor RPC results and display-transition capture callbacks;
+do not repeat byte1 trials based on flag0. Native sustained update, cursor,
+and complete physical Screens parity remain unaccepted. No release.
+
+
+## Current full-core regression after physical-size and QA lifecycle fixes (2026-10-08)
+
+Current swift test completed naturally with exit0:466 tests,16 explicit
+environment-dependent skips,0 failures,146.167s (146.229s overall).
+Log: /tmp/aetherscreens-current-full-core-20261008.log. Covers present physical
+descriptor correction, test lifecycle, SRP parsing/proofs, transport, storage,
+and input regressions. Does not exercise skipped real-device cases or prove
+sustained native updates/UI rendering/physical smoothness. Scoped diff check
+passed. Bounded12-minute remote log query found0 exact numeric monitor-RPC
+result matches; absence does not imply RPC success or failure.
+No protocol experiment retained, no commit/push/release; full goal active.
+
+
+## Reusable read-only capture timeline QA (2026-10-08)
+
+Added scripts/qa/inspect_native_capture_logs.py with trusted SSH to the
+authorized Mac mini only,1..30 minute window,40s timeout,8MiB inspection limit,
+exact static-format allowlist and validated timestamps. Emits only event names,
+time and explicitly parsed numeric flag/RPC result; raw messages/stderr are
+withheld, no credentials/pixels/clipboard/settings changes.
+Actual20-minute query exited0 and emitted33 allowlisted events:
+/tmp/aetherscreens-sanitized-capture-timeline-20261008.jsonl.
+This confirms monitor-request logs at19:21:13.655446/19:21:14.323529 and
+screen-selection flag0 at13.655754/14.326981, capture stop at19:22:03.796305.
+No explicit monitor RPC result was observed; missing logs are inconclusive.
+Python compile passed; adversarial synthetic privacy smoke verified unknown
+formats, invalid timestamps and private text in known messages never appear,
+while allowlisted numeric0/-5 are retained. No app wire behavior changed.
+Still need actual capture-delivery and native sustained-update acceptance.
+No commit/push/release; full goal remains active.
+
+
+## Native sustained update gate passed with explicit first-screen subscription (2026-10-08)
+
+Single-variable real test changed0x09 selected_screen from0xffffffff to0,
+keeping reserved0/version1/measured mm/1920x1080 logical/3840x2160 backing.
+Actual SRP owned-pattern gate PASSED1/1,0 skips/failures,60.654s:
+/tmp/aetherscreens-first-screen-pattern-live-20261008.log.
+Received8 known states spanning44.3898356667s; final change age0.4563157917s.
+Server diagnostic flag1 corroborates explicit screen selection at
+19:32:17.670489,18.341715,22.539836; monitor-request events precede each.
+Log: /tmp/aetherscreens-first-screen-capture-timeline-20261008.jsonl.
+This provides actual sustained pixel delivery evidence for this single-screen
+experimental native profile; previous all/main-sentinel trials failed the
+same acceptance gate. It does not prove universal server behavior/causation
+for other versions,60FPS, input latency, cursor transitions or physical UI.
+Retained fix: AppleFramebufferControl defaults to selected_screen0 for this
+single-display configuration; optional explicit UInt32 remains representable
+with network byte order. Public auth type30 selection stays unchanged; this
+does not enable SRP by default. No periodic polling fallback added.
+Producer85ticks/91draw passes, natural exit0:
+/tmp/aetherscreens-first-screen-producer-20261008.log. Owned remote binary
+and directory removed and absence verified, exit0. No clipboard/input changes.
+Next repeat sustained gate with final helper, test cursor and frame cadence,
+and complete current iOS/full-core validation. Full Screens/physical UI goal
+remains active, no commit/push/release.
+
+
+Final first-screen helper regression completed naturally exit0:21 tests,
+0 skips/failures,57.597s. Includes AppleFramebufferControlTests (first-screen,
+explicit UInt32/network order and invalid geometry), StreamingProgressTests
+and AppleClipboardTransportTests. Log:
+/tmp/aetherscreens-first-screen-regression-20261008.log. Earlier466 full-core
+regression predates screen-selection correction; next current full regression
+and iOS build remain required.
+
+
+## Current first-screen app gates completed (2026-10-08)
+
+After retaining explicit first-screen subscription, full swift test exited0:
+467 tests,16 explicit environment-dependent skips,0 failures,150.015s
+(150.069s overall). Log:
+/tmp/aetherscreens-first-screen-full-core-20261008.log.
+Fresh derived-data generic iOS build with CODE_SIGNING_ALLOWED=NO naturally
+exited0/BUILD SUCCEEDED:
+/tmp/aetherscreens-first-screen-ios-build-20261008.log.
+Actual build retained warnings in RFBClient.swift about implicit strong versus
+weak capture and KeyboardToolbarSettingsView.swift unreachable code; do not
+claim zero warnings, signed device installation or hardware/UI acceptance.
+Scoped diff check passed. This replaces the earlier466-test baseline for
+current single-screen wire correction. Real sustained delivery proved in
+one controlled60s trial; repeat/cursor/frame cadence/end-to-end latency and
+physical iPhone fluidity still require acceptance. No commit/push/release.
+Full Screens parity remains active and incomplete.
+
+
+## First-screen repeat failed sustained gate; cadence instrumentation (2026-10-08)
+
+Current helper unchanged (screen0), same measured physical/logical profile.
+Repeat live gate exited1,1 assertion failure/0 skips,65.449s:
+/tmp/aetherscreens-repeat-cadence-live-20261008.log.
+Known states8,span7.072920875s,final age0.733663375s,15 transitions,
+mean inter-change arrival0.471528058s,max2.297315125s. Span<30s fails existing
+gate; did not relax it. All eight states arriving late is not sustained/real-time
+proof. The earlier44s pass remains one trial only; stability is unaccepted.
+Possible late/buffered delivery needs timestamp evidence, not assumed cause.
+Concurrent read-only bounded capture-log query timed out/unavailable exit1;
+no server reset/restart or fresh producer was started in response.
+Producer85ticks/90draws auto-exited0; remote owned binary/directory removed
+and absence verified exit0:
+/tmp/aetherscreens-repeat-cadence-producer-20261008.log.
+Added test-only constant-space transition count/mean/max arrival gaps;
+unchanged images never count as transitions. Rejects nonfinite/regressing
+timestamps. Initial matcher+arm checks4/4 pass0.042s:
+/tmp/aetherscreens-native-cadence-tests-20261008.log.
+Added first-known-pattern arrival since client.connect to next live diagnostics
+(no actual measurement yet); final matcher test1/1 pass0.043s:
+/tmp/aetherscreens-native-cadence-final-tests-20261008.log.
+These metrics are received known-pattern cadence, not rendered FPS/input lag.
+App source unchanged since prior467-test full regression and iOS build; only
+QA instrumentation changed. Next isolate initial delivery from steady-state
+update cadence; native stable push/cursor/full physical fluidity remain open.
+No commit/push/release; full goal active.
+
+
+## Initial known-pattern delay measured without concurrent log query (2026-10-08)
+
+Same current single-screen profile, measured mm/logical1920/backing3840; no
+concurrent remote log query during session. Live test exited1,2 failures/0
+skips,65.059s:
+/tmp/aetherscreens-arrival-timing-live-20261008.log.
+First known-pattern arrival after client.connect58.563294792s; states1,
+span0,age1.494775042s,0 transitions. This proves late first recognized owned
+pattern in this trial, not raw first-pixel time or which stage consumed time.
+Do not infer authentication versus transfer versus decode delay without stage
+timestamps, nor label this solely an auto-subscription freeze.
+Observed73 native plaintext record bodies totaling2287780 bytes; no timestamped
+network-throughput claim. Earlier passing trial196 bodies/5388637 bytes/54
+pixel rectangles(two4K); earlier failing repeat93 bodies/2601126 bytes/21
+pixel rectangles(one4K). These totals alone do not prove cause.
+Pre-session tailscale ping returned DERP(baizhiedu)651ms; direct establishment
+failed(exit1). LAN5900 nc probe ultimately exited1. No route/daemon/settings
+changed. Owned producer85ticks/89draws natural exit0:
+/tmp/aetherscreens-arrival-timing-producer-20261008.log. Remote owned binary
+and directory removed/absence verified exit0. App/QA source unchanged this
+trial, prior current full467/iOS build still apply.
+Next add connected/first-pixel/record-duration timing to separate handshake,
+initial receive/decode and steady-state cadence; stable native/cursor/full
+physical UI parity remain open. No commit/push/release; goal remains active.
+
+
+## Session versus pixel stage timing exposes incomplete initial frame (2026-10-08)
+
+Added test-only thread-safe stage timestamps connected/first record/first pixel
+rectangle/first frame. Finite nonnegative first arrival retained; repeated
+events cannot overwrite startup measurement. Synthetic stage test1/1 pass
+0.001s, exit0: /tmp/aetherscreens-srp-stage-timing-tests-20261008.log.
+This is callback timing, not isolated CPU decode profiling.
+Actual controlled60s gate exited1/3 assertions/0 skips,63.194s:
+/tmp/aetherscreens-stage-timing-live-20261008.log. Elapsed from client setup:
+connected16.147912s,first native record19.475381s,first pixel rectangle
+header25.149447s; no first-frame callback by deadline. No known pattern
+was received (states0/span0/ageInfinity). This falsifies authentication as the
+only delay in this trial; actual rectangle header is not a completed desktop.
+Next inspect declared compressed rectangle size versus actual payload arrival
+and decode dispatch; do not claim networking/decoder cause from indirect logs.
+Producer85ticks/90draws natural exit0:
+/tmp/aetherscreens-stage-timing-producer-20261008.log. Remote owned binary
+and directory removed/absence verified exit0. No clipboard/input/settings
+changes, no concurrent remote unified-log traffic during this trial.
+Updated stale document checkpoints from442/369 counts and no-native-pixels
+claims to current app-source467-test/iOS evidence and explicitly unstable
+native sustained gate. App source unchanged; new instrumentation/test has
+targeted verification, prior full suite predates this test-only addition.
+No commit/push/release. Full Screens/physical-fluidity goal remains active.
+
+
+## Native payload completion/decode diagnostics reveal tiny first frame (2026-10-08)
+
+Added internal numeric-only native ZRLE hooks for compressed payload readiness
+and decode worker elapsed duration. Bound to captured connection; reentrant
+disconnect/reconnect is rechecked before decode scheduling and framebuffer
+commit. No timestamp cost for ordinary decoding when hooks are unset.
+ZRLE transport + stage tests33/33 pass,0 skips/failures,10.543s/exit0:
+/tmp/aetherscreens-native-payload-progress-tests-20261008.log.
+Actual60s pattern gate exited1 with1 assertion failure/0 skips,64.759s:
+/tmp/aetherscreens-payload-progress-live-20261008.log. Eight known states
+span6.337899s,final age1.524661s;12 transitions,mean0.528158s/max1.071455s.
+Connected14.891592s,first native record17.690505s,first2x2 rectangle/payload
+18.830466/18.830471s,payload ready18.830475s,decode complete/first frame
+18.830560/18.830579s. Thus first-frame callback can mean a tiny pixel update,
+not an entire usable desktop; no new completion claim from this callback.
+Later4K ZRLE rectangle declared and received2285924 bytes; its debug decode
+worker elapsed1.075819s. First known owned pattern52.174810s after connect.
+Log label originally said CPU elapsed; this is systemUptime wall time including
+preemption, not pure CPU profiling. Corrected source label to worker elapsed.
+Need per-full-frame receive time and optimized-build profiling before attribution
+or implementing tile optimizations. No desktop payload persisted.
+Producer85ticks/89draws auto-exit0, owned remote binary/directory removed and
+absence verified exit0: /tmp/aetherscreens-payload-progress-producer-20261008.log.
+Earlier467 full regression/iOS build predates these internal core hooks; targeted
+33-test check is current, full-core/iOS gates need refreshing. No protocol byte
+change, no commit/push/release. Stable native/cursor/physical UI goal open.
+
+
+## RGB565 decode lookup optimization verified (2026-10-08)
+
+Added independent4K RGB565 raw-tile fixture covering all65536 wire colors,
+partial final tile rows and three persistent-zlib frames. Expected BGRA comes
+from advertised channel maxima, never the decoder or its lookup. Every output
+byte compared. Before-change release test1/1 passed1.755s/exit0:
+/tmp/aetherscreens-rgb565-baseline-release-20261008.log. Decode milliseconds
+[62.166375,64.214375,61.200500], median62.166375.
+Retained lazy immutable256KiB RGB565 color lookup in ZRLE raw/palette/plain-RLE
+pixel conversion, preserving endian/color output. Full-color path does not
+initialize the table. Release decoder suite16/16 passed3.811s/exit0:
+/tmp/aetherscreens-rgb565-lookup-release-20261008.log. Same fixture durations
+[51.650000,51.701208,54.014250], median51.701208 (about16.8% reduction in this
+synthetic benchmark, not end-to-end FPS or proof of real-desktop cause).
+Release ZRLE transport regression32/32,0 skips/failures,3.351s/exit0:
+/tmp/aetherscreens-rgb565-lookup-transport-release-20261008.log. Covers parser,
+malformed inputs, reconnect and RGB565 transport behavior.
+Current generic unsigned iOS build BUILD SUCCEEDED/exit0:
+/tmp/aetherscreens-rgb565-lookup-ios-build-20261008.log. Existing compiler
+warnings retained, no zero-warning or signed-device acceptance claim.
+Scoped diff check passed. Full core suite predates internal numeric hooks and
+this optimization/new fixture; refresh remains required. Native real-stream
+startup, stable cadence/cursor and physical30-minute fluidity remain open.
+No desktop capture, network/settings mutation, commit/push/release. Goal active.
+
+## Optimized native full-desktop timing (2026-10-08)
+
+Two timing regression cases passed in release configuration. Actual SRP/native
+owned-pattern trial passed1/1 with zero skips/failures in60.561s. Connected1.095s,
+first record2.711s, first complete4K ZRLE payload declaration5.125s, receive
+completion10.048s, decode completion10.083s, first frame10.087s. Receive took
+4.923s while worker decode took0.035s; these are wall durations, not CPU time.
+Eight known states and49 transitions spanned49.204s, mean gap1.004s, maximum
+gap3.622s, last age0.721s. This improves the diagnostic evidence relative to
+earlier failed runs but does not prove repeatability, rendered FPS, cursor or
+physical UI fluidity. No protocol default, server settings or acceptance gates
+were changed. Evidence: `/tmp/aetherscreens-fulltiming-live-20261008.log`.
+Remote producer exited0 at tick85/draw89; exact owned binary and directory
+removed, absence and no running pattern verified via trusted SSH exit0.
+
+## Fragmented encrypted receive regression (2026-10-08)
+
+Added a4MiB record integrity case using receive fragments1,2,113,8192,65536 bytes
+so records cross fragment boundaries and a receive can contain several records.
+All128 bodies are checked byte-for-byte and retained record bytes remain bounded
+by65522. Release record suite13/13 passed, zero failures/skips,0.026s. Fragmented
+reassembly285 fragments took3.382ms; existing complete-record case3.823ms.
+These synthetic durations exclude socket, downstream RFBClient buffering and
+presentation and cannot prove a live transport bottleneck. They do indicate
+record decryption/reassembly alone did not reproduce the observed4.923s receive
+interval. No transport settings/defaults changed. Evidence:
+`/tmp/aetherscreens-fragmented-record-release-20261008.log`.
+
+## Full-desktop socket arrival window instrumentation (2026-10-08)
+
+Internal SRP test now attaches the existing onBytesReceived callback and stores
+only numeric byte/event counts and maximum arrival gap while the first full
+desktop ZRLE payload is pending. Initial wait and tail wait count toward the gap.
+Previously prefetched bytes are excluded, so it is not exact payload throughput.
+Invalid, regressing or post-completion events do not renew the window. Debug
+timing regressions3/3 passed without skips/failures,0.001s. No production source
+or network settings changed. The new window has no real-stream data yet; the
+earlier60-second pass remains earlier evidence, not validation of these hooks.
+Evidence: `/tmp/aetherscreens-receive-window-timing-tests-20261008.log`.
+
+## Actual full-desktop arrival window (2026-10-08)
+
+Release timing preflight3/3 passed. Second optimized owned-pattern60-second
+trial passed1/1, no failures/skips,60.562s. Connected0.643s;2x2 patch first
+frame2.958s;full4K payload declared3.164s/received6.707s/decoded6.738s and first
+known pattern6.741s. Receive window3.543s captured402 arrivals/2302566 wire bytes
+and maximum gap1.178s; bytes exclude earlier prefetch and include encrypted
+framing, so this is not exact payload throughput. Worker decode31ms. Eight
+states/55 transitions spanned52.455s,mean0.954s/max3.901s,last age0.809s.
+Two consecutive optimized trials support continuity but cannot establish
+consistent fluidity or distinguish network from server-side delays. Evidence:
+`/tmp/aetherscreens-arrival-live-20261008.log`.
+Producer exited0,tick85/draw90; exact owned remote binary/directory removed,
+absence and no active pattern process verified via trusted SSH exit0.
+
+## Post-run route/capture correlation (2026-10-08)
+
+Read-only allowlisted Mac mini capture log inspection exited0. Latest run
+monitoring requested20:20:42.425/42.958, capture_stop20:21:40.055 near test end.
+No intervening stop is logged; this does not prove absence of server stalls or
+correct RPC results. Post-run tailscale ping returned DERP(baizhiedu)427/22/72ms
+and exited1 because direct was not established; successful pongs prove mesh
+reachability, not direct reachability. Known LAN target192.168.50.226 ports22 and
+5900 both failed3-second connect probes. Thus no LAN-vs-mesh causal comparison
+is available presently. No service/network/security settings changed. Evidence:
+`/tmp/aetherscreens-arrival-capture-events-20261008.jsonl`,
+`/tmp/aetherscreens-current-mesh-ping-20261008.log`,
+`/tmp/aetherscreens-lan-reachability-20261008.json`.
+
+## Scroll cap overflow correction (2026-10-08)
+
+NativeScrollAccumulator previously capped emitted ticks at64 but retained all
+excess whole ticks; a subsequent zero-delta event could emit another64 or delay
+an opposite-direction scroll. It now retains only fractional remainder after
+each event, bounds before integer conversion, and rejects nonfinite deltas.
+Existing precise-wheel accumulation/direction and new cap/reverse/zero/invalid
+regressions2/2 passed, no failures/skips. These target pure accumulator functions
+only and are not native GUI/hardware smoothness acceptance. Evidence:
+`/tmp/aetherscreens-scroll-overflow-tests-20261008.log`.
+
+## Bounded two-finger wheel callbacks (2026-10-08)
+
+Extracted ScrollWheelAccumulator as shared pure calculation. iOS two-finger
+scroll now keeps its8-point step and fractional remainder but caps each axis to
+64 wheel pulses per callback rather than an unbounded loop. Invalid divisor or
+nonfinite deltas produce no pulses. Existing gesture-began reset, drag guard and
+local navigation branch remain. Three pure scroll regressions passed, no skips
+or failures. Initial iOS compile correctly caught the macOS-only declaration;
+moving the helper to shared source fixed this and final generic unsigned iOS
+build passed. No host GUI automation or physical iPhone acceptance performed.
+Evidence: `/tmp/aetherscreens-touch-scroll-bounds-tests-20261008.log` and
+`/tmp/aetherscreens-touch-scroll-bounds-ios-build-20261008.log`.
+
+## Left-drag to local-pan handoff (2026-10-08)
+
+MacNativeInputView previously returned from mouseUp while isPanning, even if
+the preceding mouseDown had sent a remote left-button press. It now remembers
+the last down/drag remote coordinate and emits a release when entering local
+pan, then clears the pan anchor. Normal mouseUp clears the remembered drag.
+No release is sent for a mode change when no remote left drag was tracked.
+macOS swift build passed, diff check passed. No native host GUI tests were run;
+actual remote/UI mode-switch acceptance remains pending. Evidence:
+`/tmp/aetherscreens-pan-drag-release-build-20261008.log`.
+
+## macOS input focus cleanup (2026-10-08)
+
+MacNativeInputView now releases remembered keySyms/modifiers and left drag on
+resignFirstResponder, window didResignKey, window movement and SwiftUI teardown.
+Key releases are deduplicated; state clears before callbacks to tolerate
+reentrant focus changes. Pan anchor, wheel remainder and marked text clear.
+Window publisher uses weak view capture. macOS build passed and existing wire
+focus-release case1/1 passed; this transport case does not cover the newly added
+AppKit lifecycle hooks. Native remote UI/window-switch acceptance is pending;
+no host GUI automation was run. Evidence:
+`/tmp/aetherscreens-mac-focus-release-build-20261008.log` and
+`/tmp/aetherscreens-focus-release-wire-tests-20261008.log`.
+
+## Thumbnail refresh duplicate work removal (2026-10-08)
+
+DeviceCardView previously assigned a newly cached image on each notification
+and incremented thumbnailRevision, immediately launching another async lookup
+and animated assignment of that same image. Cache hits now use one identity-
+guarded update; only cache misses revise the load task. Task completion uses
+the same guard and existing cancellation/visibility/fresh-cache checks remain.
+Reduce Motion still suppresses animation. macOS and generic unsigned iOS builds
+passed; async thumbnail storage regressions5/5 passed, zero skips/failures.
+These checks do not prove native card animation/large-library performance.
+Evidence: `/tmp/aetherscreens-thumbnail-refresh-build-20261008.log`,
+`/tmp/aetherscreens-thumbnail-refresh-storage-tests-20261008.log`,
+`/tmp/aetherscreens-thumbnail-refresh-ios-build-20261008.log`.
+
+## Actual Mac mini AppKit input regression (2026-10-08)
+
+Built the XCTest bundle without running native view tests on the host and
+transferred the owned bundle to the authorized Mac mini temporary directory.
+Its installed xcrun/xctest ran exactly MacNativeInputTests:8/8 passed, no
+failures/skips,0.011s. New view cases exercise mouseDown -> entering pan ->
+release at matching coordinates exactly once; flags/keyDown -> cleanup ->
+keyUp releases each key once and clears composition. Existing Unicode/key
+release/scaled-coordinate/wheel cases passed. No real window focus switching
+or long-duration hardware smoothness is proved by these synthetic event cases.
+Evidence: `/tmp/aetherscreens-macmini-input-lifecycle-tests-20261008.log`.
+Owned remote test bundle/directory removed after terminal test success; exact
+path absence verified by remote Python exit0. No host native view test ran.
+
+## Mac mini window callback regression (2026-10-08)
+
+Added an undisplayed AppKit window case to test the actual registered Combine
+window publisher and viewDidMoveToWindow detachment. A posted didResignKey
+notification releases a recorded Escape key; removing the input view releases
+a newly pressed Escape; repeat cleanup is idempotent. This uses synthetic
+notification/events, not a real system focus switch. Host built tests only;
+authorized Mac mini xcrun/xctest ran MacNativeInputTests9/9 passed, no failures
+or skips,0.075s. Evidence:
+`/tmp/aetherscreens-macmini-window-lifecycle-tests-20261008.log`.
+Owned remote test bundle and directory removed; exact path absence checked
+by trusted SSH/Python exit0 after terminal test success.
+
+## iOS canvas focus drag release (2026-10-08)
+
+RemoteTouchView now calls releaseDrag in addition to releaseHardwareKeys after
+successful resignFirstResponder. This addresses dragging left behind when
+focus transfers away from the canvas. Existing dismantle/window-detach and
+local navigation cleanup remain. Generic unsigned iOS build passed; underlying
+TrackpadEngineTests9/9 passed, zero failures/skips. These pure engine cases do
+not prove the UIKit callback or hardware/IME transition; phone acceptance remains
+pending. Evidence: `/tmp/aetherscreens-ios-focus-drag-release-build-20261008.log`
+and `/tmp/aetherscreens-ios-focus-drag-engine-tests-20261008.log`.
+
+## Actual Mac mini full-core regression and credential gate (2026-10-08)
+
+Current owned XCTest bundle full run completed477 tests,16 explicit environment
+skips,3 assertion failures in149.782s. All three belong to
+DeviceStoreTests.testMigratesLegacyKeychainPasswordOnRead, beginning with failed
+save of its legacy synthetic fixture before migration. Standalone retry likewise
+failed1 case/3 assertions. Read-only Security default-Keychain status returned
+success with unlocked=false/readable=true/writable=false. This is consistent
+with the failed persistence setup; migration remains unverified here and the
+full run is not green. No Keychain unlock, credential disclosure or system
+settings change was attempted. Remaining completed cases have no failures;
+this still does not imply physical UI/long-session/Screens parity acceptance.
+Evidence: `/tmp/aetherscreens-macmini-full-core-regression-20261008.log`,
+`/tmp/aetherscreens-macmini-keychain-migration-recheck-20261008.log`,
+`/tmp/aetherscreens-macmini-keychain-status-20261008.log`.
+Owned remote test bundle/archive/directory removed and exact path absence
+verified via trusted SSH/Python exit0 after both processes completed.
+
+## Non-destructive credential replacement (2026-10-08)
+
+KeychainStore.writeItem previously deleted before SecItemAdd; an add failure
+could lose the previous persistent value. It now updates the exact service/
+account in place, adds only on errSecItemNotFound, and retries update when a
+concurrent add reports duplicate. Lock/access failures stop without delete.
+Four injected-status branch tests passed, no skips/failures, and generic
+unsigned iOS build passed. This does not validate real Keychain migration or
+save-failure UI; the existing memory fallback remains unchanged. Official
+API grounding: https://developer.apple.com/documentation/security/updating-and-deleting-keychain-items
+Evidence: `/tmp/aetherscreens-keychain-upsert-tests-20261008.log` and
+`/tmp/aetherscreens-keychain-upsert-ios-build-20261008.log`.
+
+## Credential-save failure feedback (2026-10-08)
+
+DeviceStore add/update configuration and updatePassword now return durable
+credential write status; process-local fallback remains available. Device list
+add/discovered add/editor show existing warning banner when config is saved
+but password persistence fails. Session VNC and Mac-account remember paths
+publish a dismissible English/Chinese top warning and keep current entered
+credentials flowing through authentication. Password update logs success only
+when Security persistence succeeds. Injected-denial/store/session tests6/6
+passed and unsigned generic iOS build passed. These are logic/build evidence,
+not native warning rendering or actual writable-Keychain migration acceptance.
+Evidence: `/tmp/aetherscreens-session-save-notice-tests-20261008.log`,
+`/tmp/aetherscreens-session-save-notice-ios-build-20261008.log`; prior store/UI
+checkpoint `/tmp/aetherscreens-credential-save-report-tests-20261008.log`.

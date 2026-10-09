@@ -75,8 +75,12 @@ public enum RFBConstants {
 
         // Pseudo-encodings
         public static let cursor = EncodingType(rawValue: -239)
+        // Experimental receive codec; not included in negotiated encodings.
+        static let appleCursor = EncodingType(rawValue: 0x450)
+        static let appleDisplayLayout = EncodingType(rawValue: 0x451)
         public static let desktopSize = EncodingType(rawValue: -223)
         public static let extendedDesktopSize = EncodingType(rawValue: -308)
+        public static let extendedClipboard = EncodingType(rawValue: Int32(bitPattern: 0xC0A1E5CE))
         public static let lastRect = EncodingType(rawValue: -224)
     }
 

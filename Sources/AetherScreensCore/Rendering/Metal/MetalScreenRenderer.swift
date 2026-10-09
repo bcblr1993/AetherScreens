@@ -8,6 +8,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
 
     public let device: MTLDevice
     private let commandQueue: MTLCommandQueue
+    private let uploadBuffers: MetalUploadBufferPool
     private var pipelineState: MTLRenderPipelineState?
     private(set) var texture: MTLTexture?
     private weak var attachedView: MTKView?
@@ -72,6 +73,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         }
         self.device = dev
         self.commandQueue = queue
+        self.uploadBuffers = MetalUploadBufferPool(device: dev)
         self.metrics = metrics
         super.init()
 
@@ -135,6 +137,10 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         attachedView = view
         requestDisplay(view)
     }
+
+    // Disconnected sessions must not retain idle staging memory, including late completions.
+    func setUploadBufferCachingEnabled(_ enabled: Bool) { uploadBuffers.setCachingEnabled(enabled) }
+    var cachedUploadBufferBytes: Int { uploadBuffers.cachedBytes }
 
     // MARK: - MTKViewDelegate
 
@@ -230,6 +236,11 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     func encodeFramebufferUpload(framebuffer: Framebuffer, commandBuffer: MTLCommandBuffer, shouldUpload: Bool = true) -> Int? {
         var target = texture
         var pending: [(buffer: MTLBuffer, region: CGRect, stride: Int)] = []
+        var submitted = false
+        defer {
+            // Before encoding, failed preparations can return their unused leases.
+            if !submitted { for upload in pending { uploadBuffers.recycle(upload.buffer) } }
+        }
         var nextRevision: UInt64?
         var failed = false
         framebuffer.withPixelChanges(since: uploadedRevision) { pixels, width, height, changes, revision in
@@ -249,7 +260,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
                 let rowBytes = Int(region.width) * 4
                 // Conservative alignment supports both Apple and discrete Mac GPUs.
                 let stride = (rowBytes + 255) & ~255
-                guard let buffer = device.makeBuffer(length: stride * Int(region.height), options: .storageModeShared) else {
+                guard let buffer = uploadBuffers.take(length: stride * Int(region.height)) else {
                     failed = true; return
                 }
                 for row in 0..<Int(region.height) {
@@ -273,6 +284,12 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
             pixelBytes += Int(region.width * region.height) * 4
         }
         encoder.endEncoding()
+        let completedBuffers = pending.map(\.buffer)
+        let pool = uploadBuffers
+        commandBuffer.addCompletedHandler { _ in
+            for buffer in completedBuffers { pool.recycle(buffer) }
+        }
+        submitted = true
         texture = target
         textureFramebuffer = framebuffer
         uploadedRevision = nextRevision

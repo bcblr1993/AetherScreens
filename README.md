@@ -52,7 +52,7 @@ AETHERSCREENS_NOTARY_PROFILE='your-keychain-profile' \
 ./scripts/package_release.sh
 ```
 
-The script tests, builds arm64, signs with hardened runtime, notarizes and staples the app, then creates a DMG, ZIP and SHA-256 checksums under `build/release/`. It does not replace an installed app. Version defaults to 1.0.0 (build 2026100602); override with `AETHERSCREENS_VERSION` and `AETHERSCREENS_BUILD_NUMBER`.
+The script tests, builds arm64, signs with hardened runtime, notarizes and staples the app, then creates a DMG, ZIP and SHA-256 checksums under `build/release/`. It does not replace an installed app. The next candidate defaults to 1.1.0 (build 2026100901); override with `AETHERSCREENS_VERSION` and `AETHERSCREENS_BUILD_NUMBER`. This candidate metadata does not indicate a public release.
 
 The first public downloadable package is for macOS. iOS requires a signed Xcode installation; an App Store / TestFlight release is a separate distribution step.
 

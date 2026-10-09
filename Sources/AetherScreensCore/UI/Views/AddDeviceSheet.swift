@@ -8,20 +8,23 @@ public struct AddDeviceSheet: View {
 
     @State private var name: String = ""
     @State private var host: String = ""
+    @FocusState private var hostFocused: Bool
     @State private var portString: String = "5900"
     @State private var deviceType: RemoteDevice.DeviceType = .mac
     @State private var password: String = ""
     @State private var username: String = ""
     @State private var macAddress: String = ""
     @State private var saveComputer = false
-    private let onQuickConnect: ((ConnectionRequest, Bool) -> Void)?
+    @State private var sshDraft = SSHConnectionDraft()
+    @State private var saveError: String?
+    private let onQuickConnect: ((ConnectionRequest, Bool) throws -> Void)?
 
     public init(viewModel: DeviceListViewModel) {
         self.viewModel = viewModel
         self.onQuickConnect = nil
     }
 
-    public init(viewModel: DeviceListViewModel, onQuickConnect: @escaping (ConnectionRequest, Bool) -> Void) {
+    public init(viewModel: DeviceListViewModel, onQuickConnect: @escaping (ConnectionRequest, Bool) throws -> Void) {
         self.viewModel = viewModel
         self.onQuickConnect = onQuickConnect
     }
@@ -29,9 +32,11 @@ public struct AddDeviceSheet: View {
     private var isQuickConnect: Bool { onQuickConnect != nil }
     private var includesSavedDetails: Bool { !isQuickConnect || saveComputer }
     private var request: ConnectionRequest? {
-        ConnectionRequest(host: host, port: portString, name: includesSavedDetails ? name : "",
+        guard sshDraft.isValid else { return nil }
+        return ConnectionRequest(host: host, port: portString, name: includesSavedDetails ? name : "",
                           username: username, password: password, type: deviceType,
-                          macAddress: includesSavedDetails ? macAddress : "")
+                          macAddress: includesSavedDetails ? macAddress : "",
+                          ssh: sshDraft.settings, sshPassword: sshDraft.passwordToSave ?? "", sshPrivateKey: sshDraft.privateKeyToSave)
     }
 
     public var body: some View {
@@ -42,19 +47,19 @@ public struct AddDeviceSheet: View {
                         TextField(AppLocalization.string("Name (e.g. Studio Mac)"), text: $name)
                     }
                     TextField(AppLocalization.string("Tailscale IP / Host (e.g. 100.80.1.25)"), text: $host)
+                        .focused($hostFocused)
+                        .submitLabel(.done)
+                        .onSubmit { hostFocused = false }
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         #endif
                     LabeledContent(AppLocalization.string("Port")) {
-                        TextField(AppLocalization.string("Port"), text: $portString)
-                            .labelsHidden()
-                            .accessibilityLabel(AppLocalization.string("Port"))
+                        PortTextField(text: $portString)
                             .frame(minWidth: 80)
-                            .multilineTextAlignment(.trailing)
                             #if canImport(UIKit)
-                            .keyboardType(.numberPad)
+                            .frame(minHeight: 44)
                             #endif
                     }
                 }
@@ -81,6 +86,12 @@ public struct AddDeviceSheet: View {
                     SecureField(AppLocalization.string(username.isEmpty ? "VNC Password (Optional)" : "Mac Account Password"), text: $password)
                 }
 
+                SSHConnectionFields(draft: $sshDraft, defaultServer: host,
+                                    savedKeys: viewModel.savedSSHKeys, selectSavedKey: viewModel.selectSavedSSHKey,
+                                    refreshSavedKeys: { _ = try viewModel.managedSSHKeys() })
+                if let saveError {
+                    Section { Text(saveError).foregroundStyle(.red) }
+                }
                 if isQuickConnect {
                     Section(footer: Text(AppLocalization.string("Save this computer and its password for future connections. Leave off for a temporary session."))) {
                         Toggle(AppLocalization.string("Save Computer"), isOn: $saveComputer)
@@ -115,15 +126,17 @@ public struct AddDeviceSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(AppLocalization.string(isQuickConnect ? "Connect" : "Save")) {
                         guard let request else { return }
-                        if let onQuickConnect {
-                            onQuickConnect(request, saveComputer)
-                        } else {
-                            viewModel.addDevice(name: request.device.name, host: request.device.host,
-                                                port: request.device.port, type: request.device.deviceType,
-                                                password: request.password, macAddress: request.device.macAddress,
-                                                username: request.device.username)
+                        do {
+                            if let onQuickConnect {
+                                try onQuickConnect(request, saveComputer)
+                            } else {
+                                try viewModel.saveConfiguredDevice(request.device, password: request.password,
+                                                                  sshPassword: request.sshPassword, sshPrivateKey: request.sshPrivateKey)
+                            }
+                            dismiss()
+                        } catch {
+                            saveError = AppLocalization.string("Could not save the SSH credentials to Keychain. The computer was not saved.") + " " + error.localizedDescription
                         }
-                        dismiss()
                     }
                     .disabled(request == nil)
                 }

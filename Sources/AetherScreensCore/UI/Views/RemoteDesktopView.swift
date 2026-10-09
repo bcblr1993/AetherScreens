@@ -1,16 +1,29 @@
 import SwiftUI
 import CoreGraphics
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Metal-backed remote desktop with native input, viewport controls and session diagnostics.
 public struct RemoteDesktopView: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var viewModel: SessionViewModel
     @ObservedObject private var displayManager: MultiDisplayManager
+    @ObservedObject private var lockNotice: CurtainModeManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if canImport(UIKit)
+    @Environment(\.scenePhase) private var scenePhase
+    #endif
 
     @State private var showingLogs: Bool = false
     @State private var showingKeyboardCustomization = false
+    @State private var showingDisplayQuality = false
+    @State private var showingFileUpload = false
+    @State private var droppedUploadURL: URL?
+    @State private var isUploadDropTargeted = false
+    @State private var showingFileDownload = false
     private let managesSessionLifecycle: Bool
     private let onDisconnect: (() -> Void)?
     private let onReturnToLibrary: (() -> Void)?
@@ -19,6 +32,7 @@ public struct RemoteDesktopView: View {
                 onReturnToLibrary: (() -> Void)? = nil) {
         self.viewModel = viewModel
         self.displayManager = viewModel.multiDisplayManager
+        self.lockNotice = viewModel.curtainManager
         self.managesSessionLifecycle = managesSessionLifecycle
         self.onDisconnect = onDisconnect
         self.onReturnToLibrary = onReturnToLibrary
@@ -27,8 +41,27 @@ public struct RemoteDesktopView: View {
     // Connection failures must reveal controls even when the session prefers fullscreen.
     private var usesFullscreenLayout: Bool { viewModel.isFullscreen && viewModel.sessionState == .connected }
 
+    private var canAcceptFileDrop: Bool {
+        viewModel.canStartFileUpload && !showingFileUpload && !showingFileDownload &&
+            !showingLogs && !showingKeyboardCustomization && !showingDisplayQuality
+    }
+
+    private var isWaitingForFirstFrame: Bool {
+        (viewModel.sessionState == .connected || viewModel.sessionState == .initializing)
+            && !viewModel.hasReceivedFirstFrame
+    }
+
     public var body: some View {
         GeometryReader { geometry in
+            #if os(iOS)
+            let sideDock = UIDevice.current.userInterfaceIdiom == .phone && geometry.size.width > geometry.size.height
+            let carouselDock = viewModel.keyboardConfiguration.position == .carousel
+            let floatingDock = UIDevice.current.userInterfaceIdiom == .pad && viewModel.keyboardConfiguration.position == .floating
+            #else
+            let sideDock = false
+            let floatingDock = false
+            let carouselDock = false
+            #endif
             ZStack {
                 Color(red: 0.055, green: 0.07, blue: 0.09).ignoresSafeArea()
 
@@ -37,33 +70,97 @@ public struct RemoteDesktopView: View {
                     remoteCanvas(geometry: geometry)
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier(viewModel.hasReceivedFirstFrame ? "remote-desktop-frame" : "remote-desktop-loading")
+                        .overlay {
+                            if viewModel.sessionState != .connected && viewModel.sessionState != .initializing {
+                                ZStack {
+                                    Color.black.opacity(0.65)
+                                    connectingStateView
+                                }
+                            }
+                        }
                 } else {
                     connectingStateView
                 }
 
                 // Initial Frame Loading HUD
-                if (viewModel.sessionState == .connected || viewModel.sessionState == .initializing) && !viewModel.hasReceivedFirstFrame {
-                    firstFrameLoadingHUD
+                ZStack {
+                    if isWaitingForFirstFrame {
+                        firstFrameLoadingHUD
+                            .frame(maxWidth: min(360, max(0, geometry.size.width - 32)))
+                    }
                 }
+                // Animate HUD insertion/removal independently of framebuffer and input updates.
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isWaitingForFirstFrame)
 
                 // Floating Top Controls Bar & Diagnostic HUD
                 if !usesFullscreenLayout {
-                    VStack {
-                        floatingTopBar
-                            .padding(.top, 12)
-                        if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .top {
-                            MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
-                                .transition(.move(edge: .top))
+                    let toolbarAtTop = sideDock || viewModel.keyboardConfiguration.position == .top
+                    ZStack(alignment: toolbarAtTop ? .topLeading : .bottomLeading) {
+                        VStack {
+                            floatingTopBar(availableWidth: geometry.size.width).padding(.top, 12)
+                            Spacer()
                         }
-                        Spacer()
-
-                        // Bottom Mac Keyboard Toolbar (if toggled)
-                        if viewModel.isKeyboardVisible && viewModel.keyboardConfiguration.position == .bottom {
-                            MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
-                                .transition(.move(edge: .bottom))
+                        if viewModel.isKeyboardVisible && !floatingDock && !carouselDock {
+                            // Keep one view identity across rotation so expansion and focus survive.
+                            MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization, usesSideDock: sideDock)
+                                .padding(.top, toolbarAtTop ? 76 : 0)
+                                .transition(reduceMotion ? .opacity : .move(edge: sideDock ? .leading : (toolbarAtTop ? .top : .bottom)).combined(with: .opacity))
                         }
                     }
+                    // Animate controls only; pointer and framebuffer updates must stay immediate.
+                    .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.9),
+                               value: viewModel.isKeyboardVisible)
                 }
+                // Animate overlay presentation without carrying its transaction
+                // into the remote canvas or pointer transport.
+                ZStack {
+                    if !usesFullscreenLayout && viewModel.isKeyboardVisible && floatingDock {
+                        FloatingKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization)
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
+                    }
+                    #if os(iOS)
+                    if !usesFullscreenLayout && viewModel.isKeyboardVisible && carouselDock {
+                        CarouselKeyboardToolbar(viewModel: viewModel) {
+                            if let onDisconnect { onDisconnect() }
+                            else { viewModel.requestDisconnect(); dismiss() }
+                        }
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
+                    }
+                    #endif
+                }
+                .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.9),
+                           value: viewModel.isKeyboardVisible)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            FileTransferProgressView(store: viewModel.fileTransfers)
+                .padding(12)
+                #if canImport(UIKit)
+                .padding(.top, usesFullscreenLayout ? 0 : 76)
+                #else
+                .padding(.top, 44)
+                #endif
+        }
+        .overlay(alignment: .top) {
+            if let notice = viewModel.passwordSaveNotice {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Text(AppLocalization.string(notice)).font(.caption)
+                    Spacer(minLength: 0)
+                    Button { viewModel.passwordSaveNotice = nil } label: {
+                        Image(systemName: "xmark")
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppLocalization.string("Dismiss"))
+                    .accessibilityHint(AppLocalization.string("Close this notice and continue the connection."))
+                }
+                .padding(12)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 12)
+                .padding(.top, usesFullscreenLayout ? 12 : 68)
+                .accessibilityIdentifier("password-save-notice")
             }
         }
         #if canImport(UIKit)
@@ -75,6 +172,33 @@ public struct RemoteDesktopView: View {
         }
         .onDisappear {
             if managesSessionLifecycle { viewModel.endSession() }
+        }
+        #if canImport(UIKit)
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background: viewModel.setForegroundSession(false)
+            case .active: viewModel.setForegroundSession(true)
+            // System authentication and transient overlays may be inactive.
+            case .inactive: break
+            @unknown default: break
+            }
+        }
+        #endif
+        .alert(AppLocalization.string("Clipboard"), isPresented: Binding(
+            get: { viewModel.clipboardTransferNotice != nil },
+            set: { if !$0 { viewModel.clipboardTransferNotice = nil } }
+        )) {
+            Button(AppLocalization.string("OK"), role: .cancel) { viewModel.clipboardTransferNotice = nil }
+        } message: {
+            Text(AppLocalization.string(viewModel.clipboardTransferNotice ?? ""))
+        }
+        .sheet(item: Binding(
+            get: { viewModel.sshPrompt },
+            // The sheet cancels using its captured prompt identity on disappear;
+            // a delayed dismissal must not cancel a newer confirmation phase.
+            set: { _ in }
+        )) { prompt in
+            SessionSSHSheet(viewModel: viewModel, prompt: prompt)
         }
         .sheet(isPresented: $viewModel.isPromptingPassword) {
             PasswordPromptSheet(
@@ -101,6 +225,15 @@ public struct RemoteDesktopView: View {
         }
         .sheet(isPresented: $showingKeyboardCustomization) {
             KeyboardToolbarSettingsView(configuration: $viewModel.keyboardConfiguration)
+        }
+        .sheet(isPresented: $showingDisplayQuality) {
+            DisplayQualitySettingsView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingFileUpload, onDismiss: { droppedUploadURL = nil }) {
+            FileUploadSheet(viewModel: viewModel, initialURL: droppedUploadURL)
+        }
+        .sheet(isPresented: $showingFileDownload) {
+            FileDownloadSheet(viewModel: viewModel)
         }
     }
 
@@ -139,11 +272,23 @@ public struct RemoteDesktopView: View {
             // macOS Native Pointer and Keyboard Capture (M-chip Mac)
             if !viewModel.isObserveOnly || viewModel.isPanningViewport {
             MacNativeInputRepresentable(
+                cursorUpdates: viewModel.cursorUpdates,
                 remoteWidth: imageWidth > 0 ? imageWidth : 1920,
                 remoteHeight: imageHeight > 0 ? imageHeight : 1080,
+                viewport: CGRect(x: -originX, y: -originY,
+                    width: geometry.size.width, height: geometry.size.height),
                 isPanning: viewModel.isPanningViewport,
                 onPan: { dx, dy in
                     viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
+                },
+                onMagnification: { factor, anchor in
+                    let scale = max(1, min(max(4, viewModel.actualSizeZoomScale), viewModel.zoomScale * factor))
+                    let offset = ViewportZoom.offset(current: viewModel.viewOffset,
+                        oldScale: viewModel.zoomScale, newScale: scale,
+                        baseCanvas: CGSize(width: safeWidth * fitScale, height: safeHeight * fitScale),
+                        viewport: geometry.size, anchor: anchor)
+                    if offset != viewModel.viewOffset { viewModel.viewOffset = offset }
+                    if scale != viewModel.zoomScale { viewModel.zoomScale = scale }
                 },
                 onTextEvent: { text in viewModel.sendTextString(text) },
                 onPointerEvent: { mask, x, y in
@@ -161,9 +306,11 @@ public struct RemoteDesktopView: View {
 
             #if canImport(UIKit)
             IOSRemoteInputView(
+                cursorUpdates: viewModel.cursorUpdates,
                 engine: viewModel.trackpadEngine,
                 canvas: CGRect(x: originX, y: originY, width: canvasWidth, height: canvasHeight),
                 zoom: viewModel.zoomScale,
+                maximumZoom: max(4, viewModel.actualSizeZoomScale),
                 isPanning: viewModel.isPanningViewport,
                 isObserveOnly: viewModel.isObserveOnly,
                 isFullscreen: usesFullscreenLayout,
@@ -172,106 +319,230 @@ public struct RemoteDesktopView: View {
                 onPan: { dx, dy in
                     viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
                 },
-                onZoom: { viewModel.zoomScale = $0 }
+                onZoom: { scale, anchor in
+                    let offset = ViewportZoom.offset(current: viewModel.viewOffset,
+                        oldScale: viewModel.zoomScale, newScale: scale,
+                        baseCanvas: CGSize(width: safeWidth * fitScale, height: safeHeight * fitScale),
+                        viewport: geometry.size, anchor: anchor)
+                    if offset != viewModel.viewOffset { viewModel.viewOffset = offset }
+                    if scale != viewModel.zoomScale { viewModel.zoomScale = scale }
+                },
+                onKeyEvent: { viewModel.remoteInteraction.send(); viewModel.sendNativeKey(down: $0, keySym: $1) },
+                onRemoteInteraction: { viewModel.remoteInteraction.send() },
+                onPencilToolbarToggle: { location in
+                    guard !usesFullscreenLayout, viewModel.keyboardConfiguration.position == .carousel,
+                          viewModel.isKeyboardVisible else { return }
+                    viewModel.pencilToolbarToggle.send(location)
+                }
             )
             .id(viewModel.inputGeneration)
             .frame(width: geometry.size.width, height: geometry.size.height)
             #endif
 
-            // Curtain Mode Active Overlay Banner
-            if viewModel.curtainManager.isCurtainActive {
+            // Observe the notice directly so it updates without another frame.
+            if lockNotice.isCurtainActive {
                 VStack {
-                    HStack(spacing: 8) {
-                        Image(systemName: "eye.slash.fill")
-                        Text(AppLocalization.string("Lock Screen shortcut sent"))
-                            .font(.system(size: 12, weight: .semibold))
-
-                        Button {
-                            viewModel.curtainManager.toggleCurtain()
-                        } label: {
-                            Text(AppLocalization.string("Dismiss"))
-                                .font(.system(size: 11, weight: .bold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.white.opacity(0.2), in: Capsule())
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            lockNoticeMessage
+                            lockNoticeActions
                         }
-                        .buttonStyle(.plain)
-                        Button {
-                            viewModel.reconnectSession()
-                        } label: {
-                            Text(AppLocalization.string("Reconnect"))
-                                .font(.system(size: 11, weight: .semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color.white.opacity(0.2), in: Capsule())
+                        .fixedSize(horizontal: true, vertical: false)
+                        VStack(alignment: .leading, spacing: 8) {
+                            lockNoticeMessage
+                            lockNoticeActions
                         }
-                        .buttonStyle(.plain)
-                        .help(AppLocalization.string("Restore the session if input stops responding after unlocking"))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background(Color.purple.opacity(0.9), in: Capsule())
+                    .background(Color.purple.opacity(0.9), in: RoundedRectangle(cornerRadius: 20))
                     .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                    .padding(.horizontal, 12)
                     .padding(.top, 60)
                     Spacer()
                 }
                 .frame(maxWidth: .infinity)
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
+        .overlay {
+            ZStack {
+                if isUploadDropTargeted && canAcceptFileDrop {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16)
+                            .strokeBorder(Color.accentColor, lineWidth: 3)
+                            .padding(8)
+                        Label(AppLocalization.string("Drop a file or folder to choose where to send it"), systemImage: "doc.badge.arrow.up")
+                            .font(.callout.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                            .padding(16)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                            .padding(24)
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+                }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isUploadDropTargeted)
+        }
+        .dropDestination(for: URL.self, action: { urls, _ in
+            guard canAcceptFileDrop, urls.count == 1,
+                  let url = urls.first, url.isFileURL else { return false }
+            isUploadDropTargeted = false
+            droppedUploadURL = url
+            viewModel.fileUploadNotice = nil
+            showingFileUpload = true
+            return true
+        }, isTargeted: { isUploadDropTargeted = $0 })
         .onChange(of: fitScale, initial: true) { _, scale in
             viewModel.actualSizeZoomScale = max(1, 1 / max(0.001, scale * displayScale))
         }
+        .onChange(of: CGSize(width: limitX, height: limitY), initial: true) { _, limits in
+            // Persist the visible clamp after zoom, rotation or display changes;
+            // otherwise zooming back in restores an obsolete off-screen offset.
+            viewModel.panViewport(dx: 0, dy: 0, limitX: limits.width, limitY: limits.height)
+        }
+    }
+
+    private var lockNoticeMessage: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "eye.slash.fill")
+                .font(.system(size: 18))
+                .accessibilityHidden(true)
+            Text(AppLocalization.string("Lock Screen shortcut sent"))
+                .font(.caption.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var lockNoticeActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                lockNoticeDismissAction
+                lockNoticeReconnectAction
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 8) {
+                lockNoticeDismissAction
+                lockNoticeReconnectAction
+            }
+        }
+    }
+
+    private var lockNoticeDismissAction: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                lockNotice.toggleCurtain()
+            }
+        } label: {
+            Text(AppLocalization.string("Dismiss"))
+                .font(.caption2.weight(.bold))
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(Color.white.opacity(0.2), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var lockNoticeReconnectAction: some View {
+        Button {
+            viewModel.reconnectSession()
+        } label: {
+            Text(AppLocalization.string("Reconnect"))
+                .font(.caption2.weight(.semibold))
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(Color.white.opacity(0.2), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(AppLocalization.string("Restore the session if input stops responding after unlocking"))
     }
 
     // MARK: - Connecting State
 
+    private var hasConnectionFailure: Bool {
+        if case .failed = viewModel.sessionState { return true }
+        return false
+    }
+
     private var connectingStateView: some View {
+        ScrollView {
+            connectionStatusContent
+                .frame(maxWidth: .infinity)
+        }
+        .defaultScrollAnchor(.center)
+        .padding(.top, 76)
+        .padding(.bottom, 24)
+        .accessibilityIdentifier("connection-recovery")
+    }
+
+    private var connectionRetryAction: some View {
+        Button { viewModel.reconnectSession() } label: {
+            Text(AppLocalization.string("Retry Connection"))
+                .frame(minHeight: 44)
+        }
+            .buttonStyle(.borderedProminent)
+    }
+
+    private var connectionPasswordAction: some View {
+        Button { viewModel.isPromptingPassword = true } label: {
+            Label(AppLocalization.string("Enter Password"), systemImage: "key.fill")
+                .frame(minHeight: 44)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var connectionStatusContent: some View {
         VStack(spacing: 16) {
             Image(systemName: "display")
                 .font(.system(size: 32, weight: .ultraLight))
                 .foregroundStyle(.white.opacity(0.85))
                 .frame(width: 76, height: 76)
                 .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 22))
-            if case .failed = viewModel.sessionState {} else {
+            if viewModel.isAwaitingAutomaticReconnect || (viewModel.sessionState != .disconnected && !hasConnectionFailure) {
                 ProgressView()
                     .progressViewStyle(.circular)
                     .tint(.white)
             }
 
             Text(AppLocalization.string(statusDescription))
-                .font(.system(size: 15, weight: .medium))
+                .font(.subheadline.weight(.medium))
                 .foregroundColor(.white.opacity(0.85))
 
             Text(viewModel.device.name)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.headline)
                 .foregroundStyle(.white)
 
             Text(viewModel.device.host)
-                .font(.system(size: 13, design: .monospaced))
+                .font(.caption.monospaced())
                 .foregroundColor(.white.opacity(0.5))
 
             if case .failed(let err) = viewModel.sessionState {
                 Text(AppLocalization.message(err))
-                    .font(.system(size: 13))
+                    .font(.caption)
                     .foregroundColor(.red.opacity(0.8))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
-
-                HStack(spacing: 12) {
-                    Button(AppLocalization.string("Retry Connection")) {
-                        viewModel.startSession()
+            }
+            if viewModel.sessionState == .disconnected || hasConnectionFailure {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        connectionRetryAction
+                        connectionPasswordAction
                     }
-                    .buttonStyle(.borderedProminent)
-
-                    Button {
-                        viewModel.isPromptingPassword = true
-                    } label: {
-                        Label(AppLocalization.string("Enter Password"), systemImage: "key.fill")
+                    .fixedSize(horizontal: true, vertical: false)
+                    VStack(spacing: 12) {
+                        connectionRetryAction
+                        connectionPasswordAction
                     }
-                    .buttonStyle(.bordered)
                 }
                 .padding(.top, 4)
 
@@ -279,7 +550,9 @@ public struct RemoteDesktopView: View {
                     showingLogs = true
                 } label: {
                     Label(AppLocalization.string("View Diagnostic Logs"), systemImage: "text.book.closed")
-                        .font(.system(size: 12))
+                        .font(.caption)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.white.opacity(0.7))
@@ -298,7 +571,8 @@ public struct RemoteDesktopView: View {
                 .scaleEffect(1.2)
 
             Text(AppLocalization.string("Loading remote desktop…"))
-                .font(.system(size: 15, weight: .semibold))
+                .font(.subheadline.weight(.semibold))
+                .multilineTextAlignment(.center)
                 .foregroundColor(.white)
 
             if let progress = viewModel.downloadProgress {
@@ -306,15 +580,16 @@ public struct RemoteDesktopView: View {
                     ProgressView(value: progress.current, total: progress.total)
                         .progressViewStyle(.linear)
                         .tint(.blue)
-                        .frame(width: 220)
+                        .frame(maxWidth: .infinity)
 
                     Text(AppLocalization.format("Received %.1f MB / %.1f MB (%.0f%%)", progress.current, progress.total, (progress.current / progress.total) * 100))
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.caption.monospacedDigit())
+                        .multilineTextAlignment(.center)
                         .foregroundColor(.white.opacity(0.75))
                 }
             } else {
                 Text(AppLocalization.string("Connected. Waiting for remote frames…"))
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundColor(.white.opacity(0.65))
                     .multilineTextAlignment(.center)
             }
@@ -323,10 +598,11 @@ public struct RemoteDesktopView: View {
         .background(.ultraThinMaterial)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.4), radius: 20)
-        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.95)))
     }
 
     private var statusDescription: String {
+        if viewModel.isAwaitingAutomaticReconnect { return "Connection lost. Retrying automatically…" }
         switch viewModel.sessionState {
         case .disconnected: return "Disconnected"
         case .connecting: return "Connecting to remote computer..."
@@ -340,14 +616,14 @@ public struct RemoteDesktopView: View {
 
     // MARK: - Floating Top Controls Bar
 
-    private var floatingTopBar: some View {
+    private func floatingTopBar(availableWidth: CGFloat) -> some View {
         HStack(spacing: 8) {
             // Close / Disconnect
             Button {
                 if let onDisconnect {
                     onDisconnect()
                 } else {
-                    viewModel.endSession()
+                    viewModel.requestDisconnect()
                     dismiss()
                 }
             } label: {
@@ -357,6 +633,10 @@ public struct RemoteDesktopView: View {
                     .frame(width: 32, height: 32)
                     .background(Color.black.opacity(0.65))
                     .clipShape(Circle())
+                    #if canImport(UIKit)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+                    #endif
             }
             .accessibilityLabel(AppLocalization.string("Disconnect"))
 
@@ -369,7 +649,8 @@ public struct RemoteDesktopView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white)
                     .lineLimit(1)
-                    .frame(maxWidth: sessionNameWidth, alignment: .leading)
+                    .frame(maxWidth: sessionNameWidth(availableWidth: availableWidth), alignment: .leading)
+                    .accessibilityLabel(sessionTitle)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -398,11 +679,25 @@ public struct RemoteDesktopView: View {
                     .accessibilityIdentifier("session-return-to-library")
                     Divider()
                 }
+                Button { droppedUploadURL = nil; viewModel.fileUploadNotice = nil; showingFileUpload = true } label: {
+                    Label(AppLocalization.string("Send File or Folder"), systemImage: "doc.badge.arrow.up")
+                }
+                .disabled(!viewModel.canStartFileUpload)
+                .accessibilityIdentifier("session-send-file")
+                Button { viewModel.fileDownloadNotice = nil; showingFileDownload = true } label: {
+                    Label(AppLocalization.string("Receive File or Folder"), systemImage: "arrow.down.doc")
+                }
+                .disabled(!viewModel.canStartFileDownload)
+                .accessibilityIdentifier("session-receive-file")
                 Toggle(AppLocalization.string("Observe Only"), isOn: $viewModel.isObserveOnly)
                 Button { showingKeyboardCustomization = true } label: {
                     Label(AppLocalization.string("Customize Keyboard Toolbar"), systemImage: "slider.horizontal.3")
                 }
                 .accessibilityIdentifier("session-customize-keyboard")
+                Button { showingDisplayQuality = true } label: {
+                    Label(AppLocalization.string("Display Quality"), systemImage: "photo")
+                }
+                .accessibilityIdentifier("session-display-quality")
                 Divider()
                 #if canImport(UIKit)
                 Button { showingLogs = true } label: {
@@ -448,11 +743,13 @@ public struct RemoteDesktopView: View {
                 }
                 Button {
                     viewModel.triggerHaptic()
-                    viewModel.curtainManager.toggleCurtain()
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
+                        lockNotice.toggleCurtain()
+                    }
                 } label: {
-                    Label(AppLocalization.string(viewModel.curtainManager.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac"), systemImage: "lock")
+                    Label(AppLocalization.string(lockNotice.isCurtainActive ? "Dismiss Lock Notice" : "Lock Remote Mac"), systemImage: "lock")
                 }
-                .disabled(viewModel.isObserveOnly && !viewModel.curtainManager.isCurtainActive)
+                .disabled(viewModel.isObserveOnly && !lockNotice.isCurtainActive)
                 Button { viewModel.reconnectSession() } label: {
                     Label(AppLocalization.string("Reconnect"), systemImage: "arrow.clockwise")
                 }
@@ -480,16 +777,14 @@ public struct RemoteDesktopView: View {
 
             // Keyboard Toolbar Toggle
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    viewModel.isKeyboardVisible.toggle()
-                }
+                viewModel.isKeyboardVisible.toggle()
             } label: {
                 controlIcon("keyboard")
             }
             .accessibilityLabel(AppLocalization.string(viewModel.isKeyboardVisible ? "Hide Keyboard" : "Show Keyboard"))
             .disabled(viewModel.isObserveOnly)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ControlPressStyle())
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(.black.opacity(0.72), in: Capsule())
@@ -500,7 +795,11 @@ public struct RemoteDesktopView: View {
         Image(systemName: symbol)
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.white)
+            #if canImport(UIKit)
+            .frame(width: 44, height: 44)
+            #else
             .frame(width: 34, height: 34)
+            #endif
             .contentShape(Rectangle())
     }
 
@@ -510,11 +809,11 @@ public struct RemoteDesktopView: View {
         return viewModel.device.name
     }
 
-    private var sessionNameWidth: CGFloat {
+    private func sessionNameWidth(availableWidth: CGFloat) -> CGFloat {
         #if os(macOS)
-        170
+        return min(170, max(30, availableWidth - 500))
         #else
-        90
+        return min(260, max(30, availableWidth - 296))
         #endif
     }
 }

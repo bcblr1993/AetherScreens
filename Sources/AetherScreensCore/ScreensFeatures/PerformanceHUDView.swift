@@ -5,6 +5,8 @@ public struct PerformanceHUDView: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject public var metrics: PerformanceMetrics
     @State private var isExpanded: Bool = false
+    @State private var samplingStart = Date()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     public let isTailscale: Bool
 
     public init(metrics: PerformanceMetrics = .shared, isTailscale: Bool = false) {
@@ -13,20 +15,27 @@ public struct PerformanceHUDView: View {
     }
 
     public var body: some View {
+        TimelineView(.periodic(from: samplingStart, by: 1)) { timeline in
+            controls
+                .onChange(of: timeline.date, initial: true) { _, _ in metrics.sampleRates() }
+        }
+    }
+
+    private var controls: some View {
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.9)) {
                 isExpanded.toggle()
             }
         } label: {
             HStack(spacing: 8) {
                 // Optimal Status Light
                 Circle()
-                    .fill(metrics.latencyMs > 0 ? (metrics.isOptimal ? Color.green : Color.orange) : Color.secondary)
+                    .fill(metrics.hasLatencyMeasurements ? (metrics.isOptimal ? Color.green : Color.orange) : Color.secondary)
                     .frame(width: 7, height: 7)
 
                 // FPS Counter
                 HStack(spacing: 2) {
-                    Text("\(Int(metrics.currentFPS))")
+                    Text(metrics.hasPresentationMeasurements ? "\(Int(metrics.currentFPS))" : "—")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                     Text("FPS")
                         .font(.system(size: 9, weight: .semibold))
@@ -43,7 +52,7 @@ public struct PerformanceHUDView: View {
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundColor(.secondary)
                     }
-                    Text(metrics.latencyMs > 0 ? "\(Int(metrics.latencyMs))" : "—")
+                    Text(metrics.hasLatencyMeasurements ? "\(Int(metrics.latencyMs))" : "—")
                         .font(.system(size: 11, weight: .bold, design: .monospaced))
                     Text("ms")
                         .font(.system(size: 9, weight: .semibold))

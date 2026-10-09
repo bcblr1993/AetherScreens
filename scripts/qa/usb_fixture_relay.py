@@ -57,7 +57,7 @@ class USBFixtureRelay:
                     continue
                 # Only our synthetic fixture's four inspection operations are
                 # allowed; no arbitrary URL, device file or credential access.
-                if request['path'] not in ('events', 'reset', 'drop', 'three-displays'):
+                if request['path'] not in ('events', 'reset', 'drop', 'three-displays', 'stall-next'):
                     continue
                 try:
                     with urllib.request.urlopen(self.base + request['path'], timeout=3) as response:

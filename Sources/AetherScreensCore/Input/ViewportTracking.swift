@@ -1,5 +1,39 @@
 import Foundation
 
+/// Keeps immediate local navigation until SwiftUI supplies changed geometry.
+struct ViewportProjection {
+    private var lastLayout: CGRect?
+    private var pendingPans: [CGRect] = []
+    private(set) var canvas: CGRect = .zero
+
+    mutating func applyLayout(_ rect: CGRect) {
+        guard rect != lastLayout else { return }
+        lastLayout = rect
+        if let acknowledged = pendingPans.firstIndex(where: {
+            // Local panning adds to the canvas origin; SwiftUI recomputes it
+            // from the centered origin plus offset. Equivalent arithmetic can
+            // differ by rounding. Keep size exact so zoom/resize still resets.
+            $0.size == rect.size && abs($0.minX - rect.minX) <= 0.000001 &&
+                abs($0.minY - rect.minY) <= 0.000001
+        }) {
+            // SwiftUI can acknowledge an earlier sample after another pointer
+            // sample has already moved the canvas. Keep the newer projection.
+            pendingPans.removeFirst(acknowledged + 1)
+            return
+        }
+        pendingPans.removeAll(keepingCapacity: true)
+        canvas = rect
+    }
+
+    mutating func pan(_ delta: CGSize) {
+        guard delta != .zero else { return }
+        canvas = canvas.offsetBy(dx: delta.width, dy: delta.height)
+        pendingPans.append(canvas)
+        // Bound history when a view stops receiving layout acknowledgements.
+        if pendingPans.count > 128 { pendingPans.removeFirst() }
+    }
+}
+
 /// Keeps a moving trackpad pointer inside a zoomed viewport without exposing
 /// space beyond the remote desktop or disturbing an axis that already fits.
 enum ViewportTracking {

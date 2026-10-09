@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Sidebar navigation category for macOS and iPadOS
 public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
@@ -22,6 +23,7 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
 /// Main dashboard displaying remote machines, Bonjour nearby discovery, Tailscale sync, and quick connect.
 /// Fully optimized for both iOS (iPhone & iPad) and macOS (Apple Silicon Mac).
 public struct DeviceListView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @StateObject private var viewModel = DeviceListViewModel()
     @State private var selectedCategory: DeviceCategory = .all
@@ -109,6 +111,13 @@ public struct DeviceListView: View {
         }
         .environment(\.locale, languageSettings.locale)
         .onOpenURL(perform: receiveConnectionLink)
+        .onReceive(SavedComputerIntentInbox.shared.$revision) { _ in
+            Task { @MainActor in
+                for id in SavedComputerIntentInbox.shared.drain() {
+                    receiveConnectionLink(ConnectionLink.savedURL(for: id))
+                }
+            }
+        }
     }
 
     // MARK: - Sidebar (macOS)
@@ -119,8 +128,8 @@ public struct DeviceListView: View {
             HStack {
                 Label(AppLocalization.string(category.rawValue), systemImage: category.icon)
                 Spacer()
-                if category == .nearby && !viewModel.discoveredNearbyMacs.isEmpty {
-                    Text("\(viewModel.discoveredNearbyMacs.count)")
+                if category == .nearby && !viewModel.filteredNearbyMacs.isEmpty {
+                    Text("\(viewModel.filteredNearbyMacs.count)")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 6)
@@ -158,6 +167,17 @@ public struct DeviceListView: View {
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                         Spacer()
+                        Button {
+                            viewModel.errorMessage = nil
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(ControlPressStyle())
+                        .accessibilityLabel(AppLocalization.string("Dismiss"))
                     }
                     .padding(12)
                     .background(Color.orange.opacity(0.1))
@@ -180,8 +200,11 @@ public struct DeviceListView: View {
                             Image(systemName: "xmark")
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ControlPressStyle())
+                        .accessibilityLabel(AppLocalization.string("Dismiss"))
                     }
                     .padding(12)
                     .background(Color.green.opacity(0.12))
@@ -190,7 +213,7 @@ public struct DeviceListView: View {
                 }
 
                 // Discovered Nearby Macs (Bonjour) Section
-                if !viewModel.discoveredNearbyMacs.isEmpty && (selectedCategory == .all || selectedCategory == .nearby) {
+                if !viewModel.filteredNearbyMacs.isEmpty && (selectedCategory == .all || selectedCategory == .nearby) {
                     nearbyBonjourSection
                 }
 
@@ -200,7 +223,7 @@ public struct DeviceListView: View {
                     emptyStateView
                 } else if !devices.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
-                        if !viewModel.discoveredNearbyMacs.isEmpty {
+                        if !viewModel.filteredNearbyMacs.isEmpty {
                             Text(AppLocalization.string("Your computers"))
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundColor(.secondary)
@@ -214,6 +237,7 @@ public struct DeviceListView: View {
                                     onConnect: { openSession(for: device) },
                                     onWake: { viewModel.wakeDevice(device) }
                                 )
+                                .transition(.opacity)
                                 .contextMenu {
                                     Button {
                                         openSession(for: device)
@@ -267,6 +291,8 @@ public struct DeviceListView: View {
                                 }
                             }
                         }
+                        .animation(libraryTransitionAnimation, value: selectedCategory)
+                        .animation(libraryTransitionAnimation, value: viewModel.devices.map(\.id))
                         .padding(.horizontal, 20)
                     }
                 }
@@ -348,6 +374,11 @@ public struct DeviceListView: View {
         }
     }
 
+    private var libraryTransitionAnimation: Animation? {
+        guard !reduceMotion, viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return .smooth(duration: 0.22)
+    }
+
     @ViewBuilder
     private var libraryUtilityActions: some View {
         Button {
@@ -385,7 +416,7 @@ public struct DeviceListView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Text(AppLocalization.format("%d computers", viewModel.filteredDevices.count))
+            Text(AppLocalization.format(viewModel.filteredDevices.count == 1 ? "%d computer" : "%d computers", viewModel.filteredDevices.count))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 11)
@@ -404,7 +435,7 @@ public struct DeviceListView: View {
                 Text(AppLocalization.string("Nearby Macs (Local Wi-Fi)"))
                     .font(.system(size: 15, weight: .bold))
                 Spacer()
-                Text(AppLocalization.format("%d discovered", viewModel.discoveredNearbyMacs.count))
+                Text(AppLocalization.format("%d discovered", viewModel.filteredNearbyMacs.count))
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
             }
@@ -412,7 +443,7 @@ public struct DeviceListView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(viewModel.discoveredNearbyMacs) { discovered in
+                    ForEach(viewModel.filteredNearbyMacs) { discovered in
                         Button {
                             viewModel.addDiscoveredMac(discovered)
                         } label: {
@@ -472,7 +503,7 @@ public struct DeviceListView: View {
     }
 
     private var showsNearbyDevices: Bool {
-        !viewModel.discoveredNearbyMacs.isEmpty && (selectedCategory == .all || selectedCategory == .nearby)
+        !viewModel.filteredNearbyMacs.isEmpty && (selectedCategory == .all || selectedCategory == .nearby)
     }
 
     private var dashboardBackground: Color {
@@ -491,7 +522,7 @@ public struct DeviceListView: View {
 
     private var quickConnectSheet: some View {
         AddDeviceSheet(viewModel: viewModel) { request, saveComputer in
-            pendingQuickSession = viewModel.prepareQuickSession(request, saveComputer: saveComputer)
+            pendingQuickSession = try viewModel.prepareQuickSession(request, saveComputer: saveComputer)
         }
     }
 
@@ -508,6 +539,14 @@ public struct DeviceListView: View {
             let link = try ConnectionLink(url: url)
             viewModel.reload()
             let resolved = try link.resolve(devices: viewModel.devices) { DeviceStore.shared.getPassword(for: $0) }
+            #if !os(macOS)
+            if !resolved.requiresIndependentSession,
+               let existing = sessionRegistry.reusableEntry(for: resolved.device.id),
+               activeSessionVM === existing.viewModel {
+                // The requested saved connection is already presented; do not queue a reopening.
+                return
+            }
+            #endif
             pendingConnectionLinks.append(resolved)
             openPendingConnectionLink()
         } catch let error as ConnectionLink.Failure {
@@ -562,16 +601,16 @@ public struct DeviceListView: View {
                 .frame(width: 88, height: 88)
                 .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 24))
 
-            Text(AppLocalization.string(viewModel.searchText.isEmpty ? "No computers here yet" : "No matching computers"))
+            Text(AppLocalization.string(viewModel.normalizedSearchQuery.isEmpty ? "No computers here yet" : "No matching computers"))
                 .font(.system(size: 20, weight: .semibold))
 
-            Text(AppLocalization.string(viewModel.searchText.isEmpty ? "Add a computer to start a remote session. You can also sync devices from your tailnet." : "Try a different name or address."))
+            Text(AppLocalization.string(viewModel.normalizedSearchQuery.isEmpty ? "Add a computer to start a remote session. You can also sync devices from your tailnet." : "Try a different name or address."))
                 .font(.system(size: 14))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-            if viewModel.searchText.isEmpty && selectedCategory == .all {
+            if viewModel.normalizedSearchQuery.isEmpty && selectedCategory == .all {
                 Button {
                     showingAddSheet = true
                 } label: {
@@ -612,7 +651,26 @@ public struct TailscaleSettingsSheet: View {
                     footer: Text(AppLocalization.string("Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices."))
                 ) {
                     SecureField(AppLocalization.string("API Access Token (tskey-api-...)"), text: $viewModel.tailscaleApiKey)
+                        .autocorrectionDisabled()
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.asciiCapable)
+                        #endif
                     TextField(AppLocalization.string("Tailnet Name (Optional, e.g. example.com)"), text: $viewModel.tailnetName)
+                        .autocorrectionDisabled()
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.URL)
+                        #endif
+                }
+
+                Section(header: Text(AppLocalization.string("Secure Connection"))) {
+                    NavigationLink {
+                        SSHKeyLibraryView(viewModel: viewModel)
+                    } label: {
+                        Label(AppLocalization.string("SSH Keys"), systemImage: "key")
+                    }
+                    .accessibilityIdentifier("ssh-key-library")
                 }
 
                 Section(header: Text(AppLocalization.string("About macOS Screen Sharing"))) {
@@ -631,7 +689,7 @@ public struct TailscaleSettingsSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(AppLocalization.string("Tailscale Settings"))
+            .navigationTitle(AppLocalization.string("Settings"))
             #if canImport(UIKit)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -646,5 +704,195 @@ public struct TailscaleSettingsSheet: View {
         #if os(macOS)
         .frame(width: 540, height: 480)
         #endif
+    }
+}
+
+/// User-triggered vault reads keep private data out of SwiftUI body evaluation.
+private struct SSHKeyLibraryView: View {
+    @ObservedObject var viewModel: DeviceListViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var keys: [DeviceListViewModel.ManagedSSHKey] = []
+    @State private var errorMessage: String?
+    @State private var importing = false
+    @State private var encryptedImport: EncryptedSSHKeyImport?
+    @State private var exporting = false
+    @State private var exportDocument: SSHPrivateKeyDocument?
+    @State private var pendingExport: DeviceListViewModel.ManagedSSHKey?
+    @State private var pendingRemoval: DeviceListViewModel.ManagedSSHKey?
+    @State private var pendingRename: DeviceListViewModel.ManagedSSHKey?
+    @State private var keyName = ""
+    @State private var loaded = false
+
+    var body: some View {
+        Form {
+            Section {
+                Button(AppLocalization.string("Import Private Key")) { importing = true }
+                    .accessibilityIdentifier("ssh-library-import")
+                    .sheet(item: $encryptedImport) { request in
+                        SSHKeyUnlockSheet(request: request) { normalized in
+                            try viewModel.importManagedSSHKey(normalized)
+                            reload()
+                        }
+                    }
+                HStack {
+                    Text(AppLocalization.string("Paste Private Key"))
+                    Spacer()
+                    PasteButton(payloadType: String.self) { values in
+                        do {
+                            guard let value = values.first else { throw SSHPrivateKey.Failure.invalid }
+                            guard value.utf8.count <= SSHPrivateKey.maximumSize else { throw SSHPrivateKey.Failure.tooLarge }
+                            try importKey(Data(value.utf8))
+                            reload()
+                        } catch { show(error) }
+                    }
+                    .fixedSize()
+                    .accessibilityIdentifier("ssh-library-paste")
+                    .accessibilityLabel(AppLocalization.string("Paste Private Key"))
+                }
+                .accessibilityElement(children: .contain)
+            } footer: {
+                Text(AppLocalization.string("Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain."))
+            }
+            if let errorMessage {
+                Section {
+                    Text(errorMessage).foregroundStyle(.red)
+                    Button(AppLocalization.string("Retry")) { reload() }
+                }
+            }
+            Section(header: Text(AppLocalization.string("Saved Private Keys"))) {
+                if keys.isEmpty && errorMessage == nil {
+                    Text(AppLocalization.string("No saved private keys"))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(keys) { key in
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let name = key.name { Text(name).font(.headline) }
+                        if let fingerprint = key.fingerprint {
+                            Text(fingerprint).font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .accessibilityIdentifier("ssh-library-fingerprint-" + key.id.uuidString)
+                        }
+                        if let problem = key.problem { Text(problem).foregroundStyle(.red) }
+                        Text(key.computers.isEmpty
+                             ? AppLocalization.string("Not used by a saved computer")
+                             : key.computers.joined(separator: ", "))
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button(AppLocalization.string("Rename")) {
+                            keyName = key.name ?? ""
+                            pendingRename = key
+                        }
+                        .accessibilityIdentifier("ssh-library-rename-" + key.id.uuidString)
+                        Button(AppLocalization.string("Export Private Key")) { pendingExport = key }
+                            .disabled(key.fingerprint == nil)
+                            .accessibilityIdentifier("ssh-library-export-" + key.id.uuidString)
+                        Button(AppLocalization.string("Delete"), role: .destructive) { pendingRemoval = key }
+                            .disabled(!key.computers.isEmpty)
+                            .accessibilityIdentifier("ssh-library-delete-" + key.id.uuidString)
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(AppLocalization.string("SSH Keys"))
+        .onAppear { reload() }
+        .alert(AppLocalization.string("Key Name"), isPresented: Binding(
+            get: { pendingRename != nil }, set: { if !$0 { pendingRename = nil } })) {
+                TextField(AppLocalization.string("Key Name"), text: $keyName)
+                    .accessibilityIdentifier("ssh-library-key-name")
+                Button(AppLocalization.string("Save")) {
+                    guard let key = pendingRename else { return }
+                    pendingRename = nil
+                    do { try viewModel.renameManagedSSHKey(key.id, name: keyName); reload() }
+                    catch { show(error) }
+                }
+                Button(AppLocalization.string("Cancel"), role: .cancel) { pendingRename = nil }
+            }
+        .confirmationDialog(AppLocalization.string("Delete Private Key?"),
+            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+            titleVisibility: .visible) {
+                Button(AppLocalization.string("Delete"), role: .destructive) {
+                    guard let key = pendingRemoval else { return }
+                    pendingRemoval = nil
+                    do { try viewModel.removeManagedSSHKey(key.id); reload() }
+                    catch { show(error) }
+                }
+                Button(AppLocalization.string("Cancel"), role: .cancel) { pendingRemoval = nil }
+            }
+        .confirmationDialog(AppLocalization.string("Export Private Key?"),
+            isPresented: Binding(get: { pendingExport != nil }, set: { if !$0 { pendingExport = nil } }),
+            titleVisibility: .visible) {
+                Button(AppLocalization.string("Export")) {
+                    guard let key = pendingExport, let fingerprint = key.fingerprint else { return }
+                    pendingExport = nil
+                    do {
+                        let data = try viewModel.exportManagedSSHKey(key.id, expectedFingerprint: fingerprint)
+                        exportDocument = try SSHPrivateKeyDocument(data: data)
+                        exporting = true
+                    } catch { exportDocument = nil; show(error) }
+                }
+                Button(AppLocalization.string("Cancel"), role: .cancel) { pendingExport = nil }
+            } message: {
+                Text(AppLocalization.string("The exported file contains your unencrypted private key. Choose a trusted destination."))
+            }
+        .fileExporter(isPresented: $exporting, document: exportDocument, contentTypes: [.plainText],
+                      defaultFilename: "ssh-private-key", onCompletion: { result in
+            exportDocument = nil
+            if case .failure(let error) = result {
+                if let cocoa = error as? CocoaError, cocoa.code == .userCancelled { return }
+                publishChange { errorMessage = AppLocalization.string("Could not export the private key. Try another destination.") }
+            }
+        }, onCancellation: { exportDocument = nil })
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.data], allowsMultipleSelection: false) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                let file = try FileHandle(forReadingFrom: url)
+                defer { try? file.close() }
+                let data = try file.read(upToCount: SSHPrivateKey.maximumSize + 1) ?? Data()
+                try importKey(data)
+                reload()
+            } catch {
+                if let cocoa = error as? CocoaError, cocoa.code == .userCancelled { return }
+                show(error)
+            }
+        }
+    }
+
+    private func importKey(_ data: Data) throws {
+        if let request = try EncryptedSSHKeyImport.request(for: data) {
+            encryptedImport = request
+        } else {
+            try viewModel.importManagedSSHKey(data)
+        }
+    }
+
+    private func reload() {
+        do {
+            // Finish vault work before animating the published list changes.
+            let refreshed = try viewModel.managedSSHKeys()
+            publishChange { keys = refreshed; errorMessage = nil }
+            loaded = true
+        } catch {
+            // Keep the last readable list visible while Retry is offered.
+            show(error)
+        }
+    }
+
+    private func show(_ error: Error) {
+        let message = (error as? SSHPrivateKey.Failure)?.errorDescription
+            ?? (error as? DeviceListViewModel.KeyManagementFailure)?.errorDescription
+            ?? AppLocalization.string("Could not read the saved SSH key from Keychain.")
+        publishChange { errorMessage = message }
+    }
+
+    private func publishChange(_ update: () -> Void) {
+        if loaded && !reduceMotion {
+            withAnimation(.easeOut(duration: 0.18), update)
+        } else {
+            update()
+        }
     }
 }

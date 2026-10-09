@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public struct KeyboardToolbarSettingsView: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
@@ -6,6 +9,14 @@ public struct KeyboardToolbarSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     public init(configuration: Binding<KeyboardToolbarConfiguration>) { _configuration = configuration }
+    private var availablePositions: [KeyboardToolbarConfiguration.Position] {
+        #if os(iOS)
+        if UIDevice.current.userInterfaceIdiom == .pad { return [.top, .bottom, .floating, .carousel] }
+        return [.top, .bottom, .carousel]
+        #endif
+        return [.top, .bottom]
+    }
+
     public var body: some View {
         NavigationStack {
             Form {
@@ -17,11 +28,17 @@ public struct KeyboardToolbarSettingsView: View {
                     }
                     .accessibilityIdentifier("keyboard-size")
                     Picker(AppLocalization.string("Keyboard Position"), selection: $configuration.position) {
-                        ForEach(KeyboardToolbarConfiguration.Position.allCases, id: \.self) { position in
+                        ForEach(availablePositions, id: \.self) { position in
                             Text(AppLocalization.string(position.rawValue)).tag(position)
                         }
                     }
                     .accessibilityIdentifier("keyboard-position")
+                    Picker(AppLocalization.string("Key Repeat"), selection: $configuration.keyRepeat) {
+                        ForEach(KeyboardToolbarConfiguration.KeyRepeat.allCases, id: \.self) { mode in
+                            Text(AppLocalization.string(mode.rawValue)).tag(mode)
+                        }
+                    }
+                    .accessibilityIdentifier("keyboard-repeat")
                 }
                 Section(AppLocalization.string("Buttons and Spacers")) {
                     ForEach($configuration.items) { $item in

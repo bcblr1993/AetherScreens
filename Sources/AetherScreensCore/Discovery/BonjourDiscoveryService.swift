@@ -150,7 +150,8 @@ public final class BonjourDiscoveryService: ObservableObject, @unchecked Sendabl
     }
 
     private func publishResolvedDevices() {
-        discoveredMacs = (directDevices + Array(resolvedDevices.values)).sorted { $0.id < $1.id }
+        let updated = (directDevices + Array(resolvedDevices.values)).sorted { $0.id < $1.id }
+        if discoveredMacs != updated { discoveredMacs = updated }
     }
 
     private func isCurrentDiscovery(_ generation: UUID) -> Bool {

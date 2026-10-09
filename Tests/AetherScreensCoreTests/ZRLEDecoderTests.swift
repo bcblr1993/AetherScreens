@@ -6,9 +6,71 @@ final class ZRLEDecoderTests: XCTestCase {
     private let a: [UInt8] = [12, 34, 56]
     private let b: [UInt8] = [78, 90, 123]
 
+    func testRGB565RawPaletteAndRunLengthSubencodings() throws {
+        let red: [UInt8] = [0,0,255,255], green: [UInt8] = [0,255,0,255], blue: [UInt8] = [255,0,0,255]
+        let cases: [([UInt8], Int, Int, [UInt8])] = [
+            ([0,0,248,224,7,31,0], 3, 1, red + green + blue),
+            ([1,0,248], 3, 1, red + red + red),
+            ([2,0,248,224,7,0x40,0xA0], 3, 2, red + green + red + green + red + green),
+            ([128,31,0,2], 3, 1, blue + blue + blue),
+            ([130,0,248,31,0,0x81,2], 3, 1, blue + blue + blue)
+        ]
+        for (tile, width, height, expected) in cases {
+            let compressed = try ZRLETestDeflater().compress(Data(tile))
+            XCTAssertEqual(ZRLEDecoder(colorDepth: .rgb565).decode(data: compressed, width: width, height: height), Data(expected))
+        }
+        let short = try ZRLETestDeflater().compress(Data([0,0,248]))
+        XCTAssertNil(ZRLEDecoder(colorDepth: .rgb565).decode(data: short, width: 3, height: 1))
+    }
+
     func testRawCompactBGRPixelsBecomeOpaqueBGRA() throws {
         let encoded = [UInt8(0)] + a + b + [255, 0, 128]
         XCTAssertEqual(try decode(encoded, width: 3, height: 1), Data(a + [255] + b + [255] + [255, 0, 128, 255]))
+    }
+
+    func test4KRGB565RawTilesPreserveAllColorsAcrossRepeatedFrames() throws {
+        let width = 3840, height = 2160
+        var tiles = Data(), expected = Data()
+        tiles.reserveCapacity(width * height * 2 + 2040)
+        expected.reserveCapacity(width * height * 4)
+        // Repeats the complete 16-bit domain, independently expanding each
+        // channel according to the advertised 5/6/5 wire maxima.
+        for index in 0..<(width * height) {
+            let value = index & 65535
+            expected.append(contentsOf: [UInt8((value & 31) * 255 / 31),
+                UInt8(((value >> 5) & 63) * 255 / 63),
+                UInt8(((value >> 11) & 31) * 255 / 31), 255])
+        }
+        for y in stride(from: 0, to: height, by: 64) {
+            for x in stride(from: 0, to: width, by: 64) {
+                tiles.append(0)
+                for row in y..<min(y + 64, height) {
+                    for column in x..<min(x + 64, width) {
+                        let value = (row * width + column) & 65535
+                        tiles.append(UInt8(truncatingIfNeeded: value))
+                        tiles.append(UInt8(truncatingIfNeeded: value >> 8))
+                    }
+                }
+            }
+        }
+        let encoder = try ZRLETestDeflater()
+        let packets = try (0..<3).map { _ in try encoder.compress(tiles) }
+        let decoder = ZRLEDecoder(colorDepth: .rgb565)
+        let inflater = ZlibDecompressor()
+        var durations: [Double] = []
+        var inflateDurations: [Double] = []
+        for packet in packets {
+            let inflateStarted = ProcessInfo.processInfo.systemUptime
+            let expanded = try XCTUnwrap(inflater.decompress(data: packet, maximumBytes: tiles.count))
+            inflateDurations.append((ProcessInfo.processInfo.systemUptime - inflateStarted) * 1000)
+            XCTAssertEqual(expanded, tiles)
+            let started = ProcessInfo.processInfo.systemUptime
+            let actual = try XCTUnwrap(decoder.decode(data: packet, width: width, height: height))
+            durations.append((ProcessInfo.processInfo.systemUptime - started) * 1000)
+            XCTAssertEqual(actual, expected)
+        }
+        print("[ZRLE 4K RGB565 raw] decode milliseconds: \(durations); verifies every output byte")
+        print("[ZRLE 4K RGB565 raw] standalone inflate milliseconds: \(inflateDurations); excludes pixel conversion")
     }
 
     func testLargeRawTilesPreserveAllPixelsAndPartialTileEdges() throws {
