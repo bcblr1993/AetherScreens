@@ -20,6 +20,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/attaswift/BigInt.git", exact: "5.7.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.0"),
         .package(url: "https://github.com/apple/swift-nio-ssh.git", exact: "0.15.0"),
         .package(url: "https://github.com/apple/swift-nio.git", exact: "2.81.0")
     ],
@@ -40,8 +41,10 @@ let package = Package(
         ),
         .executableTarget(
             name: "AetherScreensApp",
-            dependencies: ["AetherScreensCore"],
-            path: "Sources/AetherScreensApp"
+            dependencies: ["AetherScreensCore",
+                .product(name: "Sparkle", package: "Sparkle", condition: .when(platforms: [.macOS]))],
+            path: "Sources/AetherScreensApp",
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"], .when(platforms: [.macOS]))]
         ),
         .testTarget(
             name: "AetherScreensCoreTests",

@@ -16,7 +16,12 @@ struct AetherScreensMacShortcuts: AppShortcutsProvider {
 }
 
 @main
+@MainActor
 struct AetherScreensMainApp: App {
+    #if os(macOS)
+    @StateObject private var appUpdater = AppUpdater()
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
+    #endif
     var body: some Scene {
         WindowGroup {
             DeviceListView()
@@ -29,6 +34,10 @@ struct AetherScreensMainApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             SidebarCommands()
+            CommandGroup(after: .appInfo) {
+                Button(AppLocalization.string("Check for Updates…")) { appUpdater.checkForUpdates() }
+                    .disabled(!appUpdater.canCheckForUpdates)
+            }
         }
         #endif
     }

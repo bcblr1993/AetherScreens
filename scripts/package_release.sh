@@ -7,7 +7,7 @@ if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
 VERSION="${AETHERSCREENS_VERSION:-1.1.0}"
-BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-2026100901}"
+BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-2026101001}"
 SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
 NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
 OUTPUT="${AETHERSCREENS_OUTPUT_DIR:-$DIR/build/release}"
@@ -22,6 +22,7 @@ RELEASE_BIN="$(swift build -c release --arch arm64 --show-bin-path)/AetherScreen
 APP_DIR="$STAGE/AetherScreens.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$RELEASE_BIN" "$APP_DIR/Contents/MacOS/AetherScreens"
+bash scripts/embed_sparkle.sh "$APP_DIR" "$SIGNING_IDENTITY"
 cp assets/branding/AppIcon-v2.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
 cp assets/licenses/BigInt-MIT.txt "$APP_DIR/Contents/Resources/BigInt-MIT.txt"
 cp assets/licenses/ThirdPartyNotices.txt "$APP_DIR/Contents/Resources/ThirdPartyNotices.txt"
@@ -37,6 +38,11 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleIdentifier</key><string>com.aethernative.aetherscreens</string>
 <key>CFBundleName</key><string>AetherScreens</string>
+<key>SUFeedURL</key><string>https://aethernative.com/apps/aetherscreens/appcast.xml</string>
+<key>SUPublicEDKey</key><string>$(cat assets/update/sparkle-public-key.txt)</string>
+<key>SUEnableAutomaticChecks</key><false/>
+<key>SUAutomaticallyUpdate</key><false/>
+<key>SUVerifyUpdateBeforeExtraction</key><true/>
 <key>CFBundleURLTypes</key><array>
 <dict><key>CFBundleURLName</key><string>com.aethernative.aetherscreens.connection</string><key>CFBundleURLSchemes</key><array><string>aetherscreens</string></array><key>CFBundleTypeRole</key><string>Viewer</string></dict>
 <dict><key>CFBundleURLName</key><string>com.aethernative.aetherscreens.vnc</string><key>CFBundleURLSchemes</key><array><string>vnc</string></array><key>CFBundleTypeRole</key><string>Viewer</string><key>LSHandlerRank</key><string>Alternate</string></dict>
@@ -75,4 +81,7 @@ hdiutil create -volname "AetherScreens $VERSION" -srcfolder "$STAGE" -ov -format
 codesign --timestamp --sign "$SIGNING_IDENTITY" "$DMG"
 ditto "$APP_DIR" "$OUTPUT/AetherScreens.app"
 (cd "$OUTPUT" && shasum -a 256 "$(basename "$ZIP")" "$(basename "$DMG")") > "$OUTPUT/SHA256SUMS.txt"
+"$DIR/.build/artifacts/sparkle/Sparkle/bin/sign_update" --account com.aethernative.aetherscreens "$DMG" > "$OUTPUT/sparkle-signature.txt"
 echo "Signed and notarized release ready: $OUTPUT"
+
+bash "$DIR/scripts/finalize_update_archive.sh" "$OUTPUT" "$VERSION" "$NOTARY_PROFILE"

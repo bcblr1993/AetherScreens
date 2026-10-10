@@ -1,6 +1,6 @@
 # AetherScreens 1.1.0 candidate release notes
 
-Build: 2026100901. Not yet published; installed-candidate acceptance is pending.
+Build: 2026101001. Not yet published; installed-candidate acceptance is pending.
 
 ## Changes
 
@@ -9,6 +9,7 @@ Build: 2026100901. Not yet published; installed-candidate acceptance is pending.
 - Improve reconnect recovery, session lifecycle and stale-callback handling.
 - Add SSH connection configuration and host-key verification, and improve file-transfer preparation, progress and receive validation.
 - Improve session controls, saved-computer management and localized interface text.
+- Add “Check for Updates…” on macOS with signed downloads and Sparkle-managed installation/relaunch. Version 1.0.0 requires a one-time manual installation to gain the updater.
 - Include pinned dependency license notices in the macOS installation package.
 
 ## Validation and limits
