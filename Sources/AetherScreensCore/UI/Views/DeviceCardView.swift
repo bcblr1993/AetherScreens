@@ -52,20 +52,7 @@ public struct DeviceCardView: View {
                     }
 
                     VStack {
-                        HStack {
-                            Spacer()
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(device.isTailscaleNode && device.isOnline ? Color(red: 0.30, green: 0.77, blue: 0.53) : .gray)
-                                    .frame(width: 6, height: 6)
-                                Text(AppLocalization.string(device.isTailscaleNode ? (device.isOnline ? "Tailnet Online" : "Tailnet Offline") : "Saved"))
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(.black.opacity(0.6), in: Capsule())
-                        }
+                        cardHeaderBadges
                         Spacer()
                     }
                     .padding(10)
@@ -73,19 +60,7 @@ public struct DeviceCardView: View {
                 .frame(height: 154)
 
                 HStack(alignment: .center, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(device.name)
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        HStack(spacing: 5) {
-                            Text(device.host)
-                            Text(":" + String(device.port))
-                        }
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    }
+                    cardDetails
                     Spacer(minLength: 4)
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -139,4 +114,55 @@ public struct DeviceCardView: View {
         }
     }
 
+    private var cardHeaderBadges: some View {
+        HStack {
+            if device.isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.yellow)
+                    .padding(6)
+                    .background(.black.opacity(0.6), in: Circle())
+            }
+            Spacer()
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(device.isTailscaleNode && device.isOnline ? Color(red: 0.30, green: 0.77, blue: 0.53) : .gray)
+                    .frame(width: 6, height: 6)
+                Text(AppLocalization.string(device.isTailscaleNode ? (device.isOnline ? "Tailnet Online" : "Tailnet Offline") : "Saved"))
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.6), in: Capsule())
+        }
+    }
+
+    private var cardDetails: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(device.name)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            HStack(spacing: 5) {
+                Text(device.host)
+                Text(":" + String(device.port))
+            }
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            if !device.tags.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(device.tags.prefix(3), id: \.self) { tag in
+                        Text(tag)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+            }
+        }
+    }
 }

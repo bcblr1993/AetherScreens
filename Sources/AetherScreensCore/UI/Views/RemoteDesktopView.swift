@@ -690,6 +690,25 @@ public struct RemoteDesktopView: View {
                 .disabled(!viewModel.canStartFileDownload)
                 .accessibilityIdentifier("session-receive-file")
                 Toggle(AppLocalization.string("Observe Only"), isOn: $viewModel.isObserveOnly)
+                Menu {
+                    Toggle(AppLocalization.string("Auto Clipboard Sync"), isOn: $viewModel.isAutoClipboardSyncEnabled)
+                    Divider()
+                    Button {
+                        viewModel.sendLocalClipboardToRemote()
+                    } label: {
+                        Label(AppLocalization.string("Send to Remote Clipboard"), systemImage: "arrow.up.doc.on.clipboard")
+                    }
+                    .disabled(viewModel.isObserveOnly || viewModel.sessionState != .connected)
+                    Button {
+                        viewModel.syncClipboardToMac()
+                    } label: {
+                        Label(AppLocalization.string("Type Clipboard as Keystrokes"), systemImage: "keyboard.badge.ellipsis")
+                    }
+                    .disabled(viewModel.isObserveOnly || viewModel.sessionState != .connected)
+                } label: {
+                    Label(AppLocalization.string("Clipboard"), systemImage: "doc.on.clipboard")
+                }
+                quickActionsMenu
                 Button { showingKeyboardCustomization = true } label: {
                     Label(AppLocalization.string("Customize Keyboard Toolbar"), systemImage: "slider.horizontal.3")
                 }
@@ -815,5 +834,78 @@ public struct RemoteDesktopView: View {
         #else
         return min(260, max(30, availableWidth - 296))
         #endif
+    }
+
+    @ViewBuilder
+    private var quickActionsMenu: some View {
+        Menu {
+            if viewModel.device.deviceType == .mac {
+                Button {
+                    viewModel.executeShortcut(.missionControl)
+                } label: {
+                    Label(AppLocalization.string("Mission Control"), systemImage: "macwindow.on.rectangle")
+                }
+                Button {
+                    viewModel.executeShortcut(.showDesktop)
+                } label: {
+                    Label(AppLocalization.string("Show Desktop"), systemImage: "menubar.rectangle")
+                }
+                Button {
+                    viewModel.executeShortcut(.appSwitcher)
+                } label: {
+                    Label(AppLocalization.string("App Switcher"), systemImage: "app.badge")
+                }
+                Button {
+                    viewModel.executeShortcut(.appExpose)
+                } label: {
+                    Label(AppLocalization.string("App Exposé"), systemImage: "rectangle.3.group")
+                }
+                Button {
+                    viewModel.executeShortcut(.spotlight)
+                } label: {
+                    Label(AppLocalization.string("Spotlight"), systemImage: "magnifyingglass")
+                }
+                Button {
+                    viewModel.executeShortcut(.forceQuit)
+                } label: {
+                    Label(AppLocalization.string("Force Quit"), systemImage: "xmark.app")
+                }
+                Divider()
+                Menu(AppLocalization.string("Hot Corners")) {
+                    Button(AppLocalization.string("Top Left Hot Corner")) {
+                        viewModel.triggerHotCorner(.topLeft)
+                    }
+                    Button(AppLocalization.string("Top Right Hot Corner")) {
+                        viewModel.triggerHotCorner(.topRight)
+                    }
+                    Button(AppLocalization.string("Bottom Left Hot Corner")) {
+                        viewModel.triggerHotCorner(.bottomLeft)
+                    }
+                    Button(AppLocalization.string("Bottom Right Hot Corner")) {
+                        viewModel.triggerHotCorner(.bottomRight)
+                    }
+                }
+                Divider()
+                Button {
+                    viewModel.triggerSystemAction(.logOut)
+                } label: {
+                    Label(AppLocalization.string("Log Out Remote User"), systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            } else {
+                Button {
+                    viewModel.triggerSystemAction(.controlAltDelete)
+                } label: {
+                    Label(AppLocalization.string("Send Ctrl-Alt-Delete"), systemImage: "keyboard")
+                }
+                Button {
+                    viewModel.triggerSystemAction(.lockScreen)
+                } label: {
+                    Label(AppLocalization.string("Lock Screen"), systemImage: "lock")
+                }
+            }
+        } label: {
+            Label(AppLocalization.string("Quick Actions"), systemImage: "bolt.fill")
+        }
+        .disabled(viewModel.isObserveOnly)
     }
 }

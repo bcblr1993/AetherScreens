@@ -11,9 +11,12 @@ public struct AddDeviceSheet: View {
     @FocusState private var hostFocused: Bool
     @State private var portString: String = "5900"
     @State private var deviceType: RemoteDevice.DeviceType = .mac
+    @State private var remoteProtocol: RemoteDevice.RemoteProtocol = .rfb
     @State private var password: String = ""
     @State private var username: String = ""
     @State private var macAddress: String = ""
+    @State private var isFavorite = false
+    @State private var tagsString = ""
     @State private var saveComputer = false
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
@@ -33,10 +36,16 @@ public struct AddDeviceSheet: View {
     private var includesSavedDetails: Bool { !isQuickConnect || saveComputer }
     private var request: ConnectionRequest? {
         guard sshDraft.isValid else { return nil }
+        let tags = tagsString
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
         return ConnectionRequest(host: host, port: portString, name: includesSavedDetails ? name : "",
                           username: username, password: password, type: deviceType,
+                          remoteProtocol: remoteProtocol,
                           macAddress: includesSavedDetails ? macAddress : "",
-                          ssh: sshDraft.settings, sshPassword: sshDraft.passwordToSave ?? "", sshPrivateKey: sshDraft.privateKeyToSave)
+                          ssh: sshDraft.settings, sshPassword: sshDraft.passwordToSave ?? "", sshPrivateKey: sshDraft.privateKeyToSave,
+                          isFavorite: isFavorite, tags: tags)
     }
 
     public var body: some View {
@@ -61,29 +70,59 @@ public struct AddDeviceSheet: View {
                             #if canImport(UIKit)
                             .frame(minHeight: 44)
                             #endif
+                            .onChange(of: portString) { _, newPort in
+                                if newPort == "3389" && remoteProtocol == .rfb {
+                                    remoteProtocol = .rdp
+                                    if deviceType == .mac { deviceType = .windows }
+                                } else if newPort == "5900" && remoteProtocol == .rdp {
+                                    remoteProtocol = .rfb
+                                }
+                            }
                     }
                 }
 
-                if includesSavedDetails {
-                    Section(header: Text(AppLocalization.string("Operating System"))) {
+                Section(header: Text(AppLocalization.string("Protocol & System"))) {
+                    Picker(AppLocalization.string("Protocol"), selection: $remoteProtocol) {
+                        Text(AppLocalization.string("macOS / VNC (RFB)")).tag(RemoteDevice.RemoteProtocol.rfb)
+                        Text(AppLocalization.string("Windows Remote Desktop (RDP)")).tag(RemoteDevice.RemoteProtocol.rdp)
+                    }
+                    .accessibilityIdentifier("protocol-picker")
+                    .onChange(of: remoteProtocol) { _, newProto in
+                        if newProto == .rdp && (portString == "5900" || portString.isEmpty) {
+                            portString = "3389"
+                            if deviceType == .mac { deviceType = .windows }
+                        } else if newProto == .rfb && (portString == "3389" || portString.isEmpty) {
+                            portString = "5900"
+                        }
+                    }
+
+                    if includesSavedDetails {
                         Picker(AppLocalization.string("Device Type"), selection: $deviceType) {
                             ForEach(RemoteDevice.DeviceType.allCases, id: \.self) { type in
                                 Label(AppLocalization.string(type.rawValue), systemImage: type.systemIcon).tag(type)
+                            }
+                        }
+                        .onChange(of: deviceType) { _, newType in
+                            if newType == .windows && remoteProtocol == .rfb {
+                                remoteProtocol = .rdp
+                                if portString == "5900" || portString.isEmpty { portString = "3389" }
                             }
                         }
                     }
                 }
 
                 Section(
-                    header: Text(AppLocalization.string("Authentication")),
-                    footer: Text(AppLocalization.string("Enter your Mac account username and password. Leave Username empty to use a VNC password."))
+                    header: Text(AppLocalization.string(remoteProtocol == .rdp ? "Windows Authentication" : "Authentication")),
+                    footer: Text(AppLocalization.string(remoteProtocol == .rdp
+                        ? "Enter your Windows account username and password."
+                        : "Enter your Mac account username and password. Leave Username empty to use a VNC password."))
                 ) {
-                    TextField(AppLocalization.string("Username (Mac account, optional)"), text: $username)
+                    TextField(AppLocalization.string(remoteProtocol == .rdp ? "Windows Username" : "Username (Mac account, optional)"), text: $username)
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .textInputAutocapitalization(.never)
                         #endif
-                    SecureField(AppLocalization.string(username.isEmpty ? "VNC Password (Optional)" : "Mac Account Password"), text: $password)
+                    SecureField(AppLocalization.string(remoteProtocol == .rdp ? "Password" : (username.isEmpty ? "VNC Password (Optional)" : "Mac Account Password")), text: $password)
                 }
 
                 SSHConnectionFields(draft: $sshDraft, defaultServer: host,
@@ -99,6 +138,17 @@ public struct AddDeviceSheet: View {
                 }
 
                 if includesSavedDetails {
+                    Section(header: Text(AppLocalization.string("Organization"))) {
+                        Toggle(AppLocalization.string("Favorite"), isOn: $isFavorite)
+                            .accessibilityIdentifier("add-favorite-toggle")
+                        TextField(AppLocalization.string("Tags (comma separated, e.g. Home, Work)"), text: $tagsString)
+                            .accessibilityIdentifier("add-tags-input")
+                            .autocorrectionDisabled()
+                            #if canImport(UIKit)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                    }
+
                     Section(
                         header: Text(AppLocalization.string("Wake-on-LAN (Optional)")),
                         footer: Text(AppLocalization.string("Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping."))

@@ -1,19 +1,644 @@
+"%d computers" = "%d computers";
+"%d discovered" = "%d discovered";
+"%d events" = "%d events";
+"1. Open System Settings on Mac > General > Sharing." = "1. Open System Settings on Mac > General > Sharing.";
+"2. Turn on Screen Sharing." = "2. Turn on Screen Sharing.";
+"3. Use your Mac account, or enable password access for VNC viewers in Computer Settings." = "3. Use your Mac account, or enable password access for VNC viewers in Computer Settings.";
+"4. For connections across networks, run Tailscale on both devices." = "4. For connections across networks, run Tailscale on both devices.";
+"API Access Token (tskey-api-...)" = "API Access Token (tskey-api-...)";
+"About macOS Screen Sharing" = "About macOS Screen Sharing";
+"Actions" = "Actions";
+"Actual Size" = "Actual Size";
+"Add %@" = "Add %@";
+"Add Computer" = "Add Computer";
+"Add Computer Manually" = "Add Computer Manually";
+"Add a computer to start a remote session. You can also sync devices from your tailnet." = "Add a computer to start a remote session. You can also sync devices from your tailnet.";
+"Add computer" = "Add computer";
+"AetherScreens" = "AetherScreens";
+"All Computers" = "All Computers";
+"All Levels" = "All Levels";
+"App Language" = "App Language";
+"App Switcher" = "App Switcher";
+"Authenticating…" = "Authenticating…";
+"Authentication" = "Authentication";
+"Authentication Required" = "Authentication Required";
+"Authentication failed (incorrect password)" = "Authentication failed (incorrect password)";
+"Authentication failed: %@" = "Authentication failed: %@";
+"Cancel" = "Cancel";
+"Clear" = "Clear";
+"Close" = "Close";
+"Close Window" = "Close Window";
+"Connect" = "Connect";
+"Connect to %@" = "Connect to %@";
 "Connect to Computer" = "Connect to Computer";
 "Computer" = "Computer";
 "Connect to ${computer}" = "Connect to ${computer}";
+"Connect to your computers from anywhere." = "Connect to your computers from anywhere.";
+"Connected" = "Connected";
+"Connected. Waiting for remote frames…" = "Connected. Waiting for remote frames…";
+"Connecting…" = "Connecting…";
+"Connection failed" = "Connection failed";
+"Connection failed: %@" = "Connection failed: %@";
+"Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in %@ > Privacy & Security > Local Network." = "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in %@ > Privacy & Security > Local Network.";
+"Copied to Clipboard!" = "Copied to Clipboard!";
+"Copy" = "Copy";
+"Copy Logs" = "Copy Logs";
+"Cut" = "Cut";
+"Delete" = "Delete";
+"Device Information" = "Device Information";
+"Device Type" = "Device Type";
+"Diagnostic Logs" = "Diagnostic Logs";
+"Disconnect" = "Disconnect";
+"Disconnected" = "Disconnected";
+"Dismiss" = "Dismiss";
+"Dismiss Lock Notice" = "Dismiss Lock Notice";
+"Display %d" = "Display %d";
+"Done" = "Done";
+"Edit Computer" = "Edit Computer";
+"Edit Computer..." = "Edit Computer...";
+"Enter Password" = "Enter Password";
+"Enter the Mac account password for %@" = "Enter the Mac account password for %@";
+"Enter the VNC password for %@" = "Enter the VNC password for %@";
+"Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping." = "Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping.";
+"Enter your Mac account username and password. Leave Username empty to use a VNC password." = "Enter your Mac account username and password. Leave Username empty to use a VNC password.";
+"Failed to send Wake-on-LAN packet. Check MAC format." = "Failed to send Wake-on-LAN packet. Check MAC format.";
+"Filter logs..." = "Filter logs...";
+"Fit to Window" = "Fit to Window";
+"Fn" = "Fn";
+"Follow System" = "Follow System";
+"Force Quit" = "Force Quit";
+"Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices." = "Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices.";
+"Hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake this Mac remotely." = "Hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake this Mac remotely.";
+"Hide Keyboard" = "Hide Keyboard";
+"Initializing…" = "Initializing…";
+"Input Mode" = "Input Mode";
+"Remote desktop canvas" = "Remote desktop canvas";
+"Insert local clipboard text into the focused remote field" = "Insert local clipboard text into the focused remote field";
+"Language" = "Language";
+"Level" = "Level";
+"Loading remote desktop…" = "Loading remote desktop…";
+"Lock Remote Mac" = "Lock Remote Mac";
+"Lock Screen" = "Lock Screen";
+"Lock Screen shortcut sent" = "Lock Screen shortcut sent";
+"MAC Address" = "MAC Address";
+"MAC Address (Optional)" = "MAC Address (Optional)";
+"Mac Account Password" = "Mac Account Password";
+"Macs" = "Macs";
+"Main Display" = "Main Display";
+"Mission Control" = "Mission Control";
+"Name" = "Name";
+"Name (e.g. Studio Mac)" = "Name (e.g. Studio Mac)";
+"Nearby (Bonjour)" = "Nearby (Bonjour)";
+"Nearby Macs (Local Wi-Fi)" = "Nearby Macs (Local Wi-Fi)";
+"Negotiating protocol…" = "Negotiating protocol…";
+"New Window" = "New Window";
+"No MAC address configured for this Mac." = "No MAC address configured for this Mac.";
+"No computers here yet" = "No computers here yet";
+"No log entries match the current filter." = "No log entries match the current filter.";
+"No matching computers" = "No matching computers";
+"Observe Only" = "Observe Only";
+"Observe · %@" = "Observe · %@";
+"Operating System" = "Operating System";
+"Other" = "Other";
+"Pan View" = "Pan View";
+"Paste" = "Paste";
+"Paste Text" = "Paste Text";
+"Please enter your Tailscale API Key in Settings" = "Please enter your Tailscale API Key in Settings";
+"Port" = "Port";
+"Quick Connect" = "Quick Connect";
+"Received %.1f MB / %.1f MB (%.0f%%)" = "Received %.1f MB / %.1f MB (%.0f%%)";
+"Reconnect" = "Reconnect";
+"Redo" = "Redo";
+"Restore the session if input stops responding after unlocking" = "Restore the session if input stops responding after unlocking";
+"Retry Connection" = "Retry Connection";
+"Save" = "Save";
+"Save Computer" = "Save Computer";
+"Save File" = "Save File";
+"Save password in Keychain" = "Save password in Keychain";
+"Save this computer and its password for future connections. Leave off for a temporary session." = "Save this computer and its password for future connections. Leave off for a temporary session.";
+"Saved" = "Saved";
+"Saved in the system Keychain. Enter a new password to update or leave unchanged." = "Saved in the system Keychain. Enter a new password to update or leave unchanged.";
+"Select All" = "Select All";
+"Send" = "Send";
+"Session Options" = "Session Options";
+"Settings" = "Settings";
+"Show Desktop" = "Show Desktop";
+"Show Keyboard" = "Show Keyboard";
+"Spotlight" = "Spotlight";
+"Sync Tailscale Devices" = "Sync Tailscale Devices";
+"Sync Tailscale Online Nodes" = "Sync Tailscale Online Nodes";
+"Synced %d nodes from Tailscale" = "Synced %d nodes from Tailscale";
+"System Settings" = "System Settings";
+"Tailnet Name (Optional, e.g. example.com)" = "Tailnet Name (Optional, e.g. example.com)";
+"Tailnet Offline" = "Tailnet Offline";
+"Tailnet Online" = "Tailnet Online";
+"Tailscale API Credentials" = "Tailscale API Credentials";
+"Tailscale IP / Host (e.g. 100.80.1.25)" = "Tailscale IP / Host (e.g. 100.80.1.25)";
+"Tailscale Nodes" = "Tailscale Nodes";
+"Tailscale Settings" = "Tailscale Settings";
+"Touch" = "Touch";
+"Trackpad" = "Trackpad";
+"Try a different name or address." = "Try a different name or address.";
+"Type" = "Type";
+"Type or paste text to send to Mac..." = "Type or paste text to send to Mac...";
+"Undo" = "Undo";
+"Username (Mac account, optional)" = "Username (Mac account, optional)";
+"VNC Password" = "VNC Password";
+"VNC Password (Optional)" = "VNC Password (Optional)";
+"View Diagnostic Logs" = "View Diagnostic Logs";
+"WORKSPACE" = "WORKSPACE";
+"Wake Mac (WOL)" = "Wake Mac (WOL)";
+"Wake-on-LAN (Optional)" = "Wake-on-LAN (Optional)";
+"Wake-on-LAN Magic Packet sent to %@" = "Wake-on-LAN Magic Packet sent to %@";
+"Your computers" = "Your computers";
+"Your screens" = "Your screens";
+"Zoom In" = "Zoom In";
+"Zoom Out" = "Zoom Out";
+"All Displays" = "All Displays";
+"App Switcher (⌘Tab)" = "App Switcher (⌘Tab)";
+"Authenticating with Mac..." = "Authenticating with Mac...";
+"Connecting to remote computer..." = "Connecting to remote computer...";
+"DEBUG" = "DEBUG";
+"Display 1 (Left)" = "Display 1 (Left)";
+"Display 2 (Right)" = "Display 2 (Right)";
+"ERROR" = "ERROR";
+"Failed to parse ServerInit" = "Failed to parse ServerInit";
+"Failed to parse Tailscale response: %@" = "Failed to parse Tailscale response: %@";
+"Failed to parse security result" = "Failed to parse security result";
+"Force Quit (⌥⌘Esc)" = "Force Quit (⌥⌘Esc)";
+"INFO" = "INFO";
+"Initializing screen sharing session..." = "Initializing screen sharing session...";
+"Invalid RFB protocol header from server" = "Invalid RFB protocol header from server";
+"Invalid Tailscale API endpoint URL." = "Invalid Tailscale API endpoint URL.";
+"Invalid rectangle header" = "Invalid rectangle header";
+"Lock Screen (⌃⌘Q)" = "Lock Screen (⌃⌘Q)";
+"Mac account authentication challenge could not be processed" = "Mac account authentication challenge could not be processed";
+"Mac account password required" = "Mac account password required";
+"Mission Control (⌃↑)" = "Mission Control (⌃↑)";
+"Negotiating RFB 3.8 protocol..." = "Negotiating RFB 3.8 protocol...";
+"No compatible security type supported by server. Offered: [%@]" = "No compatible security type supported by server. Offered: [%@]";
+"Remote clipboard exceeds the supported size" = "Remote clipboard exceeds the supported size";
+"Remote host closed connection (received %d/%d bytes)" = "Remote host closed connection (received %d/%d bytes)";
+"Search computers or Tailscale IP" = "Search computers or Tailscale IP";
+"Server does not support Mac account authentication. Leave Username empty to use a VNC password." = "Server does not support Mac account authentication. Leave Username empty to use a VNC password.";
+"Server rejected connection: %@" = "Server rejected connection: %@";
+"Server requires VNC password, but none was provided" = "Server requires VNC password, but none was provided";
+"Show Desktop (⌘F3)" = "Show Desktop (⌘F3)";
+"Socket read error: %@" = "Socket read error: %@";
+"Spotlight (⌘Space)" = "Spotlight (⌘Space)";
+"Tailscale HTTP %d: %@" = "Tailscale HTTP %d: %@";
+"Tailscale authentication failed. Check your API access token." = "Tailscale authentication failed. Check your API access token.";
+"Unsupported Mac account authentication key length" = "Unsupported Mac account authentication key length";
+"VNC Password required to connect" = "VNC Password required to connect";
+"WARNING" = "WARNING";
+"cmd" = "cmd";
+"ctrl" = "ctrl";
+"del" = "del";
+"esc" = "esc";
+"opt" = "opt";
+"return" = "return";
+"shift" = "shift";
+"space" = "space";
+"tab" = "tab";
+"⇧" = "⇧";
+"⌃" = "⌃";
+"⌘" = "⌘";
+"⌥" = "⌥";
+"WARN" = "WARN";
+"LAN / Host" = "LAN / Host";
+"Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in Settings > Privacy & Security > Local Network." = "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in Settings > Privacy & Security > Local Network.";
+"Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network." = "Connection timed out. Check the address, Screen Sharing and your LAN or Tailscale connection. Allow AetherScreens in System Settings > Privacy & Security > Local Network.";
+"More Actions" = "More Actions";
+"Syncing…" = "Syncing…";
+"Open Sessions" = "Open Sessions";
+"Open in New Window" = "Open in New Window";
+"Customize Keyboard Toolbar" = "Customize Keyboard Toolbar";
+"Button Size" = "Button Size";
+"Keyboard Position" = "Keyboard Position";
+"Buttons and Spacers" = "Buttons and Spacers";
+"Move Up" = "Move Up";
+"Move Down" = "Move Down";
+"Remove Spacer" = "Remove Spacer";
+"Add Spacer" = "Add Spacer";
+"Reset Toolbar" = "Reset Toolbar";
+"Small" = "Small";
+"Medium" = "Medium";
+"Large" = "Large";
+"Top" = "Top";
+"Bottom" = "Bottom";
+"Spacer" = "Spacer";
+"Left Arrow" = "Left Arrow";
+"Right Arrow" = "Right Arrow";
+"Up Arrow" = "Up Arrow";
+"Down Arrow" = "Down Arrow";
+"Keyboard Toolbar" = "Keyboard Toolbar";
+
+"Enter your Mac account username and password" = "Enter your Mac account username and password";
+
+"Mac Account Username" = "Mac Account Username";
+
+"Mac account username and password required" = "Mac account username and password required";
+
+"Copy Connection Link" = "Copy Connection Link";
+
+"Connection link copied" = "Connection link copied";
+
+"This connection link is invalid." = "This connection link is invalid.";
+
+"This connection link uses an unsupported option." = "This connection link uses an unsupported option.";
+
+"The computer in this link is not in your library." = "The computer in this link is not in your library.";
+
+"Several computers match this link. Use a link copied from the computer's menu." = "Several computers match this link. Use a link copied from the computer's menu.";
+
+"Pan · %@" = "Pan · %@";
+
+"Invalid remote display layout" = "Invalid remote display layout";
+"Full Screen" = "Full Screen";
+"Enter Full Screen" = "Enter Full Screen";
+"Exit Full Screen" = "Exit Full Screen";
+"App Windows (⌃↓)" = "App Windows (⌃↓)";
+"Previous Space (⌃←)" = "Previous Space (⌃←)";
+"Next Space (⌃→)" = "Next Space (⌃→)";
+
+"TCP RTT" = "TCP RTT";
+"Invalid ZRLE rectangle size" = "Invalid ZRLE rectangle size";
+"Invalid ZRLE compressed length" = "Invalid ZRLE compressed length";
+"Invalid ZRLE pixel data" = "Invalid ZRLE pixel data";
+"Network round-trip time; excludes remote processing and display delay." = "Network round-trip time; excludes remote processing and display delay.";
+"Invalid Zlib rectangle size" = "Invalid Zlib rectangle size";
+"Invalid Zlib compressed length" = "Invalid Zlib compressed length";
+"Invalid Zlib pixel data" = "Invalid Zlib pixel data";
+"Return to Computers" = "Return to Computers";
+
+// Connection-stage timeout guidance
+"Network connection timed out. Check the address, LAN or Tailscale connection, and Local Network permission." = "Network connection timed out. Check the address, LAN or Tailscale connection, and Local Network permission.";
+"The server did not respond with a remote desktop protocol. Check Screen Sharing and the port." = "The server did not respond with a remote desktop protocol. Check Screen Sharing and the port.";
+"Authentication timed out. Complete the account or password prompt and check the Mac's sharing permissions." = "Authentication timed out. Complete the account or password prompt and check the Mac's sharing permissions.";
+"The server did not initialize the desktop. Check Screen Sharing on the remote Mac and retry." = "The server did not initialize the desktop. Check Screen Sharing on the remote Mac and retry.";
+"Connected, but no desktop image arrived. Check the remote Mac's Screen Sharing session and retry." = "Connected, but no desktop image arrived. Check the remote Mac's Screen Sharing session and retry.";
+"The remote port refused the connection. Enable Screen Sharing and check the port and firewall." = "The remote port refused the connection. Enable Screen Sharing and check the port and firewall.";
+"The remote network is unreachable. Check your LAN or Tailscale connection and the device address." = "The remote network is unreachable. Check your LAN or Tailscale connection and the device address.";
+
+"Send to Remote Clipboard" = "Send to Remote Clipboard";
+"Clipboard" = "Clipboard";
+"Clipboard transfer requires an active control session." = "Clipboard transfer requires an active control session.";
+"The local clipboard contains no plain text." = "The local clipboard contains no plain text.";
+"Clipboard transfer requested. Paste on the remote computer to check." = "Clipboard transfer requested. Paste on the remote computer to check.";
+"Clipboard transfer is unavailable for this text. Use Paste Text instead." = "Clipboard transfer is unavailable for this text. Use Paste Text instead.";
+
+"Close Text Input" = "Close Text Input";
+"Modifier Inactive" = "Inactive";
+"Modifier Once" = "Next action";
+"Modifier Locked" = "Locked";
+"Home" = "Home";
+"End" = "End";
+"Page Up" = "Page Up";
+"Page Down" = "Page Down";
+"PgUp" = "PgUp";
+"PgDn" = "PgDn";
+
+"Floating" = "Floating";
+
+"Move Keyboard Toolbar" = "Move Keyboard Toolbar";
+
+"Collapse Keyboard Toolbar" = "Collapse Keyboard Toolbar";
+
+"Expand Keyboard Toolbar" = "Expand Keyboard Toolbar";
+
+"Key Repeat" = "Key Repeat";
+
+"Slow" = "Slow";
+
+"Normal" = "Normal";
+
+"Fast" = "Fast";
+
+"Off" = "Off";
+
+"Carousel" = "Carousel";
+
+"Function Keys" = "Function Keys";
+
+"Modifier Keys" = "Modifier Keys";
+
+"Navigation Keys" = "Navigation Keys";
+
+"Shortcuts" = "Shortcuts";
+
+"Edit" = "Edit";
+
+"Display Quality" = "Display Quality";
+
+"Colors" = "Colors";
+
+"Full Color" = "Full Color";
+
+"Reduced Colors" = "Reduced Colors";
+
+"Reduced colors use less data but may show color banding. Changing this setting reconnects. Desktop size stays the same." = "Reduced colors use less data but may show color banding. Changing this setting reconnects. Desktop size stays the same.";
+
+"On Disconnect" = "On Disconnect";
+"Perform Action" = "Perform Action";
+"No Action" = "No Action";
+"Log Out Remote User" = "Log Out Remote User";
+"Send Ctrl-Alt-Delete" = "Send Ctrl-Alt-Delete";
+"Top Left Hot Corner" = "Top Left Hot Corner";
+"Top Right Hot Corner" = "Top Right Hot Corner";
+"Bottom Left Hot Corner" = "Bottom Left Hot Corner";
+"Bottom Right Hot Corner" = "Bottom Right Hot Corner";
+"Logs out the remote user immediately when you disconnect. Save your work first." = "Logs out the remote user immediately when you disconnect. Save your work first.";
+"Runs only when you choose Disconnect. Hot corners use the remote Mac's configured actions." = "Runs only when you choose Disconnect. Hot corners use the remote Mac's configured actions.";
+"SSH Authentication" = "SSH Authentication";
+"SSH Server Identity" = "SSH Server Identity";
+"Trust and Connect" = "Trust and Connect";
+"Previous fingerprint" = "Previous fingerprint";
+"SHA256 fingerprint" = "SHA256 fingerprint";
+"Verify this fingerprint before trusting the SSH server." = "Verify this fingerprint before trusting the SSH server.";
+"The SSH host key has changed. Verify the new fingerprint with the server administrator before continuing." = "The SSH host key has changed. Verify the new fingerprint with the server administrator before continuing.";
+"Could not save the SSH password to Keychain." = "Could not save the SSH password to Keychain.";
+"SSH private key authentication is not available yet." = "SSH private key authentication is not available yet.";
+"SSH connection failed. Check the server, credentials and host identity." = "SSH connection failed. Check the server, credentials and host identity.";
+"Remember in Keychain" = "Remember in Keychain";
+"Secure Connection" = "Secure Connection";
+"Use SSH Tunnel" = "Use SSH Tunnel";
+"SSH Server" = "SSH Server";
+"SSH Port" = "SSH Port";
+"SSH Username" = "SSH Username";
+"SSH Password (Optional)" = "SSH Password (Optional)";
+"Desktop Host from SSH Server" = "Desktop Host from SSH Server";
+"SSH encrypts the connection. The SSH account is separate from the remote desktop account. Leave the password empty to keep a saved password or enter it when connecting." = "SSH encrypts the connection. The SSH account is separate from the remote desktop account. Leave the password empty to keep a saved password or enter it when connecting.";
+"Could not save the SSH credentials to Keychain. The computer was not saved." = "Could not save the SSH credentials to Keychain. The computer was not saved.";
+"Could not remove the SSH password from Keychain. The computer was kept." = "Could not remove the SSH password from Keychain. The computer was kept.";
+
+"The SSH private key is invalid or damaged." = "The SSH private key is invalid or damaged.";
+"Encrypted SSH key files are not supported yet." = "Encrypted SSH key files are not supported yet.";
+"Use an Ed25519 or ECDSA SSH private key." = "Use an Ed25519 or ECDSA SSH private key.";
+"The SSH key file exceeds 64 KB." = "The SSH key file exceeds 64 KB.";
+"The SSH private key is missing. Import it again." = "The SSH private key is missing. Import it again.";
+"Private Key" = "Private Key";
+"Import Private Key" = "Import Private Key";
+"Replace Private Key" = "Replace Private Key";
+"Saved private key" = "Saved private key";
+"Import an unencrypted Ed25519 or ECDSA key. Saved keys stay in Keychain; temporary keys remain in this session." = "Import an unencrypted Ed25519 or ECDSA key. Saved keys stay in Keychain; temporary keys remain in this session.";
+"Could not read the SSH key file." = "Could not read the SSH key file.";
+
+"Could not read the saved SSH key from Keychain." = "Could not read the saved SSH key from Keychain.";
+
+"Password" = "Password";
+
+"Use Saved Private Key" = "Use Saved Private Key";
+
+"Paste Private Key" = "Paste Private Key";
+
+"SSH Keys" = "SSH Keys";
+
+"Saved Private Keys" = "Saved Private Keys";
+
+"No saved private keys" = "No saved private keys";
+
+"Not used by a saved computer" = "Not used by a saved computer";
+
+"Delete Private Key?" = "Delete Private Key?";
+
+"Import an unencrypted Ed25519 or ECDSA key. Private keys stay in Keychain." = "Import an unencrypted Ed25519 or ECDSA key. Private keys stay in Keychain.";
+
+"This private key is used by a saved computer or an open session." = "This private key is used by a saved computer or an open session.";
+
+"Retry" = "Retry";
+
+"%d computer" = "%d computer";
+
+"Rename" = "Rename";
+
+"Key Name" = "Key Name";
 
 "Connect to a computer to show its desktop here." = "Connect to a computer to show its desktop here.";
 
 "No desktop preview" = "No desktop preview";
 "Desktop preview available" = "Desktop preview available";
 
+"Export Private Key" = "Export Private Key";
+
+"Export Private Key?" = "Export Private Key?";
+
+"Export" = "Export";
+
+"The exported file contains your unencrypted private key. Choose a trusted destination." = "The exported file contains your unencrypted private key. Choose a trusted destination.";
+
+"This private key changed. Reload the key library and try again." = "This private key changed. Reload the key library and try again.";
+
+"Could not export the private key. Try another destination." = "Could not export the private key. Try another destination.";
+
+"Private Key Passphrase" = "Private Key Passphrase";
+
+"Unlock Private Key" = "Unlock Private Key";
+
+"Unlock" = "Unlock";
+
+"Unlocking Private Key" = "Unlocking Private Key";
+
+"The passphrase is used only to unlock this import. The unlocked key stays in Keychain or this session." = "The passphrase is used only to unlock this import. The unlocked key stays in Keychain or this session.";
+
+"This encrypted key uses an unsupported encryption profile. Use PBKDF2 and AES-CBC with an ECDSA PKCS#8 key." = "This encrypted key uses an unsupported encryption profile. Use PBKDF2 and AES-CBC with an ECDSA PKCS#8 key.";
+
+"Could not unlock the private key. Check the passphrase and key file." = "Could not unlock the private key. Check the passphrase and key file.";
+
+"Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Saved keys stay in Keychain; temporary keys remain in this session." = "Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Saved keys stay in Keychain; temporary keys remain in this session.";
+
+"Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain." = "Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain.";
+
 "Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app." = "Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app.";
 
 "This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app." = "This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app.";
-"Dismiss" = "Dismiss";
 
 "Close this notice and continue the connection." = "Close this notice and continue the connection.";
 
-"Automatic Compression" = "Automatic Compression";
+"Cancel transfer" = "Cancel transfer";
 
-"Adjusts compression for active transfers without reconnecting. Servers may ignore quality hints. Native Apple sessions use their own display configuration." = "Adjusts compression for active transfers without reconnecting. Servers may ignore quality hints. Native Apple sessions use their own display configuration.";
+"Transfer complete" = "Transfer complete";
+
+"Transfer stopped. Check the remote folder for partial files." = "Transfer stopped. Check the remote folder for partial files.";
+
+"Transfer stopped" = "Transfer stopped";
+
+"Transfer paused" = "Transfer paused";
+
+"Transferring" = "Transferring";
+
+"File transfer failed" = "File transfer failed";
+
+"Send File or Folder" = "Send File or Folder";
+
+"Choose File or Folder" = "Choose File or Folder";
+
+"Remote Folder" = "Remote Folder";
+
+"Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files." = "Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files.";
+
+"Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported." = "Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported.";
+
+"Preparing Files…" = "Preparing Files…";
+
+"Could not open the file picker." = "Could not open the file picker.";
+
+"Enter an absolute remote folder or a path starting with ~/." = "Enter an absolute remote folder or a path starting with ~/.";
+
+"Cannot start file transfer on this connection." = "Cannot start file transfer on this connection.";
+
+"Could not prepare the selected file or folder. Check access and transfer limits." = "Could not prepare the selected file or folder. Check access and transfer limits.";
+
+"Download failed. Check the destination folder for saved files." = "Download failed. Check the destination folder for saved files.";
+
+"Transfer stopped. Check the destination folder for saved files." = "Transfer stopped. Check the destination folder for saved files.";
+
+"Receive File or Folder" = "Receive File or Folder";
+
+"Remote File or Folder" = "Remote File or Folder";
+
+"Choose Save Folder" = "Choose Save Folder";
+
+"Choose an existing local folder. Existing files are never replaced; choose another folder if a name already exists." = "Choose an existing local folder. Existing files are never replaced; choose another folder if a name already exists.";
+
+"Receive" = "Receive";
+
+"Enter an absolute remote path or a path starting with ~/." = "Enter an absolute remote path or a path starting with ~/.";
+
+"Could not start download. Check the remote path and destination access." = "Could not start download. Check the remote path and destination access.";
+
+"Not enough space in the save folder. Free space or choose another folder." = "Not enough space in the save folder. Free space or choose another folder.";
+
+"Not enough temporary storage to prepare this upload. Free space and try again." = "Not enough temporary storage to prepare this upload. Free space and try again.";
+
+"Drop a file or folder to choose where to send it" = "Drop a file or folder to choose where to send it";
+
+"Show in Finder" = "Show in Finder";
+
+"Share" = "Share";
+
+"Connection lost. Retrying automatically…" = "Connection lost. Retrying automatically…";
+
+"Check for Updates…" = "Check for Updates…";
+
+"About AetherScreens" = "About AetherScreens";
+
+"Privacy Policy" = "Privacy Policy";
+
+"Support" = "Support";
+
+"Protocol & System" = "Protocol & System";
+
+"Protocol" = "Protocol";
+
+"macOS / VNC (RFB)" = "macOS / VNC (RFB)";
+
+"Windows Remote Desktop (RDP)" = "Windows Remote Desktop (RDP)";
+
+"Windows Authentication" = "Windows Authentication";
+
+"Windows Username" = "Windows Username";
+
+"Enter your Windows account username and password." = "Enter your Windows account username and password.";
+
+"iCloud Sync" = "iCloud Sync";
+
+"iCloud Sync is turned off" = "iCloud Sync is turned off";
+
+"iCloud Sync is ready" = "iCloud Sync is ready";
+
+"Syncing with iCloud…" = "Syncing with iCloud…";
+
+"Last synced: %@" = "Last synced: %@";
+
+"Sync failed: %@" = "Sync failed: %@";
+
+"Sync failed to complete." = "Sync failed to complete.";
+
+"Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain." = "Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain.";
+
+"Sync Now" = "Sync Now";
+
+"Common Locations" = "Common Locations";
+
+"Quick Path Prefixes" = "Quick Path Prefixes";
+
+"Recent" = "Recent";
+
+"Desktop" = "Desktop";
+
+"Downloads" = "Downloads";
+
+"Documents" = "Documents";
+
+"Home Folder" = "Home Folder";
+
+"Applications" = "Applications";
+
+"Click to choose another file" = "Click to choose another file";
+
+"Drop files here or click to browse" = "Drop files here or click to browse";
+
+"Select destination on local device" = "Select destination on local device";
+
+"AetherScreens is Locked" = "AetherScreens is Locked";
+
+"Authenticate to access your remote computers and saved credentials." = "Authenticate to access your remote computers and saved credentials.";
+
+"Unlock" = "Unlock";
+
+"Unlock AetherScreens to access your remote computers" = "Unlock AetherScreens to access your remote computers";
+
+"Security & Privacy" = "Security & Privacy";
+
+"App Lock" = "App Lock";
+
+"Require Lock" = "Require Lock";
+
+"Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials." = "Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials.";
+
+"Immediately" = "Immediately";
+
+"After 1 minute" = "After 1 minute";
+
+"After 5 minutes" = "After 5 minutes";
+
+"After 15 minutes" = "After 15 minutes";
+
+"Never" = "Never";
+
+"Passcode" = "Passcode";
+
+"Touch ID" = "Touch ID";
+
+"Face ID" = "Face ID";
+
+"Optic ID" = "Optic ID";
+
+"Favorites" = "Favorites";
+
+"Add to Favorites" = "Add to Favorites";
+
+"Remove from Favorites" = "Remove from Favorites";
+
+"Organization" = "Organization";
+
+"Favorite" = "Favorite";
+
+"Tags (comma separated, e.g. Home, Work)" = "Tags (comma separated, e.g. Home, Work)";
+
+"Automatic Clipboard Sync" = "Automatic Clipboard Sync";
+
+"Auto Clipboard Sync" = "Auto Clipboard Sync";
+
+"Automatically synchronize the clipboard between your local device and the remote computer during active sessions." = "Automatically synchronize the clipboard between your local device and the remote computer during active sessions.";
+
+"Quick Actions" = "Quick Actions";
+
+"App Exposé" = "App Exposé";
+
+"Hot Corners" = "Hot Corners";
+
+"Type Clipboard as Keystrokes" = "Type Clipboard as Keystrokes";
+
+"Type or paste text to send to Windows..." = "Type or paste text to send to Windows...";
+

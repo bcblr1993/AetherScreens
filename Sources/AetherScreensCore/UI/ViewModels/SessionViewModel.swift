@@ -23,6 +23,20 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     var fileUploadPreparationTask: Task<Void, Never>?
     var fileUploadPreparationID = UUID()
     public let client: RFBClient
+    public let rdpClient: RDPClient?
+    public var isRDP: Bool { device.remoteProtocol == .rdp }
+    public var framebuffer: Framebuffer {
+        if isRDP, let rdp = rdpClient {
+            return rdp.framebuffer
+        }
+        return client.framebuffer
+    }
+    public var remoteUsername: String? {
+        if isRDP {
+            return rdpClient?.username ?? device.username
+        }
+        return client.username
+    }
     public let trackpadEngine: TrackpadEngine
     public let curtainManager: CurtainModeManager
     public let multiDisplayManager: MultiDisplayManager
@@ -64,6 +78,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             trackpadEngine.releaseAllButtons()
             if isObserveOnly { stopFileTransfers(); isKeyboardVisible = false }
             client.setInputEnabled(!isObserveOnly && isForegroundSession)
+            rdpClient?.setInputEnabled(!isObserveOnly && isForegroundSession)
             inputGeneration = UUID()
         }
     }
@@ -90,6 +105,20 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public var isTextInputBarVisible: Bool = false
     @Published public var textInputBuffer: String = ""
     @Published public var clipboardTransferNotice: String?
+
+    // Automatic Bidirectional Clipboard Sync
+    nonisolated public static let autoClipboardSyncKey = "aetherscreens.auto-clipboard-sync"
+    @Published public var isAutoClipboardSyncEnabled: Bool = UserDefaults.standard.object(forKey: SessionViewModel.autoClipboardSyncKey) as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(isAutoClipboardSyncEnabled, forKey: SessionViewModel.autoClipboardSyncKey)
+            if isAutoClipboardSyncEnabled {
+                syncLocalClipboardIfNeeded()
+            }
+        }
+    }
+    public private(set) var lastSentClipboardText: String?
+    public private(set) var lastReceivedClipboardText: String?
+    private var clipboardPollingTask: Task<Void, Never>?
 
     // 3-State Modifiers (Screens Sticky Keys)
     public enum ModifierState: Equatable, Sendable {
@@ -133,12 +162,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             }
             pointerButtonsForModifiers = []
             client.setPointerInputEnabled(!isPanningViewport)
+            rdpClient?.setPointerInputEnabled(!isPanningViewport)
         }
     }
     @Published public private(set) var inputGeneration = UUID() {
         didSet {
             pointerButtonsForModifiers = []
             client.cancelPendingWheelEvents()
+            rdpClient?.cancelPendingWheelEvents()
             resetPendingModifierWheels()
             releaseToolbarHeldKeys()
         }
@@ -223,13 +254,23 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             requiresLoopbackForwarding: device.ssh != nil
         )
         self.client = rfb
+        if device.remoteProtocol == .rdp {
+            self.rdpClient = RDPClient(
+                host: device.host,
+                port: device.port,
+                username: device.username,
+                password: password
+            )
+        } else {
+            self.rdpClient = nil
+        }
         self.trackpadEngine = TrackpadEngine(remoteWidth: 1920, remoteHeight: 1080)
         self.curtainManager = CurtainModeManager()
         self.multiDisplayManager = MultiDisplayManager()
         self.metrics = PerformanceMetrics()
 
         let renderer = MetalScreenRenderer(metrics: self.metrics)
-        renderer?.framebuffer = rfb.framebuffer
+        renderer?.framebuffer = device.remoteProtocol == .rdp ? (self.rdpClient?.framebuffer ?? rfb.framebuffer) : rfb.framebuffer
         self.metalRenderer = renderer
 
         setupBindings()
@@ -457,6 +498,113 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 guard let self, self.callbackGeneration.matches(generation),
                       self.foregroundGeneration.matches(foreground), self.isForegroundSession,
                       self.client.state == .connected else { return }
+                self.lastReceivedClipboardText = text
+                self.clipboardWriter(text)
+            }
+        }
+
+        if let rdpClient {
+            setupRDPBindings(rdpClient)
+        }
+    }
+
+    private func setupRDPBindings(_ rdp: RDPClient) {
+        rdp.onStateChanged = { [weak self] state in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation) else { return }
+                switch state {
+                case .disconnected: self.sessionState = .disconnected
+                case .connecting: self.sessionState = .connecting
+                case .authenticating: self.sessionState = .authenticating
+                case .connected: self.sessionState = .connected
+                case .failed(let err): self.sessionState = .failed(err)
+                }
+                if self.sessionState == .connected {
+                    self.metalRenderer?.setUploadBufferCachingEnabled(true)
+                    if !self.isTemporary {
+                        self.deviceStore.recordConnection(for: self.device)
+                    }
+                }
+                let stopped: Bool
+                switch state {
+                case .disconnected, .failed: stopped = true
+                default: stopped = false
+                }
+                if stopped {
+                    self.stopFileTransfers()
+                    self.cursorUpdates.send(nil)
+                    self.metalRenderer?.setUploadBufferCachingEnabled(false)
+                    self.resetPendingModifierWheels()
+                    self.metrics.reset()
+                    self.releaseToolbarHeldKeys()
+                    self.releaseAllModifiers()
+                    self.trackpadEngine.releaseAllButtons()
+                    self.inputGeneration = UUID()
+                    self.scheduleAutomaticReconnect()
+                }
+            }
+        }
+
+        rdp.onFrameUpdated = { [weak self] in
+            guard let self else { return }
+            self.metalRenderer?.notifyFrameUpdated()
+            guard let generation = self.callbackGeneration.scheduleFrame(gate: self.frameUpdateGate) else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let updates = self.frameUpdateGate.consume(generation: generation)
+                guard updates > 0, self.callbackGeneration.matches(generation) else { return }
+                self.frameUpdates.send()
+                if !self.hasReceivedFirstFrame {
+                    self.hasReceivedFirstFrame = true
+                    self.reconnectPolicy.receivedDesktop()
+                    self.cancelAutomaticReconnect()
+                }
+                if self.downloadProgress != nil { self.downloadProgress = nil }
+                if self.metalRenderer == nil {
+                    self.fallbackFramePipeline.submit(framebuffer: self.framebuffer, generation: generation) { [weak self] image, expected in
+                        MainActor.assumeIsolated {
+                            guard let self, self.callbackGeneration.matches(expected) else { return }
+                            self.currentImage = image
+                        }
+                    }
+                }
+
+                let w = self.framebuffer.width
+                let h = self.framebuffer.height
+                let size = CGSize(width: w, height: h)
+                if self.lastFramebufferSize != size {
+                    self.lastFramebufferSize = size
+                    if self.activeCropRect == nil {
+                        self.trackpadEngine.remoteWidth = CGFloat(w)
+                        self.trackpadEngine.remoteHeight = CGFloat(h)
+                        self.trackpadEngine.resetCursor()
+                    }
+                    self.multiDisplayManager.updateFromFramebuffer(width: w, height: h)
+                }
+
+                if !self.isTemporary && self.thumbnailCadence.shouldCapture(at: ProcessInfo.processInfo.systemUptime) {
+                    let fb = self.framebuffer
+                    let deviceId = self.device.id
+                    self.thumbnailSnapshots.schedule {
+                        if let image = fb.makeCGImage() {
+                            ThumbnailStore.shared.saveThumbnail(image, for: deviceId)
+                        }
+                    }
+                }
+            }
+        }
+
+        rdp.onClipboardReceived = { [weak self] text in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            let foreground = self.foregroundGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation),
+                      self.foregroundGeneration.matches(foreground), self.isForegroundSession,
+                      self.sessionState == .connected else { return }
+                self.lastReceivedClipboardText = text
                 self.clipboardWriter(text)
             }
         }
@@ -465,13 +613,17 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     private func applyDisplaySelection(resetInput: Bool = false) {
         let display = multiDisplayManager.currentDisplay
         let crop = display.flatMap { $0.id > 0 ? $0.bounds : nil }
-        let width = crop?.width ?? CGFloat(client.framebuffer.width)
-        let height = crop?.height ?? CGFloat(client.framebuffer.height)
+        let width = crop?.width ?? CGFloat(framebuffer.width)
+        let height = crop?.height ?? CGFloat(framebuffer.height)
         let geometryChanged = crop != activeCropRect || width != trackpadEngine.remoteWidth || height != trackpadEngine.remoteHeight
         guard geometryChanged || resetInput else { return }
         // Release before local coordinates can be translated into a new display.
         client.setPointerInputEnabled(false)
-        defer { client.setPointerInputEnabled(!isPanningViewport) }
+        rdpClient?.setPointerInputEnabled(false)
+        defer {
+            client.setPointerInputEnabled(!isPanningViewport)
+            rdpClient?.setPointerInputEnabled(!isPanningViewport)
+        }
         trackpadEngine.releaseAllButtons()
         inputGeneration = UUID()
         guard geometryChanged else { return }
@@ -481,7 +633,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         zoomScale = 1
         viewOffset = .zero
         isPanningViewport = false
-        if client.state == .connected { trackpadEngine.resetCursor() }
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        if isConnected { trackpadEngine.resetCursor() }
     }
 
     /// Keep the connection and viewport, but only the selected session may control input or clipboard.
@@ -497,6 +650,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         adaptiveDisplayQuality.reset()
         if foreground {
             client.setCompressionQuality(jpegQuality: automaticDisplayQuality ? adaptiveDisplayQuality.level.rawValue : nil)
+            syncLocalClipboardIfNeeded()
         }
         if !foreground {
             cancelAutomaticReconnect()
@@ -505,12 +659,24 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             isTextInputBarVisible = false
         }
         client.setInputEnabled(foreground && !isObserveOnly)
+        rdpClient?.setInputEnabled(foreground && !isObserveOnly)
         if foreground { scheduleAutomaticReconnect() }
     }
 
     /// Submit entered password to active RFB handshake
     public func submitPassword(_ pwd: String, rememberInKeychain: Bool, accountUsername: String? = nil) {
         passwordSaveNotice = nil
+        if isRDP {
+            rdpClient?.password = pwd
+            if rememberInKeychain && canRememberPassword {
+                if !deviceStore.updatePassword(pwd, for: device) {
+                    passwordSaveNotice = "This connection can continue, but its password was not saved to Keychain. Re-enter it after restarting the app."
+                }
+            }
+            isPromptingPassword = false
+            reconnectSession()
+            return
+        }
         if let accountContinuation = macAccountContinuation {
             guard let account = accountUsername?.trimmingCharacters(in: .whitespacesAndNewlines), !account.isEmpty else { return }
             macAccountContinuation = nil
@@ -591,6 +757,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
         isDisconnectRequested = false
         thumbnailCadence = ThumbnailSnapshotCadence()
+        startClipboardAutoSyncLoop()
         client.setInputEnabled(isForegroundSession && !isObserveOnly)
         resetPendingModifierWheels()
         pointerButtonsForModifiers = []
@@ -600,9 +767,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         hasReceivedFirstFrame = false
         downloadProgress = nil
         lastFramebufferSize = .zero
-        multiDisplayManager.reset(width: client.framebuffer.width, height: client.framebuffer.height)
-        if let settings = device.ssh { startSSH(settings) }
-        else { client.connect() }
+        multiDisplayManager.reset(width: framebuffer.width, height: framebuffer.height)
+        if isRDP {
+            rdpClient?.setInputEnabled(isForegroundSession && !isObserveOnly)
+            rdpClient?.connect()
+        } else if let settings = device.ssh {
+            startSSH(settings)
+        } else {
+            client.connect()
+        }
     }
 
     /// Reauthenticate without leaving the viewport; also clear held local input.
@@ -614,7 +787,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         inputGeneration = UUID()
         if curtainManager.isCurtainActive { curtainManager.toggleCurtain() }
         stopFileTransfers()
-        client.disconnect()
+        if isRDP { rdpClient?.disconnect() }
+        else { client.disconnect() }
         startSession()
     }
 
@@ -649,6 +823,11 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public func requestDisconnect() {
         guard !isDisconnectRequested else { return }
         isDisconnectRequested = true
+        if isRDP {
+            endSession()
+            rdpClient?.disconnect()
+            return
+        }
         let action = !isTemporary && isForegroundSession && !isObserveOnly
             ? DisconnectActionStore.shared.load(for: device.id, type: device.deviceType) : .none
         // Detach before local teardown so disappearance cannot prematurely
@@ -666,6 +845,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Clean up local session state without triggering configured remote actions.
     public func endSession() {
         sessionLifecycleActive = false
+        clipboardPollingTask?.cancel()
+        clipboardPollingTask = nil
         reconnectPolicy.stop()
         cancelAutomaticReconnect()
         metalRenderer?.setUploadBufferCachingEnabled(false)
@@ -677,7 +858,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         releaseToolbarHeldKeys()
         releaseAllModifiers()
         trackpadEngine.releaseAllButtons()
-        let framebuffer = client.framebuffer
+        let framebuffer = self.framebuffer
         let deviceId = device.id
         // A failed/unopened attempt may still have an allocated blank framebuffer.
         // Preserve the last successful preview until this attempt received a frame.
@@ -854,18 +1035,29 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     // MARK: - Modifiers & Sticky Keys (Screens 3-State Logic)
 
+    private func sendRawKeyEvent(down: Bool, keySym: UInt32) {
+        if down && (keySym == MacKeyMap.v || keySym == 118 || keySym == 86) && (isCmdActive || isCtrlActive) {
+            syncLocalClipboardIfNeeded()
+        }
+        if isRDP {
+            rdpClient?.sendKeyEvent(down: down, keySym: keySym)
+        } else {
+            client.sendKeyEvent(down: down, keySym: keySym)
+        }
+    }
+
     public func cycleCmd() {
         guard !isObserveOnly else { return }
         switch cmdState {
         case .inactive:
             cmdState = .activeOnce
-            client.sendKeyEvent(down: true, keySym: MacKeyMap.commandLeft)
+            sendRawKeyEvent(down: true, keySym: MacKeyMap.commandLeft)
         case .activeOnce:
             cmdState = .locked
             // Already down
         case .locked:
             cmdState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.commandLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.commandLeft)
         }
     }
 
@@ -874,12 +1066,12 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         switch optState {
         case .inactive:
             optState = .activeOnce
-            client.sendKeyEvent(down: true, keySym: MacKeyMap.optionLeft)
+            sendRawKeyEvent(down: true, keySym: MacKeyMap.optionLeft)
         case .activeOnce:
             optState = .locked
         case .locked:
             optState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.optionLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.optionLeft)
         }
     }
 
@@ -888,12 +1080,12 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         switch ctrlState {
         case .inactive:
             ctrlState = .activeOnce
-            client.sendKeyEvent(down: true, keySym: MacKeyMap.controlLeft)
+            sendRawKeyEvent(down: true, keySym: MacKeyMap.controlLeft)
         case .activeOnce:
             ctrlState = .locked
         case .locked:
             ctrlState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
         }
     }
 
@@ -902,12 +1094,12 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         switch shiftState {
         case .inactive:
             shiftState = .activeOnce
-            client.sendKeyEvent(down: true, keySym: MacKeyMap.shiftLeft)
+            sendRawKeyEvent(down: true, keySym: MacKeyMap.shiftLeft)
         case .activeOnce:
             shiftState = .locked
         case .locked:
             shiftState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.shiftLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.shiftLeft)
         }
     }
 
@@ -922,19 +1114,19 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         guard pendingModifierWheels == 0 else { return }
         if cmdState == .activeOnce && (snapshot == nil || snapshot?.cmd == cmdGeneration) {
             cmdState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.commandLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.commandLeft)
         }
         if optState == .activeOnce && (snapshot == nil || snapshot?.opt == optGeneration) {
             optState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.optionLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.optionLeft)
         }
         if ctrlState == .activeOnce && (snapshot == nil || snapshot?.ctrl == ctrlGeneration) {
             ctrlState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
         }
         if shiftState == .activeOnce && (snapshot == nil || snapshot?.shift == shiftGeneration) {
             shiftState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.shiftLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.shiftLeft)
         }
     }
 
@@ -942,34 +1134,35 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public func releaseAllModifiers() {
         if cmdState != .inactive {
             cmdState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.commandLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.commandLeft)
         }
         if optState != .inactive {
             optState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.optionLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.optionLeft)
         }
         if ctrlState != .inactive {
             ctrlState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
         }
         if shiftState != .inactive {
             shiftState = .inactive
-            client.sendKeyEvent(down: false, keySym: MacKeyMap.shiftLeft)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.shiftLeft)
         }
     }
 
     public var canSendRemoteCommands: Bool {
-        isForegroundSession && !isObserveOnly && client.state == .connected
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        return isForegroundSession && !isObserveOnly && isConnected
     }
 
     /// Send a single key tap (down + up)
     public func sendKeyTap(_ keySym: UInt32) {
         guard canSendRemoteCommands else { return }
-        client.sendKeyEvent(down: true, keySym: keySym)
+        sendRawKeyEvent(down: true, keySym: keySym)
         let generation = inputGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             guard let self, self.inputGeneration == generation else { return }
-            self.client.sendKeyEvent(down: false, keySym: keySym)
+            self.sendRawKeyEvent(down: false, keySym: keySym)
             self.releaseActiveOnceModifiers()
         }
     }
@@ -979,18 +1172,18 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         guard isForegroundSession, !isObserveOnly, isKeyboardVisible,
               sessionState == .connected || client.state == .connected else { return }
         toolbarHeldKeys.insert(keySym)
-        client.sendKeyEvent(down: true, keySym: keySym)
+        sendRawKeyEvent(down: true, keySym: keySym)
     }
 
     public func releaseToolbarKey(_ keySym: UInt32) {
         guard toolbarHeldKeys.remove(keySym) != nil else { return }
-        client.sendKeyEvent(down: false, keySym: keySym)
+        sendRawKeyEvent(down: false, keySym: keySym)
         if toolbarHeldKeys.isEmpty { releaseActiveOnceModifiers() }
     }
 
     private func releaseToolbarHeldKeys() {
         guard !toolbarHeldKeys.isEmpty else { return }
-        for key in toolbarHeldKeys.sorted() { client.sendKeyEvent(down: false, keySym: key) }
+        for key in toolbarHeldKeys.sorted() { sendRawKeyEvent(down: false, keySym: key) }
         toolbarHeldKeys.removeAll()
         releaseActiveOnceModifiers()
     }
@@ -1005,19 +1198,29 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Send arbitrary text string cleanly to remote Mac
     public func sendTextString(_ text: String) {
         guard canSendRemoteCommands else { return }
-        client.sendText(text)
+        if isRDP {
+            rdpClient?.sendText(text)
+        } else {
+            client.sendText(text)
+        }
         releaseActiveOnceModifiers()
     }
 
     /// Editing commands use the remote clipboard and preserve an already locked Cmd.
     public func sendCommandShortcut(_ character: Character) {
-        guard !isObserveOnly, isForegroundSession, client.state == .connected,
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        guard !isObserveOnly, isForegroundSession, isConnected,
               let key = MacKeyMap.keySym(for: character) else { return }
-        let introducedCommand = !isCmdActive
-        if introducedCommand { client.sendKeyEvent(down: true, keySym: MacKeyMap.commandLeft) }
-        client.sendKeyEvent(down: true, keySym: key)
-        client.sendKeyEvent(down: false, keySym: key)
-        if introducedCommand { client.sendKeyEvent(down: false, keySym: MacKeyMap.commandLeft) }
+        if character == "v" || character == "V" {
+            syncLocalClipboardIfNeeded()
+        }
+        let modifierKey = isRDP ? MacKeyMap.controlLeft : MacKeyMap.commandLeft
+        let isModifierActive = isRDP ? isCtrlActive : isCmdActive
+        let introducedModifier = !isModifierActive
+        if introducedModifier { sendRawKeyEvent(down: true, keySym: modifierKey) }
+        sendRawKeyEvent(down: true, keySym: key)
+        sendRawKeyEvent(down: false, keySym: key)
+        if introducedModifier { sendRawKeyEvent(down: false, keySym: modifierKey) }
         releaseActiveOnceModifiers()
     }
 
@@ -1026,9 +1229,58 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         guard canSendRemoteCommands else { return }
         let sequence = shortcut.keySequence
         for item in sequence {
-            client.sendKeyEvent(down: item.down, keySym: item.key)
+            sendRawKeyEvent(down: item.down, keySym: item.key)
         }
         releaseActiveOnceModifiers()
+    }
+
+    /// Trigger a remote hot corner immediately during the active session.
+    public func triggerHotCorner(_ corner: DisconnectAction) {
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        guard !isObserveOnly, isForegroundSession, isConnected else { return }
+        let currentWidth = isRDP ? (rdpClient?.framebuffer.width ?? 0) : client.framebuffer.width
+        let currentHeight = isRDP ? (rdpClient?.framebuffer.height ?? 0) : client.framebuffer.height
+        guard currentWidth > 0, currentHeight > 0 else { return }
+        let right = UInt16(clamping: currentWidth - 1)
+        let bottom = UInt16(clamping: currentHeight - 1)
+        let targetX: UInt16
+        let targetY: UInt16
+        switch corner {
+        case .topLeft: targetX = 0; targetY = 0
+        case .topRight: targetX = right; targetY = 0
+        case .bottomLeft: targetX = 0; targetY = bottom
+        case .bottomRight: targetX = right; targetY = bottom
+        default: return
+        }
+        if isRDP {
+            rdpClient?.sendPointerEvent(buttonMask: [], x: targetX, y: targetY)
+        } else {
+            client.sendPointerEvent(buttonMask: [], x: targetX, y: targetY)
+        }
+    }
+
+    /// Execute a system action (lock, log out, hot corners, or Ctrl-Alt-Delete) during the active session.
+    public func triggerSystemAction(_ action: DisconnectAction) {
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        guard !isObserveOnly, isForegroundSession, isConnected else { return }
+        switch action {
+        case .none:
+            break
+        case .lockScreen:
+            executeShortcut(.lockScreen)
+        case .logOut:
+            let keys: [UInt32] = [MacKeyMap.optionLeft, MacKeyMap.shiftLeft, MacKeyMap.commandLeft, 113]
+            for key in keys { sendRawKeyEvent(down: true, keySym: key) }
+            for key in keys.reversed() { sendRawKeyEvent(down: false, keySym: key) }
+            releaseActiveOnceModifiers()
+        case .controlAltDelete:
+            let keys: [UInt32] = [MacKeyMap.controlLeft, MacKeyMap.optionLeft, MacKeyMap.delete]
+            for key in keys { sendRawKeyEvent(down: true, keySym: key) }
+            for key in keys.reversed() { sendRawKeyEvent(down: false, keySym: key) }
+            releaseActiveOnceModifiers()
+        case .topLeft, .topRight, .bottomLeft, .bottomRight:
+            triggerHotCorner(action)
+        }
     }
 
     private var shouldReduceMotion: Bool {
@@ -1082,7 +1334,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Explicit clipboard transfer, distinct from inserting text as key events.
     public func sendLocalClipboardToRemote() {
-        guard !isObserveOnly, isForegroundSession, client.state == .connected else {
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        guard !isObserveOnly, isForegroundSession, isConnected else {
             clipboardTransferNotice = "Clipboard transfer requires an active control session."
             return
         }
@@ -1090,9 +1343,51 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             clipboardTransferNotice = "The local clipboard contains no plain text."
             return
         }
+        lastSentClipboardText = text
+        if isRDP {
+            guard let rdp = rdpClient else { return }
+            clipboardTransferNotice = rdp.sendCutText(text) != nil
+                ? "Clipboard transfer requested. Paste on the remote computer to check."
+                : "Clipboard transfer is unavailable for this text. Use Paste Text instead."
+            return
+        }
         clipboardTransferNotice = client.sendCutText(text)
             ? "Clipboard transfer requested. Paste on the remote computer to check."
             : "Clipboard transfer is unavailable for this text. Use Paste Text instead."
+    }
+
+    /// Synchronize local clipboard to remote host automatically if changed.
+    public func syncLocalClipboardIfNeeded() {
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        guard isAutoClipboardSyncEnabled, !isObserveOnly, isForegroundSession, isConnected else { return }
+        guard let text = clipboardReader(), !text.isEmpty else { return }
+        let normalizedText = text.replacingOccurrences(of: "\r\n", with: "\n")
+        if let lastReceived = lastReceivedClipboardText?.replacingOccurrences(of: "\r\n", with: "\n"),
+           normalizedText == lastReceived {
+            return
+        }
+        if let lastSent = lastSentClipboardText?.replacingOccurrences(of: "\r\n", with: "\n"),
+           normalizedText == lastSent {
+            return
+        }
+
+        lastSentClipboardText = text
+        if isRDP {
+            _ = rdpClient?.sendCutText(text)
+        } else {
+            _ = client.sendCutText(text)
+        }
+    }
+
+    private func startClipboardAutoSyncLoop() {
+        clipboardPollingTask?.cancel()
+        clipboardPollingTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                guard let self, !Task.isCancelled else { break }
+                self.syncLocalClipboardIfNeeded()
+            }
+        }
     }
 
     /// Trigger tactile haptic feedback on iOS devices
@@ -1110,7 +1405,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Direct pointer event for macOS native mouse tracking or iPad trackpad
     public func sendNativePointer(buttonMask: RFBConstants.ButtonMask, x: UInt16, y: UInt16) {
-        guard !isObserveOnly, !isPanningViewport, isForegroundSession, client.state == .connected else {
+        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        guard !isObserveOnly, !isPanningViewport, isForegroundSession, isConnected else {
             pointerButtonsForModifiers = []
             return
         }
@@ -1120,10 +1416,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         let (tx, ty) = multiDisplayManager.translateCoordinates(
             x: CGFloat(x),
             y: CGFloat(y),
-            remoteTotalWidth: CGFloat(client.framebuffer.width),
-            remoteTotalHeight: CGFloat(client.framebuffer.height)
+            remoteTotalWidth: CGFloat(framebuffer.width),
+            remoteTotalHeight: CGFloat(framebuffer.height)
         )
         pointerUpdates.send(CGPoint(x: Int(tx), y: Int(ty)))
+        if isRDP {
+            rdpClient?.sendPointerEvent(buttonMask: buttonMask, x: tx, y: ty)
+            if completedClickOrDrag { releaseActiveOnceModifiers() }
+            return
+        }
         let snapshot = onceModifierSnapshot
         if buttonMask.rawValue & 0x78 != 0, !snapshot.isEmpty {
             let generation = inputGeneration
@@ -1148,7 +1449,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Direct key event for macOS native keyboard passthrough
     public func sendNativeKey(down: Bool, keySym: UInt32) {
-        client.sendKeyEvent(down: down, keySym: keySym)
+        sendRawKeyEvent(down: down, keySym: keySym)
     }
 }
 

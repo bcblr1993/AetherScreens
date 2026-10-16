@@ -17,3 +17,8 @@
 
 # Local signing identity (not committed)
 scripts/signing.local.env
+
+# Python
+__pycache__/
+*.pyc
+

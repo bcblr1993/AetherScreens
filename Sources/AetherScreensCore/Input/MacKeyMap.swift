@@ -20,6 +20,7 @@ public enum MacKeyMap {
     public static let escape: UInt32      = 0xFF1B
     public static let delete: UInt32      = 0xFFFF
     public static let space: UInt32       = 0x0020
+    public static let v: UInt32           = 0x0076
 
     // MARK: - Directional Keys
     public static let arrowLeft: UInt32   = 0xFF51

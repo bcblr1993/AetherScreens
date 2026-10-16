@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 /// Sidebar navigation category for macOS and iPadOS
 public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
     case all = "All Computers"
+    case favorites = "Favorites"
     case nearby = "Nearby (Bonjour)"
     case tailscale = "Tailscale Nodes"
     case mac = "Macs"
@@ -13,6 +14,7 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
     public var icon: String {
         switch self {
         case .all: return "display.2"
+        case .favorites: return "star.fill"
         case .nearby: return "dot.radiowaves.left.and.right"
         case .tailscale: return "point.3.connected.trianglepath.dotted"
         case .mac: return "apple.logo"
@@ -24,7 +26,9 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
 /// Fully optimized for both iOS (iPhone & iPad) and macOS (Apple Silicon Mac).
 public struct DeviceListView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
+    @ObservedObject private var appLockService = AppLockService.shared
     @StateObject private var viewModel = DeviceListViewModel()
     @State private var selectedCategory: DeviceCategory = .all
     @State private var showingAddSheet = false
@@ -118,6 +122,25 @@ public struct DeviceListView: View {
                 }
             }
         }
+        .onAppear {
+            if viewModel.syncService.isEnabled {
+                Task { await viewModel.syncService.synchronize() }
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                appLockService.handleAppDidEnterBackground()
+            } else if newPhase == .active {
+                appLockService.handleAppWillEnterForeground()
+            }
+        }
+        .overlay {
+            if appLockService.isLockEnabled && appLockService.isLocked {
+                AppLockOverlayView(service: appLockService)
+                    .transition(.opacity)
+                    .zIndex(999)
+            }
+        }
     }
 
     // MARK: - Sidebar (macOS)
@@ -128,7 +151,15 @@ public struct DeviceListView: View {
             HStack {
                 Label(AppLocalization.string(category.rawValue), systemImage: category.icon)
                 Spacer()
-                if category == .nearby && !viewModel.filteredNearbyMacs.isEmpty {
+                if category == .favorites {
+                    let favCount = viewModel.devices.filter(\.isFavorite).count
+                    if favCount > 0 {
+                        Text("\(favCount)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 6)
+                    }
+                } else if category == .nearby && !viewModel.filteredNearbyMacs.isEmpty {
                     Text("\(viewModel.filteredNearbyMacs.count)")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.white)
@@ -253,6 +284,15 @@ public struct DeviceListView: View {
                                         Label(AppLocalization.string("Open in New Window"), systemImage: "macwindow.badge.plus")
                                     }
                                     #endif
+
+                                    Button {
+                                        viewModel.toggleFavorite(for: device)
+                                    } label: {
+                                        Label(
+                                            AppLocalization.string(device.isFavorite ? "Remove from Favorites" : "Add to Favorites"),
+                                            systemImage: device.isFavorite ? "star.slash" : "star"
+                                        )
+                                    }
 
                                     Button {
                                         editingDevice = device
@@ -493,6 +533,8 @@ public struct DeviceListView: View {
         switch selectedCategory {
         case .all:
             return base
+        case .favorites:
+            return base.filter { $0.isFavorite }
         case .nearby:
             return []
         case .tailscale:
@@ -629,9 +671,12 @@ public struct DeviceListView: View {
     }
 }
 
-/// Settings sheet for configuring Tailscale API credentials
+public typealias SettingsSheet = TailscaleSettingsSheet
+
+/// Settings sheet for configuring Tailscale API credentials, iCloud Sync, and Security Lock
 public struct TailscaleSettingsSheet: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
+    @ObservedObject private var appLockService = AppLockService.shared
     @ObservedObject public var viewModel: DeviceListViewModel
     @Environment(\.dismiss) private var dismiss
 
@@ -646,6 +691,77 @@ public struct TailscaleSettingsSheet: View {
                     }
                     .accessibilityIdentifier("app-language")
                 }
+
+                Section(
+                    header: Text(AppLocalization.string("iCloud Sync")),
+                    footer: Text(AppLocalization.string("Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain."))
+                ) {
+                    Toggle(AppLocalization.string("iCloud Sync"), isOn: Binding(
+                        get: { viewModel.syncService.isEnabled },
+                        set: { enabled in
+                            Task { await viewModel.syncService.setEnabled(enabled) }
+                        }
+                    ))
+                    .accessibilityIdentifier("icloud-sync-toggle")
+
+                    if viewModel.syncService.isEnabled {
+                        HStack {
+                            Text(viewModel.syncService.status.localizedDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("icloud-sync-status")
+
+                            Spacer()
+
+                            if viewModel.syncService.status == .syncing {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Button(AppLocalization.string("Sync Now")) {
+                                    Task { await viewModel.syncService.synchronize() }
+                                }
+                                .font(.caption)
+                                .buttonStyle(.borderless)
+                                .accessibilityIdentifier("icloud-sync-now")
+                            }
+                        }
+                    }
+                }
+
+                Section(
+                    header: Text(AppLocalization.string("Security & Privacy")),
+                    footer: Text(AppLocalization.string("Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials."))
+                ) {
+                    Toggle(
+                        AppLocalization.string("App Lock"),
+                        isOn: $appLockService.isLockEnabled
+                    )
+                    .accessibilityIdentifier("app-lock-toggle")
+
+                    if appLockService.isLockEnabled {
+                        Picker(AppLocalization.string("Require Lock"), selection: $appLockService.autoLockInterval) {
+                            ForEach(AutoLockInterval.allCases) { interval in
+                                Text(AppLocalization.string(interval.titleKey)).tag(interval)
+                            }
+                        }
+                        .accessibilityIdentifier("app-lock-interval-picker")
+                    }
+                }
+
+                Section(
+                    header: Text(AppLocalization.string("Clipboard")),
+                    footer: Text(AppLocalization.string("Automatically synchronize the clipboard between your local device and the remote computer during active sessions."))
+                ) {
+                    Toggle(
+                        AppLocalization.string("Automatic Clipboard Sync"),
+                        isOn: Binding(
+                            get: { UserDefaults.standard.object(forKey: SessionViewModel.autoClipboardSyncKey) as? Bool ?? true },
+                            set: { UserDefaults.standard.set($0, forKey: SessionViewModel.autoClipboardSyncKey) }
+                        )
+                    )
+                    .accessibilityIdentifier("auto-clipboard-sync-toggle")
+                }
+
                 Section(
                     header: Text(AppLocalization.string("Tailscale API Credentials")),
                     footer: Text(AppLocalization.string("Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices."))
@@ -671,6 +787,17 @@ public struct TailscaleSettingsSheet: View {
                         Label(AppLocalization.string("SSH Keys"), systemImage: "key")
                     }
                     .accessibilityIdentifier("ssh-key-library")
+                }
+
+                Section(header: Text(AppLocalization.string("About AetherScreens"))) {
+                    Link(destination: URL(string: "https://aethernative.com/apps/aetherscreens/privacy/")!) {
+                        Label(AppLocalization.string("Privacy Policy"), systemImage: "hand.raised")
+                    }
+                    .accessibilityIdentifier("app-privacy-policy")
+                    Link(destination: URL(string: "https://aethernative.com/apps/aetherscreens/support/")!) {
+                        Label(AppLocalization.string("Support"), systemImage: "questionmark.circle")
+                    }
+                    .accessibilityIdentifier("app-support")
                 }
 
                 Section(header: Text(AppLocalization.string("About macOS Screen Sharing"))) {

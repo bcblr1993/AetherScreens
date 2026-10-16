@@ -15,6 +15,7 @@ public final class DeviceListViewModel: ObservableObject {
     @Published public var activeSessionDevice: RemoteDevice?
     @Published public var errorMessage: String?
     @Published public var statusNotice: String?
+    @Published public var syncService: ComputerSyncService
 
     private let store: DeviceStore
     private let sshCredentials: SSHCredentialStore
@@ -23,14 +24,26 @@ public final class DeviceListViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     public init(store: DeviceStore = .shared, bonjourService: BonjourDiscoveryService = .shared,
-                sshTrust: SSHHostTrustStore = .shared) {
+                sshTrust: SSHHostTrustStore = .shared, syncService: ComputerSyncService? = nil) {
         self.store = store
         self.sshCredentials = store.sshCredentials
         self.sshTrust = sshTrust
         self.bonjourService = bonjourService
+        self.syncService = syncService ?? ComputerSyncService(store: store)
         self.devices = store.devices
 
         setupBonjourBindings()
+        setupSyncBindings()
+    }
+
+    private func setupSyncBindings() {
+        syncService.$status
+            .sink { [weak self] status in
+                if case .synced = status {
+                    self?.reload()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     private func setupBonjourBindings() {
@@ -125,6 +138,7 @@ public final class DeviceListViewModel: ObservableObject {
             errorMessage = "Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app."
         }
         reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
     }
 
     /// Connect directly to a discovered Bonjour Mac
@@ -134,6 +148,7 @@ public final class DeviceListViewModel: ObservableObject {
             errorMessage = "Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app."
         }
         reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
         connect(to: dev)
     }
 
@@ -144,6 +159,25 @@ public final class DeviceListViewModel: ObservableObject {
             return
         }
         reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+    }
+
+    /// Toggle favorite status of a device and persist
+    public func toggleFavorite(for device: RemoteDevice) {
+        var updated = device
+        updated.isFavorite.toggle()
+        _ = store.updateDevice(updated)
+        reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+    }
+
+    /// Update tags for a device and persist
+    public func updateTags(for device: RemoteDevice, tags: [String]) {
+        var updated = device
+        updated.tags = tags
+        _ = store.updateDevice(updated)
+        reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
     }
 
     /// Read only public identity for the editor. Saved key bytes never become

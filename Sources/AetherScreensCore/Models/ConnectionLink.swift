@@ -24,14 +24,14 @@ public struct ConnectionLink {
         guard url.absoluteString.utf8.count <= 8192,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               components.fragment == nil,
-              let scheme = components.scheme?.lowercased(), ["aetherscreens", "vnc"].contains(scheme) else { throw Failure.invalid }
+              let scheme = components.scheme?.lowercased(), ["aetherscreens", "vnc", "rdp"].contains(scheme) else { throw Failure.invalid }
         var query: [String: String] = [:]
         for item in components.queryItems ?? [] {
             guard query[item.name] == nil, let value = item.value,
                   !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else { throw Failure.invalid }
             query[item.name] = value
         }
-        let allowed: Set<String> = scheme == "vnc" ? ["observe"] : ["host", "port", "name", "username", "password", "observe"]
+        let allowed: Set<String> = (scheme == "vnc" || scheme == "rdp") ? ["observe"] : ["host", "port", "name", "username", "password", "observe", "protocol"]
         guard Set(query.keys).isSubset(of: allowed) else { throw Failure.unsupportedOption }
         if let value = query["observe"] {
             guard ["true", "false"].contains(value) else { throw Failure.invalid }
@@ -47,16 +47,26 @@ public struct ConnectionLink {
         for value in [username, password].compactMap({ $0 }) {
             guard value.utf8.count <= 2048, !value.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else { throw Failure.invalid }
         }
-        if scheme == "vnc" {
+        if scheme == "rdp" {
             guard components.path.isEmpty || components.path == "/", let host = components.host,
-                  let request = ConnectionRequest(host: host, port: String(components.port ?? 5900), username: username ?? "", password: password ?? "") else { throw Failure.invalid }
+                  let request = ConnectionRequest(host: host, port: String(components.port ?? 3389),
+                                                  username: username ?? "", password: password ?? "",
+                                                  type: .windows, remoteProtocol: .rdp) else { throw Failure.invalid }
+            target = .temporary(request)
+        } else if scheme == "vnc" {
+            guard components.path.isEmpty || components.path == "/", let host = components.host,
+                  let request = ConnectionRequest(host: host, port: String(components.port ?? 5900), username: username ?? "", password: password ?? "", remoteProtocol: .rfb) else { throw Failure.invalid }
             target = .temporary(request)
         } else {
             guard components.port == nil else { throw Failure.invalid }
             switch components.host?.lowercased() {
             case "connect":
-                guard components.path.isEmpty || components.path == "/", let host = query["host"],
-                      let request = ConnectionRequest(host: host, port: query["port"] ?? "5900", name: query["name"] ?? "", username: username ?? "", password: password ?? "") else { throw Failure.invalid }
+                guard components.path.isEmpty || components.path == "/", let host = query["host"] else { throw Failure.invalid }
+                let proto: RemoteDevice.RemoteProtocol? = query["protocol"].flatMap { RemoteDevice.RemoteProtocol(rawValue: $0.uppercased()) }
+                let defaultPort = proto == .rdp ? "3389" : "5900"
+                guard let request = ConnectionRequest(host: host, port: query["port"] ?? defaultPort,
+                                                      name: query["name"] ?? "", username: username ?? "", password: password ?? "",
+                                                      remoteProtocol: proto) else { throw Failure.invalid }
                 target = .temporary(request)
             case "saved":
                 guard query["host"] == nil, query["port"] == nil else { throw Failure.invalid }

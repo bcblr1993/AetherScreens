@@ -12,11 +12,14 @@ public struct EditDeviceSheet: View {
     @FocusState private var hostFocused: Bool
     @State private var portString: String = "5900"
     @State private var deviceType: RemoteDevice.DeviceType = .mac
+    @State private var remoteProtocol: RemoteDevice.RemoteProtocol = .rfb
     @State private var password: String = ""
     @State private var username: String = ""
     @State private var macAddress: String = ""
     @State private var isPasswordModified: Bool = false
     @State private var disconnectAction: DisconnectAction = .none
+    @State private var isFavorite: Bool = false
+    @State private var tagsString: String = ""
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
 
@@ -45,13 +48,52 @@ public struct EditDeviceSheet: View {
                             #if canImport(UIKit)
                             .frame(minHeight: 44)
                             #endif
+                            .onChange(of: portString) { _, newPort in
+                                if newPort == "3389" && remoteProtocol == .rfb {
+                                    remoteProtocol = .rdp
+                                    if deviceType == .mac { deviceType = .windows }
+                                } else if newPort == "5900" && remoteProtocol == .rdp {
+                                    remoteProtocol = .rfb
+                                }
+                            }
                     }
                 }
 
-                Section(header: Text(AppLocalization.string("Operating System"))) {
+                Section(header: Text(AppLocalization.string("Organization"))) {
+                    Toggle(AppLocalization.string("Favorite"), isOn: $isFavorite)
+                        .accessibilityIdentifier("edit-favorite-toggle")
+                    TextField(AppLocalization.string("Tags (comma separated, e.g. Home, Work)"), text: $tagsString)
+                        .accessibilityIdentifier("edit-tags-input")
+                        .autocorrectionDisabled()
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                }
+
+                Section(header: Text(AppLocalization.string("Protocol & System"))) {
+                    Picker(AppLocalization.string("Protocol"), selection: $remoteProtocol) {
+                        Text(AppLocalization.string("macOS / VNC (RFB)")).tag(RemoteDevice.RemoteProtocol.rfb)
+                        Text(AppLocalization.string("Windows Remote Desktop (RDP)")).tag(RemoteDevice.RemoteProtocol.rdp)
+                    }
+                    .accessibilityIdentifier("protocol-picker")
+                    .onChange(of: remoteProtocol) { _, newProto in
+                        if newProto == .rdp && (portString == "5900" || portString.isEmpty) {
+                            portString = "3389"
+                            if deviceType == .mac { deviceType = .windows }
+                        } else if newProto == .rfb && (portString == "3389" || portString.isEmpty) {
+                            portString = "5900"
+                        }
+                    }
+
                     Picker(AppLocalization.string("Device Type"), selection: $deviceType) {
                         ForEach(RemoteDevice.DeviceType.allCases, id: \.self) { type in
                             Label(AppLocalization.string(type.rawValue), systemImage: type.systemIcon).tag(type)
+                        }
+                    }
+                    .onChange(of: deviceType) { _, newType in
+                        if newType == .windows && remoteProtocol == .rfb {
+                            remoteProtocol = .rdp
+                            if portString == "5900" || portString.isEmpty { portString = "3389" }
                         }
                     }
                 }
@@ -73,15 +115,15 @@ public struct EditDeviceSheet: View {
                 }
 
                 Section(
-                    header: Text(AppLocalization.string("Authentication")),
+                    header: Text(AppLocalization.string(remoteProtocol == .rdp ? "Windows Authentication" : "Authentication")),
                     footer: Text(AppLocalization.string("Saved in the system Keychain. Enter a new password to update or leave unchanged."))
                 ) {
-                    TextField(AppLocalization.string("Username (Mac account, optional)"), text: $username)
+                    TextField(AppLocalization.string(remoteProtocol == .rdp ? "Windows Username" : "Username (Mac account, optional)"), text: $username)
                         .autocorrectionDisabled()
                         #if canImport(UIKit)
                         .textInputAutocapitalization(.never)
                         #endif
-                    SecureField(AppLocalization.string(username.isEmpty ? "VNC Password" : "Mac Account Password"), text: $password)
+                    SecureField(AppLocalization.string(remoteProtocol == .rdp ? "Password" : (username.isEmpty ? "VNC Password" : "Mac Account Password")), text: $password)
                         .onChange(of: password) { _, _ in
                             isPasswordModified = true
                         }
@@ -122,10 +164,20 @@ public struct EditDeviceSheet: View {
                         updatedDev.host = host.trimmingCharacters(in: .whitespaces)
                         updatedDev.port = port
                         updatedDev.username = username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : username.trimmingCharacters(in: .whitespacesAndNewlines)
-                        updatedDev.authMethod = updatedDev.username == nil ? .vncPassword : .macAccount
+                        updatedDev.remoteProtocol = remoteProtocol
+                        if remoteProtocol == .rdp {
+                            updatedDev.authMethod = .windowsCredentials
+                        } else {
+                            updatedDev.authMethod = updatedDev.username == nil ? .vncPassword : .macAccount
+                        }
                         updatedDev.deviceType = deviceType
                         updatedDev.macAddress = macAddress.isEmpty ? nil : macAddress
                         updatedDev.ssh = sshDraft.settings
+                        updatedDev.isFavorite = isFavorite
+                        updatedDev.tags = tagsString
+                            .split(separator: ",")
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
                         
                         let newPassword = isPasswordModified ? (password.isEmpty ? nil : password) : DeviceStore.shared.getPassword(for: device)
                         
@@ -157,8 +209,11 @@ public struct EditDeviceSheet: View {
                 host = device.host
                 portString = "\(device.port)"
                 deviceType = device.deviceType
+                remoteProtocol = device.remoteProtocol
                 disconnectAction = DisconnectActionStore.shared.load(for: device.id, type: device.deviceType)
                 macAddress = device.macAddress ?? ""
+                isFavorite = device.isFavorite
+                tagsString = device.tags.joined(separator: ", ")
                 if let savedPwd = DeviceStore.shared.getPassword(for: device) {
                     password = savedPwd
                 }

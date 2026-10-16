@@ -519,3 +519,126 @@
 "Connection lost. Retrying automatically…" = "连接已中断，正在等待自动重连…";
 
 "Check for Updates…" = "检查更新…";
+
+"About AetherScreens" = "关于 AetherScreens";
+
+"Privacy Policy" = "隐私政策";
+
+"Support" = "帮助与支持";
+
+"Protocol & System" = "协议与系统";
+
+"Protocol" = "协议";
+
+"macOS / VNC (RFB)" = "macOS / VNC (RFB)";
+
+"Windows Remote Desktop (RDP)" = "Windows 远程桌面 (RDP)";
+
+"Windows Authentication" = "Windows 身份验证";
+
+"Windows Username" = "Windows 用户名";
+
+"Enter your Windows account username and password." = "输入 Windows 系统的账户名与登录密码。";
+
+"iCloud Sync" = "iCloud 同步";
+
+"iCloud Sync is turned off" = "iCloud 同步已关闭";
+
+"iCloud Sync is ready" = "iCloud 同步已就绪";
+
+"Syncing with iCloud…" = "正在同步到 iCloud…";
+
+"Last synced: %@" = "上次同步：%@";
+
+"Sync failed: %@" = "同步失败：%@";
+
+"Sync failed to complete." = "同步未能完成。";
+
+"Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain." = "使用 iCloud 在 Mac、iPhone 和 iPad 之间同步已保存的电脑列表。密码与连接凭据依然加密保存在本地钥匙串中。";
+
+"Sync Now" = "立即同步";
+
+"Common Locations" = "常用位置";
+
+"Quick Path Prefixes" = "常用路径前缀";
+
+"Recent" = "最近";
+
+"Desktop" = "桌面";
+
+"Downloads" = "下载";
+
+"Documents" = "文稿";
+
+"Home Folder" = "个人主文件夹";
+
+"Applications" = "应用程序";
+
+"Click to choose another file" = "点击选择其他文件";
+
+"Drop files here or click to browse" = "拖放文件到此处或点击浏览";
+
+"Select destination on local device" = "选择本地设备上的存储目录";
+
+"AetherScreens is Locked" = "AetherScreens 已锁定";
+
+"Authenticate to access your remote computers and saved credentials." = "验证身份以访问您的远程电脑和已保存凭据。";
+
+"Unlock" = "解锁";
+
+"Unlock AetherScreens to access your remote computers" = "解锁 AetherScreens 以访问您的远程电脑";
+
+"Security & Privacy" = "安全与隐私";
+
+"App Lock" = "应用安全锁";
+
+"Require Lock" = "需要锁定";
+
+"Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials." = "需要生物识别（面容/触控 ID）或密码以解锁 AetherScreens 并保护已保存的远程电脑凭据。";
+
+"Immediately" = "立即";
+
+"After 1 minute" = "1 分钟后";
+
+"After 5 minutes" = "5 分钟后";
+
+"After 15 minutes" = "15 分钟后";
+
+"Never" = "从不";
+
+"Passcode" = "锁屏密码";
+
+"Touch ID" = "触控 ID";
+
+"Face ID" = "面容 ID";
+
+"Optic ID" = "视力 ID";
+
+"Favorites" = "已收藏";
+
+"Add to Favorites" = "添加到收藏";
+
+"Remove from Favorites" = "从收藏中移除";
+
+"Organization" = "分类与标签";
+
+"Favorite" = "收藏";
+
+"Tags (comma separated, e.g. Home, Work)" = "标签（逗号分隔，如：家庭、工作）";
+
+"Automatic Clipboard Sync" = "自动剪贴板同步";
+
+"Auto Clipboard Sync" = "自动剪贴板同步";
+
+"Automatically synchronize the clipboard between your local device and the remote computer during active sessions." = "在活跃会话期间，在本地设备与远端计算机之间自动同步剪贴板内容。";
+
+"Quick Actions" = "快捷操作";
+
+"App Exposé" = "应用程序窗口";
+
+"Hot Corners" = "屏幕热角";
+
+"Type Clipboard as Keystrokes" = "键入剪贴板文本";
+
+"Type or paste text to send to Windows..." = "输入或粘贴要发送到 Windows 的文本…";
+

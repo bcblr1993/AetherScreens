@@ -6,8 +6,8 @@ cd "$DIR"
 if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
-VERSION="${AETHERSCREENS_VERSION:-1.1.0}"
-BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-2026101001}"
+VERSION="${AETHERSCREENS_VERSION:-1.2.0}"
+BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-2026101601}"
 SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
 NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
 OUTPUT="${AETHERSCREENS_OUTPUT_DIR:-$DIR/build/release}"
@@ -85,3 +85,5 @@ ditto "$APP_DIR" "$OUTPUT/AetherScreens.app"
 echo "Signed and notarized release ready: $OUTPUT"
 
 bash "$DIR/scripts/finalize_update_archive.sh" "$OUTPUT" "$VERSION" "$NOTARY_PROFILE"
+
+bash "$DIR/scripts/cleanup_test_artifacts.sh"

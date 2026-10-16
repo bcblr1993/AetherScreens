@@ -15,13 +15,14 @@ extension SessionViewModel {
     }
 
     func beginFileUpload(url: URL, destination: String, onStarted: @escaping () -> Void) {
-        guard canStartFileUpload, let generation = client.fileCopyTransportGeneration else { return }
         let path = Data(destination.utf8)
         guard !path.isEmpty, path.count < 200, !path.contains(0),
               destination.hasPrefix("/") || destination.hasPrefix("~/") else {
             fileUploadNotice = AppLocalization.string("Enter an absolute remote folder or a path starting with ~/.")
             return
         }
+        FileTransferHistoryStore.shared.recordUploadDestination(destination)
+        guard canStartFileUpload, let generation = client.fileCopyTransportGeneration else { return }
         let identity = UUID()
         fileUploadPreparationID = identity
         isPreparingFileUpload = true

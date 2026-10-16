@@ -32,7 +32,12 @@ public struct MacKeyboardToolbar: View {
                     Image(systemName: "keyboard")
                         .foregroundColor(.secondary)
 
-                    TextField(AppLocalization.string("Type or paste text to send to Mac..."), text: $viewModel.textInputBuffer)
+                    TextField(
+                        viewModel.device.deviceType == .windows
+                            ? AppLocalization.string("Type or paste text to send to Windows...")
+                            : AppLocalization.string("Type or paste text to send to Mac..."),
+                        text: $viewModel.textInputBuffer
+                    )
                         .textFieldStyle(.plain)
                         .focused($textInputFocused)
                         .accessibilityIdentifier("keyboard-text-input")

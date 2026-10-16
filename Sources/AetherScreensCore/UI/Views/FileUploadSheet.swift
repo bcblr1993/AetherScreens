@@ -8,6 +8,7 @@ struct FileUploadSheet: View {
     @State private var selectedURL: URL?
     @State private var destination = "~/Desktop"
     @FocusState private var destinationFocused: Bool
+    @State private var isTargetedForDrop = false
 
     init(viewModel: SessionViewModel, initialURL: URL? = nil) {
         self.viewModel = viewModel
@@ -20,12 +21,7 @@ struct FileUploadSheet: View {
                 Text(AppLocalization.string("Send File or Folder"))
                     .font(.title2.bold())
                 Text(viewModel.device.name).font(.subheadline).foregroundStyle(.secondary)
-                Button { selectingFile = true } label: {
-                    Label(selectedURL?.lastPathComponent ?? AppLocalization.string("Choose File or Folder"), systemImage: "doc.badge.arrow.up")
-                        .lineLimit(1)
-                }
-                .disabled(viewModel.isPreparingFileUpload)
-                .accessibilityIdentifier("file-upload-select")
+                filePickerCard
                 TextField(AppLocalization.string("Remote Folder"), text: $destination)
                     .textFieldStyle(.roundedBorder)
                     .focused($destinationFocused)
@@ -37,6 +33,45 @@ struct FileUploadSheet: View {
                     .onSubmit { destinationFocused = false }
                     .accessibilityIdentifier("file-upload-destination")
                     .disabled(viewModel.isPreparingFileUpload)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(AppLocalization.string("Common Locations"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        let recents = FileTransferHistoryStore.shared.recentUploadDestinations
+                        if !recents.isEmpty {
+                            Menu {
+                                ForEach(recents, id: \.self) { recent in
+                                    Button(recent) { destination = recent }
+                                }
+                            } label: {
+                                Label(AppLocalization.string("Recent"), systemImage: "clock")
+                                    .font(.caption)
+                            }
+                            .menuStyle(.borderlessButton)
+                            .accessibilityIdentifier("file-upload-recent-menu")
+                        }
+                    }
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(FileTransferPresetLocation.standardPresets) { preset in
+                                Button {
+                                    destination = preset.path
+                                } label: {
+                                    Label(AppLocalization.string(preset.titleKey), systemImage: preset.systemIcon)
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(destination == preset.path ? .blue : .secondary)
+                                .accessibilityIdentifier("file-upload-preset-\(preset.id)")
+                            }
+                        }
+                    }
+                }
+
                 Text(AppLocalization.string("Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files."))
                     .font(.caption).foregroundStyle(.secondary)
                 Text(AppLocalization.string("Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported."))
@@ -73,6 +108,14 @@ struct FileUploadSheet: View {
             case .failure: viewModel.fileUploadNotice = AppLocalization.string("Could not open the file picker.")
             }
         }
+        .dropDestination(for: URL.self, action: { urls, _ in
+            guard let url = urls.first, url.isFileURL else { return false }
+            selectedURL = url
+            viewModel.fileUploadNotice = nil
+            return true
+        }, isTargeted: { targeted in
+            isTargetedForDrop = targeted
+        })
     }
 
     private var actionBar: some View {
@@ -106,6 +149,7 @@ struct FileUploadSheet: View {
         Button {
             guard let selectedURL else { return }
             destinationFocused = false
+            FileTransferHistoryStore.shared.recordUploadDestination(destination)
             viewModel.beginFileUpload(url: selectedURL, destination: destination) { dismiss() }
         } label: {
             actionTitle("Send")
@@ -126,5 +170,58 @@ struct FileUploadSheet: View {
         Text(AppLocalization.string(key))
             .fixedSize(horizontal: true, vertical: false)
         #endif
+    }
+
+    private var filePickerCard: some View {
+        Button { selectingFile = true } label: {
+            HStack(spacing: 12) {
+                fileIcon
+                fileTextContent
+                Spacer()
+                if selectedURL != nil {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardBackground)
+            .overlay(cardBorder)
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isPreparingFileUpload)
+        .accessibilityIdentifier("file-upload-select")
+    }
+
+    private var fileIcon: some View {
+        let hasFile = selectedURL != nil
+        return Image(systemName: hasFile ? "doc.fill" : "doc.badge.plus")
+            .font(.title2)
+            .foregroundStyle(hasFile ? Color.blue : Color.secondary)
+    }
+
+    private var fileTextContent: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(selectedURL?.lastPathComponent ?? AppLocalization.string("Choose File or Folder"))
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text(selectedURL != nil ? AppLocalization.string("Click to choose another file") : AppLocalization.string("Drop files here or click to browse"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(isTargetedForDrop ? Color.blue.opacity(0.12) : Color.secondary.opacity(0.08))
+    }
+
+    private var cardBorder: some View {
+        let dashPattern: [CGFloat] = selectedURL == nil ? [6, 4] : []
+        let strokeColor: Color = isTargetedForDrop ? .blue : .secondary.opacity(0.2)
+        let strokeWidth: CGFloat = isTargetedForDrop ? 2 : 1
+        return RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(strokeColor, style: StrokeStyle(lineWidth: strokeWidth, dash: dashPattern))
     }
 }

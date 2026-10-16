@@ -10,8 +10,11 @@ public struct ConnectionRequest {
 
     public init?(host: String, port: String = "5900", name: String = "",
                  username: String = "", password: String = "",
-                 type: RemoteDevice.DeviceType = .mac, macAddress: String = "",
-                 ssh: SSHConnectionSettings? = nil, sshPassword: String = "", sshPrivateKey: Data? = nil) {
+                 type: RemoteDevice.DeviceType = .mac,
+                 remoteProtocol: RemoteDevice.RemoteProtocol? = nil,
+                 macAddress: String = "",
+                 ssh: SSHConnectionSettings? = nil, sshPassword: String = "", sshPrivateKey: Data? = nil,
+                 isFavorite: Bool = false, tags: [String] = []) {
         var address = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if address.hasPrefix("[") && address.hasSuffix("]") {
             address = String(address.dropFirst().dropLast())
@@ -27,10 +30,19 @@ public struct ConnectionRequest {
         self.sshPassword = ssh == nil || sshPassword.isEmpty ? nil : sshPassword
         if case .privateKey = ssh?.authentication { self.sshPrivateKey = sshPrivateKey }
         else { self.sshPrivateKey = nil }
+        let proto = remoteProtocol ?? (portNumber == 3389 ? .rdp : .rfb)
+        let auth: RemoteDevice.AuthMethod
+        if proto == .rdp {
+            auth = .windowsCredentials
+        } else {
+            auth = account.isEmpty ? (password.isEmpty ? .none : .vncPassword) : .macAccount
+        }
         device = RemoteDevice(name: label.isEmpty ? address : label, host: address, port: portNumber,
                               deviceType: type,
-                              authMethod: account.isEmpty ? (password.isEmpty ? .none : .vncPassword) : .macAccount,
+                              remoteProtocol: proto,
+                              authMethod: auth,
                               username: account.isEmpty ? nil : account,
-                              macAddress: mac.isEmpty ? nil : mac, ssh: ssh)
+                              macAddress: mac.isEmpty ? nil : mac, ssh: ssh,
+                              isFavorite: isFavorite, tags: tags)
     }
 }

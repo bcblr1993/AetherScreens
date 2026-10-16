@@ -51,7 +51,8 @@ final class StreamingProgressTests: XCTestCase {
         defer { server.stop() }
         await fulfillment(of: [ready], timeout: 3)
         let session = SessionViewModel(device: RemoteDevice(name: "Slow quality QA", host: "127.0.0.1",
-            port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true)
+            port: try XCTUnwrap(server.listener.port).rawValue), password: nil, isTemporary: true,
+            clipboardReader: { nil })
         defer { session.requestDisconnect() }
         var frameCount = 0
         let frameHandler = session.client.onFrameUpdated
@@ -682,6 +683,16 @@ private final class LargeFrameServer: @unchecked Sendable {
                             body.subdata(in: offset..<(offset + 4)).withUnsafeBytes { $0.loadUnaligned(as: Int32.self).bigEndian }
                         }
                         encodings(values)
+                        readClientCommands(connection, encodings: encodings)
+                    }
+                }
+            case 6:
+                readData(connection, count: 7) { header in
+                    guard header.count == 7 else { return }
+                    let length = Int(header[3]) << 24 | Int(header[4]) << 16 | Int(header[5]) << 8 | Int(header[6])
+                    if length > 0 {
+                        readData(connection, count: length) { _ in readClientCommands(connection, encodings: encodings) }
+                    } else {
                         readClientCommands(connection, encodings: encodings)
                     }
                 }

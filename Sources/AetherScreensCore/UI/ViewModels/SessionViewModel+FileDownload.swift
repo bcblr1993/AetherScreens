@@ -7,13 +7,14 @@ extension SessionViewModel {
     }
 
     func beginFileDownload(remotePath: String, destination: URL, onStarted: () -> Void) {
-        guard canStartFileDownload else { return }
         let path = Data(remotePath.utf8)
         guard !path.isEmpty, path.count < 200, !path.contains(0),
               remotePath.hasPrefix("/") || remotePath.hasPrefix("~/") else {
             fileDownloadNotice = AppLocalization.string("Enter an absolute remote path or a path starting with ~/.")
             return
         }
+        FileTransferHistoryStore.shared.recordDownloadPath(remotePath)
+        guard canStartFileDownload else { return }
         let access = FileTransferScopedAccess(destination)
         var handedOff = false
         defer { if !handedOff { access.close() } }

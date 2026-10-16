@@ -519,3 +519,126 @@
 "Connection lost. Retrying automatically…" = "Connection lost. Retrying automatically…";
 
 "Check for Updates…" = "Check for Updates…";
+
+"About AetherScreens" = "About AetherScreens";
+
+"Privacy Policy" = "Privacy Policy";
+
+"Support" = "Support";
+
+"Protocol & System" = "Protocol & System";
+
+"Protocol" = "Protocol";
+
+"macOS / VNC (RFB)" = "macOS / VNC (RFB)";
+
+"Windows Remote Desktop (RDP)" = "Windows Remote Desktop (RDP)";
+
+"Windows Authentication" = "Windows Authentication";
+
+"Windows Username" = "Windows Username";
+
+"Enter your Windows account username and password." = "Enter your Windows account username and password.";
+
+"iCloud Sync" = "iCloud Sync";
+
+"iCloud Sync is turned off" = "iCloud Sync is turned off";
+
+"iCloud Sync is ready" = "iCloud Sync is ready";
+
+"Syncing with iCloud…" = "Syncing with iCloud…";
+
+"Last synced: %@" = "Last synced: %@";
+
+"Sync failed: %@" = "Sync failed: %@";
+
+"Sync failed to complete." = "Sync failed to complete.";
+
+"Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain." = "Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain.";
+
+"Sync Now" = "Sync Now";
+
+"Common Locations" = "Common Locations";
+
+"Quick Path Prefixes" = "Quick Path Prefixes";
+
+"Recent" = "Recent";
+
+"Desktop" = "Desktop";
+
+"Downloads" = "Downloads";
+
+"Documents" = "Documents";
+
+"Home Folder" = "Home Folder";
+
+"Applications" = "Applications";
+
+"Click to choose another file" = "Click to choose another file";
+
+"Drop files here or click to browse" = "Drop files here or click to browse";
+
+"Select destination on local device" = "Select destination on local device";
+
+"AetherScreens is Locked" = "AetherScreens is Locked";
+
+"Authenticate to access your remote computers and saved credentials." = "Authenticate to access your remote computers and saved credentials.";
+
+"Unlock" = "Unlock";
+
+"Unlock AetherScreens to access your remote computers" = "Unlock AetherScreens to access your remote computers";
+
+"Security & Privacy" = "Security & Privacy";
+
+"App Lock" = "App Lock";
+
+"Require Lock" = "Require Lock";
+
+"Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials." = "Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials.";
+
+"Immediately" = "Immediately";
+
+"After 1 minute" = "After 1 minute";
+
+"After 5 minutes" = "After 5 minutes";
+
+"After 15 minutes" = "After 15 minutes";
+
+"Never" = "Never";
+
+"Passcode" = "Passcode";
+
+"Touch ID" = "Touch ID";
+
+"Face ID" = "Face ID";
+
+"Optic ID" = "Optic ID";
+
+"Favorites" = "Favorites";
+
+"Add to Favorites" = "Add to Favorites";
+
+"Remove from Favorites" = "Remove from Favorites";
+
+"Organization" = "Organization";
+
+"Favorite" = "Favorite";
+
+"Tags (comma separated, e.g. Home, Work)" = "Tags (comma separated, e.g. Home, Work)";
+
+"Automatic Clipboard Sync" = "Automatic Clipboard Sync";
+
+"Auto Clipboard Sync" = "Auto Clipboard Sync";
+
+"Automatically synchronize the clipboard between your local device and the remote computer during active sessions." = "Automatically synchronize the clipboard between your local device and the remote computer during active sessions.";
+
+"Quick Actions" = "Quick Actions";
+
+"App Exposé" = "App Exposé";
+
+"Hot Corners" = "Hot Corners";
+
+"Type Clipboard as Keystrokes" = "Type Clipboard as Keystrokes";
+
+"Type or paste text to send to Windows..." = "Type or paste text to send to Windows...";
+
