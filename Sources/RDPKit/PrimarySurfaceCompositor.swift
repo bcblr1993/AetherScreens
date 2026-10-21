@@ -390,8 +390,10 @@ final class RDPPrimarySurfaceCompositor {
                 let green = Int((pixel >> 5) & UInt16((1 << greenBits) - 1))
                 let red = Int((pixel >> (5 + greenBits)) & 0x001F)
                 destination[destinationOffset] = UInt8((blue * 255 + 15) / 31)
-                destination[destinationOffset + 1] = UInt8((green * 255 + ((1 << greenBits) - 1) / 2)
-                    / ((1 << greenBits) - 1))
+                // Split out the green maximum; the inline form times out older compilers' type checker.
+                let greenMax: Int = (1 << greenBits) - 1
+                let scaledGreen: Int = green * 255 + greenMax / 2
+                destination[destinationOffset + 1] = UInt8(scaledGreen / greenMax)
                 destination[destinationOffset + 2] = UInt8((red * 255 + 15) / 31)
             case 24:
                 let sourceOffset = column * 3
