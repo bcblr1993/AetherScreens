@@ -459,10 +459,14 @@ final class RDPCredSSPNTLMContext {
         guard offset >= 0, offset <= data.count - 4 else {
             throw RDPCredSSPError.ntlm("truncated NTLM message")
         }
-        return UInt32(data[data.index(data.startIndex, offsetBy: offset)])
-            | UInt32(data[data.index(data.startIndex, offsetBy: offset + 1)]) << 8
-            | UInt32(data[data.index(data.startIndex, offsetBy: offset + 2)]) << 16
-            | UInt32(data[data.index(data.startIndex, offsetBy: offset + 3)]) << 24
+        // Accumulate byte by byte; a single four-term `|` chain times out the type checker on older compilers.
+        let start = data.index(data.startIndex, offsetBy: offset)
+        var value: UInt32 = 0
+        for byteIndex in 0 ..< 4 {
+            let byte = UInt32(data[data.index(start, offsetBy: byteIndex)])
+            value |= byte << UInt32(byteIndex * 8)
+        }
+        return value
     }
 
     private static func readLittleEndianUInt64(_ data: Data, at offset: Int) throws -> UInt64 {
