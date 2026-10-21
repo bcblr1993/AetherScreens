@@ -4,6 +4,7 @@
 Never emit raw unified-log messages. Unknown/interpolated data stays in memory.
 This reports diagnostics, not successful pixel delivery or UI acceptance.
 """
+import os
 import argparse
 import json
 import re
@@ -32,7 +33,7 @@ def main():
     # Host/account are the explicitly authorized QA target, never user-supplied
     # shell fragments or a password. Require existing trusted SSH identity.
     command = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
-               "-o", "ConnectTimeout=15", "chenxu@100.64.0.3",
+               "-o", "ConnectTimeout=15", os.environ["AETHERSCREENS_QA_SSH_TARGET"],
                f"/usr/bin/log show --last {args.minutes}m --style json --info --debug "
                f"--predicate '{predicate}'"]
     try:

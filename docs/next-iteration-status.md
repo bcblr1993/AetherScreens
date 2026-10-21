@@ -268,7 +268,7 @@ run proves otherwise.
   2/2 passed, zero failures/skips; no host GUI automation ran. Evidence:
   `/tmp/aetherscreens-scroll-overflow-tests-20261008.log`.
 - Post-run route/log diagnostic: mesh ping stayed DERP(baizhiedu),427/22/72ms,
-  no direct connection. LAN192.168.50.226 ports22/5900 both timed out after3s.
+  no direct connection. LAN<mac-mini-lan> ports22/5900 both timed out after3s.
   Allowlisted server events show monitoring requested20:20:42 and capture stop
   20:21:40 near test end, with no intervening stop logged. Absence of a log is
   not proof of absence of server stalls. A direct-LAN comparison is unavailable
@@ -438,7 +438,7 @@ run proves otherwise.
   reject older queued window results. The HUD motion setting is respected;
   this is not physical FPS or Mac-window visual acceptance.
 - Mac mini LAN ports still time out, but current Tailscale peer discovery found
-  `100.64.0.3` online. SSH confirms the Mac mini identity and macOS 27.0.1;
+  `<mac-mini-tailscale>` online. SSH confirms the Mac mini identity and macOS 27.0.1;
   actual RFB handshake and 3840x2160 desktop/60-second connection passed 2/2,
   `/tmp/aetherscreens-macmini-mesh-handshake-20261008.log`. Physical iPhone
   acceptance remains deferred; paired physical 12 Pro currently unavailable.
@@ -3575,7 +3575,7 @@ Async credential-scope preference remains unanswered. Goal remains active.
 
 ### 2026-10-08：指定真实 Mac mini 可达性
 
-- 对用户指定 192.168.50.226 的 TCP 5900 / 22 进行独立 nc -vz -G 3 检查，两者均 Operation timed out，自然退出 1；route get 显示需要网关路径。没有发认证、操作远端桌面或修改远端设置。
+- 对用户指定 <mac-mini-lan> 的 TCP 5900 / 22 进行独立 nc -vz -G 3 检查，两者均 Operation timed out，自然退出 1；route get 显示需要网关路径。没有发认证、操作远端桌面或修改远端设置。
 - 真实 Apple 服务器验收当前受网络可达性阻塞，已询问当前局域网/Tailscale 地址。不是代码或受控 fixture 失败，也不能将此前受控通过作为真实服务器通过。完整目标保持，真实设备与云端配置等待用户提供。
 
 ### 2026-10-08：CloudKit 保存操作的 SDK 超时配置
@@ -4045,7 +4045,7 @@ acceptance remain open. No commit, push, tag or release performed.
 
 ## Recover actual Mac mini through existing Tailscale peer (2026-10-08)
 
-Read-only existing Tailscale status identified the online Mac mini at 100.64.0.3
+Read-only existing Tailscale status identified the online Mac mini at <mac-mini-tailscale>
 and fd7a:115c:a1e0::3. Both addresses accepted SSH and RFB connections; Apple
 server banner RFB 003.889 and offered security types [30,33,36,31,32,2,35].
 Existing trusted SSH key/host verification confirmed ComputerName and macOS
@@ -4075,7 +4075,7 @@ inspection still uses its separate account; actual clipboard delivery still
 travels through RFB. No password is copied into test arguments or logs. Printed
 outcomes contain only the fixed restoration/match markers, never board contents.
 
-Actual macOS 27.0.1 Mac mini, 100.64.0.3, saved VNC Keychain authentication:
+Actual macOS 27.0.1 Mac mini, <mac-mini-tailscale>, saved VNC Keychain authentication:
 - Unicode/multiline gate failed in 64.699 seconds: remote-to-client expectation
   timed out; the client rejected text not representable by the negotiated legacy
   clipboard; remote board did not match. Connection-state assertion and original
@@ -4110,7 +4110,7 @@ report retains only public version/type/generator/length metadata, not modulus,
 server key, failure text or credentials. A total per-connection deadline bounds
 fragmented/slow input; challenge length is bounded before reading its body.
 
-Actual Mac mini 100.64.0.3 final probe passed both negotiations. Server banner
+Actual Mac mini <mac-mini-tailscale> final probe passed both negotiations. Server banner
 003.889, types [30,33,36,31,32,2,35], generator 5 and key-length field 512 bytes
 in both profiles. Evidence:
 `/tmp/aetherscreens-apple-version-negotiation-final-20261008.json`.
@@ -4134,7 +4134,7 @@ Full Screens parity and physical fluidity still open; no publication.
 ## Actual Mac-account authentication and clipboard isolation (2026-10-08)
 
 The saved password for this exact Mac mini also authenticated the previously
-user-authorized username chenxu through security type 30. Existing live session
+user-authorized username <mac-user> through security type 30. Existing live session
 QA selects the username explicitly and retrieves the password from the same
 host's Keychain record in memory; no credentials are copied into logs, arguments
 or files. No new saved account is necessary for this probe; the earlier request
@@ -4232,7 +4232,7 @@ it does not prove actual Apple post-authentication bootstrap or rekey exchange.
 Validation:
 - Three ARD crypto tests + eight record tests passed 11/11, zero failures;
   `/tmp/aetherscreens-apple-auth-record-bridge-targeted-20261008.log`.
-- Actual known Mac mini/chenxu account using same-target Keychain secret passed
+- Actual known Mac mini/<mac-user> account using same-target Keychain secret passed
   standard RFB regression 1/1, zero skips/failures, 72.254 seconds: authentication,
   real 3840x2160 frames, 60-second stability and intentional teardown;
   `/tmp/aetherscreens-apple-auth-bridge-live-20261008.log`. No clipboard mutation.
@@ -5006,8 +5006,8 @@ smoothness, cursor parity, commit, push or release acceptance.
 
 ## Actual route comparison and loopback SSH QA (2026-10-08)
 
-Read-only SSH on the trusted Mac mini reports en0 192.168.50.79 and en1
-192.168.50.226; TCP 22/5900 on both addresses timed out from this host.
+Read-only SSH on the trusted Mac mini reports en0 <mac-mini-lan-alt> and en1
+<mac-mini-lan>; TCP 22/5900 on both addresses timed out from this host.
 The mesh addresses remain reachable. A bounded, compression-disabled SSH probe
 read/discarded 262,144 generated random bytes in 14.776 seconds including SSH
 startup, exit 0. No remote file was created or user content transferred. This
@@ -6680,7 +6680,7 @@ commit/push/release. Goal remains active.
   and remote-server feel acceptance is still pending.
 
 - 2026-10-09: Current compiled bundle ran selected input tests on the authorized
-  Mac mini (100.64.0.3): 21 native-input/viewport/session-recovery tests passed,
+  Mac mini (<mac-mini-tailscale>): 21 native-input/viewport/session-recovery tests passed,
   zero failures. This includes synthetic AppKit scroll phases and recent
   viewport publication/clamp changes. Terminal xctest exit was zero:
   /tmp/aetherscreens-macmini-input-qa-20261009.log.
@@ -6906,8 +6906,8 @@ passed. No live-device pointer/rotation acceptance is claimed.
 
 ### 2026-10-09 Mac mini 局域网路径恢复
 
-- 当前实际 TCP 探测 192.168.50.226:22 与 :5900 均成功，取代此前局域网不可达的判断。Tailscale SSH 仍成功，远端 macOS 27.0.1。
-- 指定 AETHERSCREENS_LIVE_HOST=192.168.50.226 的真实 Screen Sharing 握手专项通过 1/1，0.073s：`/tmp/aetherscreens-lan-recovery-handshake-20261009.log`。此为握手证据，未认证、未取得画面，也不证明渲染流畅度。
+- 当前实际 TCP 探测 <mac-mini-lan>:22 与 :5900 均成功，取代此前局域网不可达的判断。Tailscale SSH 仍成功，远端 macOS 27.0.1。
+- 指定 AETHERSCREENS_LIVE_HOST=<mac-mini-lan> 的真实 Screen Sharing 握手专项通过 1/1，0.073s：`/tmp/aetherscreens-lan-recovery-handshake-20261009.log`。此为握手证据，未认证、未取得画面，也不证明渲染流畅度。
 - 后续可在同一测试配置下比较 LAN 与 Tailscale 的真实首帧/持续传输耗时，以排除历史 DERP 路径影响；不应再以 LAN 不可达作为当前阻塞。
 
 ### 2026-10-09 LAN 完整会话尝试未取得认证凭据
@@ -6919,13 +6919,13 @@ passed. No live-device pointer/rotation acceptance is claimed.
 ### 2026-10-09 LAN 已认证 4K 会话与首帧
 
 - 使用此前用户授权的 Mac 账号，通过关闭回显的终端输入向测试子进程环境注入密码；未保存密码文件、未修改应用存储、未将密码写入测试日志。测试结束后子进程退出并移除包装进程环境引用。
-- LAN 192.168.50.226 的 fullColor 标准会话通过 1/1，无跳过，65.172s；实际认证与初始化成功、3840x2160 首帧在连接开始后 4.087s 到达，随后按测试要求保持 connected 60 秒。日志 `/tmp/aetherscreens-lan-authenticated-session-20261009.log`。本次不发送键盘/鼠标，不改变远端图案。
+- LAN <mac-mini-lan> 的 fullColor 标准会话通过 1/1，无跳过，65.172s；实际认证与初始化成功、3840x2160 首帧在连接开始后 4.087s 到达，随后按测试要求保持 connected 60 秒。日志 `/tmp/aetherscreens-lan-authenticated-session-20261009.log`。本次不发送键盘/鼠标，不改变远端图案。
 - 观察到后续帧回调不代表渲染 FPS，未执行高动态图案或物理呈现测量。LAN 首帧仍为数秒，不能把历史慢首帧仅归因于 Tailscale/DERP；后续需同配置 mesh 对照与初始化/首帧阶段分解。
 
 ### 2026-10-09 同配置 Tailscale 会话分阶段计时
 
 - Live session 测试增加 monotonic state elapsed 输出，无凭据/画面内容记录；没有改变产品协议或输入行为。
-- 100.64.0.3 fullColor 标准认证会话通过 1/1，无跳过，67.861s，4K 首帧 6.818s，随后稳定 60 秒。与本轮 LAN 4.087s 相比约多 2.73s；各为一次顺序观察，不代表重复样本均值或完全相同桌面内容。
+- <mac-mini-tailscale> fullColor 标准认证会话通过 1/1，无跳过，67.861s，4K 首帧 6.818s，随后稳定 60 秒。与本轮 LAN 4.087s 相比约多 2.73s；各为一次顺序观察，不代表重复样本均值或完全相同桌面内容。
 - Mesh 阶段：negotiatingVersion 0.0047s，authenticating 0.0896s，initializing 3.0237s，connected 3.0873s，首帧 6.8177s。认证阶段约 2.934s，connected 后等待首帧约 3.730s。日志 `/tmp/aetherscreens-mesh-phase-session-20261009.log`。
 - 同时 tailscale ping 两次确认 DERP(baizhiedu)，115ms / 227ms，命令最终报告 direct connection not established；这是当时路径证据，不证明稳定端到端输入或渲染延迟。后续补 LAN 同一分阶段计时，再定位认证及首帧传输的独立开销。
 
@@ -7254,7 +7254,7 @@ iOS无签名构建通过，日志 /tmp/aetherscreens-startup-ios-20261009.log。
 ## 2026-10-09 新启动链的原生服务器验收
 
 03:40 已使用新的 AppleFileCopyStartupTransport + 捕获连接代际，在授权
-Mac mini 192.168.50.226 上做两次独立真实上传，未操作原生GUI/系统剪贴板。
+Mac mini <mac-mini-lan> 上做两次独立真实上传，未操作原生GUI/系统剪贴板。
 普通文件512字节，服务端返回command200/version1；SSH读取全部内容与源模式
 相同，SHA256为110009dcee21620b166f3abfecb5eff7a873be729d1c2d53822e7acc5f34eb9b。
 文件夹包含空文件、子目录、多块131073字节文件和3字节同级文件，共5项，
@@ -8086,7 +8086,7 @@ Physical UI/FPS/provider workflows and remaining Screens parity stay open.
 
 2026-10-09 — current native desktop connection refresh
 Current Release client passed the explicitly authenticated Mac mini desktop
-gate over LAN 192.168.50.226, without keyboard/pointer injection: connection
+gate over LAN <mac-mini-lan>, without keyboard/pointer injection: connection
 completed at 0.618 seconds, genuine 3840x2160 pixel frame at 1.735 seconds,
 then remained connected for the test's 60-second stability window.
 Log: /tmp/aetherscreens-current-live-desktop-stability-20261009.log.

@@ -11,17 +11,17 @@ final class RDPConnectionModelsTests: XCTestCase {
     func testRemoteDeviceInitializationWithRDPProtocol() {
         let rdpDevice = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
         XCTAssertEqual(rdpDevice.remoteProtocol, .rdp)
         XCTAssertEqual(rdpDevice.port, 3389)
         XCTAssertEqual(rdpDevice.deviceType, .windows)
-        XCTAssertEqual(rdpDevice.username, "sprixin")
+        XCTAssertEqual(rdpDevice.username, "rdpuser")
         XCTAssertEqual(rdpDevice.authMethod, .windowsCredentials)
     }
 
@@ -32,11 +32,11 @@ final class RDPConnectionModelsTests: XCTestCase {
         {
             "id": "\(UUID().uuidString)",
             "name": "Win Host",
-            "host": "10.8.8.250",
+            "host": "192.0.2.50",
             "port": 3389,
             "deviceType": "Windows",
             "authMethod": "macOS Account",
-            "username": "sprixin",
+            "username": "rdpuser",
             "isOnline": true,
             "isTailscaleNode": false
         }
@@ -66,10 +66,10 @@ final class RDPConnectionModelsTests: XCTestCase {
 
     func testConnectionRequestForRDP() throws {
         let request = try XCTUnwrap(ConnectionRequest(
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: "3389",
             name: "Win10",
-            username: "sprixin",
+            username: "rdpuser",
             password: "secretpassword",
             type: .windows,
             remoteProtocol: .rdp
@@ -77,31 +77,31 @@ final class RDPConnectionModelsTests: XCTestCase {
 
         XCTAssertEqual(request.device.remoteProtocol, .rdp)
         XCTAssertEqual(request.device.port, 3389)
-        XCTAssertEqual(request.device.username, "sprixin")
+        XCTAssertEqual(request.device.username, "rdpuser")
         XCTAssertEqual(request.device.authMethod, .windowsCredentials)
         XCTAssertEqual(request.password, "secretpassword")
     }
 
     func testConnectionLinkSupportsRDPScheme() throws {
-        let url = try XCTUnwrap(URL(string: "rdp://sprixin:123456@10.8.8.250:3389"))
+        let url = try XCTUnwrap(URL(string: "rdp://rdpuser:test-pass@192.0.2.50:3389"))
         let link = try ConnectionLink(url: url)
         let resolved = try link.resolve(devices: []) { _ in nil }
 
-        XCTAssertEqual(resolved.device.host, "10.8.8.250")
+        XCTAssertEqual(resolved.device.host, "192.0.2.50")
         XCTAssertEqual(resolved.device.port, 3389)
-        XCTAssertEqual(resolved.device.username, "sprixin")
+        XCTAssertEqual(resolved.device.username, "rdpuser")
         XCTAssertEqual(resolved.device.remoteProtocol, .rdp)
-        XCTAssertEqual(resolved.password, "123456")
+        XCTAssertEqual(resolved.password, "test-pass")
         XCTAssertTrue(resolved.isTemporary)
     }
 
     func testConnectionRequestProtocolResolution() throws {
         // Windows on port 3389 without explicit protocol should resolve to .rdp
         let req1 = try XCTUnwrap(ConnectionRequest(
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: "3389",
             name: "Win Default",
-            username: "sprixin",
+            username: "rdpuser",
             password: "123",
             type: .windows
         ))
@@ -110,10 +110,10 @@ final class RDPConnectionModelsTests: XCTestCase {
 
         // Explicit .rfb on port 3389 should be honored
         let req2 = try XCTUnwrap(ConnectionRequest(
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: "3389",
             name: "Win VNC",
-            username: "sprixin",
+            username: "rdpuser",
             password: "123",
             type: .windows,
             remoteProtocol: .rfb
@@ -126,12 +126,12 @@ final class RDPConnectionModelsTests: XCTestCase {
         let store = DeviceStore(userDefaults: UserDefaults(suiteName: "qa.rdp.store.\(UUID().uuidString)")!)
         let device = RemoteDevice(
             name: "Win 10 QA",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
 
         XCTAssertTrue(store.addDevice(device))
@@ -140,6 +140,6 @@ final class RDPConnectionModelsTests: XCTestCase {
         XCTAssertEqual(fetched.deviceType, .windows)
         XCTAssertEqual(fetched.authMethod, .windowsCredentials)
         XCTAssertEqual(fetched.port, 3389)
-        XCTAssertEqual(fetched.username, "sprixin")
+        XCTAssertEqual(fetched.username, "rdpuser")
     }
 }

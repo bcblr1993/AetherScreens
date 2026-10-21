@@ -678,3 +678,7 @@
 
 "Unmute Remote Audio" = "Unmute Remote Audio";
 
+
+"The remote computer closed the connection before Screen Sharing responded. Check that Screen Sharing is enabled on it and that no proxy, VPN or firewall intercepts the connection." = "The remote computer closed the connection before Screen Sharing responded. Check that Screen Sharing is enabled on it and that no proxy, VPN or firewall intercepts the connection.";
+
+"No saved computers yet. Select + on a nearby Mac or add one by address." = "No saved computers yet. Select + on a nearby Mac or add one by address.";

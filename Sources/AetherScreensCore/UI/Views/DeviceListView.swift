@@ -252,6 +252,9 @@ public struct DeviceListView: View {
                 let devices = displayedDevices
                 if devices.isEmpty && !showsNearbyDevices {
                     emptyStateView
+                } else if devices.isEmpty && selectedCategory == .all && viewModel.normalizedSearchQuery.isEmpty {
+                    // Nearby Macs replace the full empty state, so keep a pointer to adding a computer.
+                    savedComputersHint
                 } else if !devices.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         if !viewModel.filteredNearbyMacs.isEmpty {
@@ -634,6 +637,25 @@ public struct DeviceListView: View {
         activeSessionVM = nil
     }
     #endif
+
+    private var savedComputersHint: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "display.2")
+                .foregroundStyle(.secondary)
+            Text(AppLocalization.string("No saved computers yet. Select + on a nearby Mac or add one by address."))
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+            Spacer(minLength: 8)
+            Button {
+                showingAddSheet = true
+            } label: {
+                Label(AppLocalization.string("Add computer"), systemImage: "plus")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, 20)
+        .accessibilityIdentifier("saved-computers-hint")
+    }
 
     private var emptyStateView: some View {
         VStack(spacing: 20) {

@@ -454,8 +454,8 @@ final class DeviceStoreTests: XCTestCase {
     @MainActor
     func testLibrarySearchTrimsPastedWhitespaceAndPreservesDeviceOrder() {
         let store = makeStore()
-        let first = RemoteDevice(name: "工作 Mac", host: "100.64.0.3")
-        let second = RemoteDevice(name: "Studio", host: "192.168.50.226")
+        let first = RemoteDevice(name: "工作 Mac", host: "100.80.0.3")
+        let second = RemoteDevice(name: "Studio", host: "192.0.2.226")
         store.addDevice(first)
         store.addDevice(second)
         let discovery = BonjourDiscoveryService()
@@ -464,15 +464,15 @@ final class DeviceStoreTests: XCTestCase {
         let originalIDs = model.devices.map(\.id)
         model.searchText = " \nmac\t "
         XCTAssertEqual(model.filteredDevices.map(\.id), [first.id])
-        model.searchText = " 192.168.50.226\n"
+        model.searchText = " 192.0.2.226\n"
         XCTAssertEqual(model.filteredDevices.map(\.id), [second.id])
         model.searchText = "\t\n "
         XCTAssertEqual(model.filteredDevices.map(\.id), originalIDs)
-        let nearby = DiscoveredMac(name: "Nearby Studio", host: "192.168.50.10")
+        let nearby = DiscoveredMac(name: "Nearby Studio", host: "192.0.2.10")
         model.discoveredNearbyMacs = [nearby]
         model.searchText = "  studio\n"
         XCTAssertEqual(model.filteredNearbyMacs, [nearby])
-        model.searchText = " 192.168.50.10 "
+        model.searchText = " 192.0.2.10 "
         XCTAssertEqual(model.filteredNearbyMacs, [nearby])
         model.searchText = "\t\n"
         XCTAssertEqual(model.filteredNearbyMacs, [nearby])

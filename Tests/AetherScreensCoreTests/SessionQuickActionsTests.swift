@@ -6,7 +6,7 @@ final class SessionQuickActionsTests: XCTestCase {
     func testTriggerHotCornersDispatchesPointerToExactCoordinates() async throws {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -56,7 +56,7 @@ final class SessionQuickActionsTests: XCTestCase {
     func testHotCornerBlockedInObserveMode() async throws {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -85,7 +85,7 @@ final class SessionQuickActionsTests: XCTestCase {
     func testTriggerSystemActionsWhenConnected() async throws {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,

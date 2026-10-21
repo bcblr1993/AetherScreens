@@ -693,6 +693,7 @@ public struct RemoteDesktopView: View {
                 controlIcon("list.bullet.rectangle")
             }
             .help(AppLocalization.string("View Diagnostic Logs"))
+            .accessibilityLabel(AppLocalization.string("View Diagnostic Logs"))
             #endif
 
             if viewModel.isRDP && viewModel.isRemoteAudioEnabled {

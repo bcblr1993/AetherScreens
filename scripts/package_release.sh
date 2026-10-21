@@ -6,8 +6,8 @@ cd "$DIR"
 if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
-VERSION="${1:-${AETHERSCREENS_VERSION:-1.3.2}}"
-BUILD_NUMBER="${2:-${AETHERSCREENS_BUILD_NUMBER:-2026102103}}"
+VERSION="${1:-${AETHERSCREENS_VERSION:-1.3.3}}"
+BUILD_NUMBER="${2:-${AETHERSCREENS_BUILD_NUMBER:-2026102104}}"
 SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
 NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
 OUTPUT="${AETHERSCREENS_OUTPUT_DIR:-$DIR/build/release}"
@@ -18,9 +18,11 @@ trap 'rm -rf "$STAGE"' EXIT
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
     swift test
 fi
-swift build -c release --arch arm64
+# Strip local checkout paths (which contain the builder's account name) from __FILE__ / #file strings.
+PRIVACY_FLAGS=(-Xcc "-ffile-prefix-map=$DIR=." -Xswiftc -file-prefix-map -Xswiftc "$DIR=." -Xswiftc -debug-prefix-map -Xswiftc "$DIR=.")
+swift build -c release --arch arm64 "${PRIVACY_FLAGS[@]}"
 python3 scripts/generate_dependency_notices.py --check
-RELEASE_BIN="$(swift build -c release --arch arm64 --show-bin-path)/AetherScreensApp"
+RELEASE_BIN="$(swift build -c release --arch arm64 "${PRIVACY_FLAGS[@]}" --show-bin-path)/AetherScreensApp"
 APP_DIR="$STAGE/AetherScreens.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$RELEASE_BIN" "$APP_DIR/Contents/MacOS/AetherScreens"
@@ -60,6 +62,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <key>NSBonjourServices</key><array><string>_rfb._tcp</string><string>_apple-sas._tcp</string></array>
 </dict></plist>
 PLIST
+bash scripts/check_release_privacy.sh "$APP_DIR"
 codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP_DIR"
 codesign --verify --deep --strict "$APP_DIR"
 NOTARY_ZIP="$STAGE/notarization.zip"

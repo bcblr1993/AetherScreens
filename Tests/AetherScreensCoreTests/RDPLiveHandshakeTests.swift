@@ -17,8 +17,12 @@ final class RDPLiveHandshakeTests: XCTestCase {
         if let port = env["AETHERSCREENS_RDP_LIVE_PORT"].flatMap(UInt16.init) {
             targetPort = port
         }
-        targetUsername = env["AETHERSCREENS_RDP_LIVE_USERNAME"] ?? "sprixin"
-        targetPassword = env["AETHERSCREENS_RDP_LIVE_PASSWORD"] ?? "123456"
+        guard let username = env["AETHERSCREENS_RDP_LIVE_USERNAME"], !username.isEmpty,
+              let password = env["AETHERSCREENS_RDP_LIVE_PASSWORD"], !password.isEmpty else {
+            throw XCTSkip("Set AETHERSCREENS_RDP_LIVE_USERNAME and AETHERSCREENS_RDP_LIVE_PASSWORD to run live RDP tests")
+        }
+        targetUsername = username
+        targetPassword = password
     }
 
     @MainActor

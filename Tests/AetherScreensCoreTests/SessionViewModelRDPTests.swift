@@ -7,21 +7,21 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelInitializesWithRDPDevice() {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
         let session = SessionViewModel(device: device, password: "secretPassword", isTemporary: true)
         defer { session.endSession() }
 
         XCTAssertTrue(session.isRDP)
         XCTAssertNotNil(session.rdpClient)
-        XCTAssertEqual(session.rdpClient?.host, "10.8.8.250")
+        XCTAssertEqual(session.rdpClient?.host, "192.0.2.50")
         XCTAssertEqual(session.rdpClient?.port, 3389)
-        XCTAssertEqual(session.rdpClient?.username, "sprixin")
+        XCTAssertEqual(session.rdpClient?.username, "rdpuser")
         XCTAssertEqual(session.rdpClient?.password, "secretPassword")
         XCTAssertTrue(session.framebuffer === session.rdpClient?.framebuffer)
     }
@@ -30,12 +30,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPStateForwarding() async throws {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
         let session = SessionViewModel(device: device, password: "123", isTemporary: true)
         defer { session.endSession() }
@@ -69,12 +69,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPFrameUpdates() async throws {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
         let session = SessionViewModel(device: device, password: "123", isTemporary: true)
         defer { session.endSession() }
@@ -108,12 +108,12 @@ final class SessionViewModelRDPTests: XCTestCase {
 
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
         let session = SessionViewModel(
             device: device,
@@ -153,12 +153,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPPointerInputDispatch() {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
         let session = SessionViewModel(device: device, password: "123", isTemporary: true)
         defer { session.endSession() }
@@ -188,12 +188,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPDesktopResolutionAndRemoteSize() async throws {
         let device = RemoteDevice(
             name: "Win11 Workstation",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin",
+            username: "rdpuser",
             desktopWidth: 1920,
             desktopHeight: 1080
         )
@@ -227,12 +227,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPFileUploadAndDirectDrop() throws {
         let device = RemoteDevice(
             name: "Win11 Workstation",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
         let session = SessionViewModel(device: device, password: "123", isTemporary: true)
         defer { session.endSession() }
@@ -271,12 +271,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPMouseCoordinatesAccurateWithoutDistortion() {
         let device = RemoteDevice(
             name: "Win11 Workstation",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin",
+            username: "rdpuser",
             desktopWidth: 1920,
             desktopHeight: 1080
         )
@@ -303,12 +303,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPAudioHandlingAndMuteToggle() async throws {
         let device = RemoteDevice(
             name: "Win11 Workstation",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin",
+            username: "rdpuser",
             remoteAudioEnabled: true
         )
         let session = SessionViewModel(device: device, password: "123", isTemporary: true)
@@ -364,12 +364,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPAutoFitAndResolutionUpdate() {
         let device = RemoteDevice(
             name: "Win11 Workstation",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin",
+            username: "rdpuser",
             autoFitResolution: true
         )
         let session = SessionViewModel(device: device, password: "123", isTemporary: true)
@@ -389,12 +389,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPBidirectionalFileClipboard() async throws {
         let device = RemoteDevice(
             name: "Win11 Workstation",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
 
         let writtenFilesBox = Box<[URL]>([])
@@ -457,12 +457,12 @@ final class SessionViewModelRDPTests: XCTestCase {
     func testSessionViewModelRDPDragAndDropTargetingCoordinates() async throws {
         let device = RemoteDevice(
             name: "Win11 Workstation",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
             authMethod: .windowsCredentials,
-            username: "sprixin"
+            username: "rdpuser"
         )
 
         let session = SessionViewModel(device: device, password: "123", isTemporary: true)

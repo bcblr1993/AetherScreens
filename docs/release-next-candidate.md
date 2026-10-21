@@ -21,7 +21,7 @@ Latest checkpoint: actual TCP downgrade and recovery passed with matching server
 
 No new version has been published. Full Screens parity, actual motion/typing/pointer behavior and energy/hitch measurements remain separate acceptance requirements.
 
-The current candidate also passed a 60-second authenticated, read-only Mac mini session at 192.168.50.226, receiving 3840×2160 frames. This verifies default RFB interoperability, not server adoption of JPEG hints or native/UI acceptance. Log: /tmp/aetherscreens-macmini-current-candidate-20261009.log. Candidate packaging uses a separate output directory to preserve previous release artifacts.
+The current candidate also passed a 60-second authenticated, read-only Mac mini session at <mac-mini-lan>, receiving 3840×2160 frames. This verifies default RFB interoperability, not server adoption of JPEG hints or native/UI acceptance. Log: /tmp/aetherscreens-macmini-current-candidate-20261009.log. Candidate packaging uses a separate output directory to preserve previous release artifacts.
 
 User directed packaging/publication to pause on 2026-10-09. Finish compilation/tests and submit/push this phase first. Version 1.1.0/build 2026100901 remains candidate metadata; no tag, public release or website download update is authorized in this paused step.
 

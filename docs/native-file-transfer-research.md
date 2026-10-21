@@ -604,7 +604,7 @@ Locked flags, negotiated options, server interoperability and UI integration
 remain pending; these explicit finalizers do not advertise completed parity.
 
 Mac mini acceptance checkpoint (2026-10-09): current SSH endpoint
-100.64.0.3 reported macOS 27.0.1. The refreshed local XCTest bundle ran seven
+<mac-mini-tailscale> reported macOS 27.0.1. The refreshed local XCTest bundle ran seven
 file-transfer suites there, including the native C catalog bridge, recursive
 restoration, zero-access directory cancellation/conflict retry and final modes.
 All 44 selected real-filesystem tests passed, no skips/failures:
@@ -1067,7 +1067,7 @@ iPhone/native-server acceptance remain outstanding.
 
 ### Mac mini direct-helper probe is rejected by launch constraints (2026-10-09)
 
-On the authorized Mac mini (100.64.0.3), sw_vers reported 27.0.1 and the SSH
+On the authorized Mac mini (<mac-mini-tailscale>), sw_vers reported 27.0.1 and the SSH
 process UID was 501. A small read-only CFPreferences probe queried exactly
 ARDCollectLogs / com.apple.RemoteManagement / AnyUser / CurrentHost and found
 logging disabled. A unique temporary destination was created, then the installed

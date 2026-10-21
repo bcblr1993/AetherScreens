@@ -159,8 +159,9 @@ final class AppleRSA1PreludeTests: XCTestCase {
         var password: String?
         if authenticate {
             let credentialHost = env["AETHERSCREENS_LIVE_CREDENTIAL_HOST"] ?? host
-            guard credentialHost == host || (host == "100.64.0.3" && credentialHost == "192.168.50.226") else {
-                throw XCTSkip("Credential alias must refer to the authorized Mac mini")
+            let allowedAlias = env["AETHERSCREENS_LIVE_CREDENTIAL_ALIAS_OF"]
+            guard credentialHost == host || allowedAlias == host else {
+                throw XCTSkip("Set AETHERSCREENS_LIVE_CREDENTIAL_ALIAS_OF to the live host to use a credential alias")
             }
             var store = DeviceStore.shared
             var device = store.devices.first { $0.host == credentialHost && $0.username == identity }

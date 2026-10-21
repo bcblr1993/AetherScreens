@@ -22,3 +22,6 @@ scripts/signing.local.env
 __pycache__/
 *.pyc
 
+
+# Local personal-data patterns for scripts/check_release_privacy.sh (not committed)
+scripts/privacy.local.patterns

@@ -1914,8 +1914,9 @@ public final class RFBClient: @unchecked Sendable {
                 self.readBuffer.removeSubrange(0..<count)
                 completion(Data(chunk))
             } else if isComplete {
-                print("[DEBUG readExact] Connection marked isComplete=true, but only have \(self.readBuffer.count) of \(count) bytes")
-                self.handleFailure("Remote host closed connection (received \(self.readBuffer.count)/\(count) bytes)")
+                self.handleFailure(Self.closedConnectionMessage(
+                    received: self.readBuffer.count, expected: count, state: self.state
+                ))
                 completion(nil)
             } else {
                 // Buffer remaining bytes recursively
@@ -1977,6 +1978,17 @@ public final class RFBClient: @unchecked Sendable {
         default:
             return "Connected, but no desktop image arrived. Check the remote Mac's Screen Sharing session and retry."
         }
+    }
+
+    static let closedBeforeHandshakeMessage = "The remote computer closed the connection before Screen Sharing responded. Check that Screen Sharing is enabled on it and that no proxy, VPN or firewall intercepts the connection."
+
+    /// A close with nothing received during version negotiation usually means the port is not a VNC server
+    /// (or a proxy accepted and dropped it), so say that instead of reporting raw byte counts.
+    static func closedConnectionMessage(received: Int, expected: Int, state: State) -> String {
+        if received == 0, state == .connecting || state == .negotiatingVersion {
+            return closedBeforeHandshakeMessage
+        }
+        return "Remote host closed connection (received \(received)/\(expected) bytes)"
     }
 
     private func handleFailure(_ message: String) {

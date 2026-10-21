@@ -678,3 +678,7 @@
 
 "Unmute Remote Audio" = "取消静音远程音频";
 
+
+"The remote computer closed the connection before Screen Sharing responded. Check that Screen Sharing is enabled on it and that no proxy, VPN or firewall intercepts the connection." = "远端电脑在屏幕共享响应前关闭了连接。请确认对方已开启屏幕共享，并检查是否有代理、VPN 或防火墙拦截了连接。";
+
+"No saved computers yet. Select + on a nearby Mac or add one by address." = "还没有保存的电脑。点按附近 Mac 上的 + 或按地址添加。";

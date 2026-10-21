@@ -5,10 +5,10 @@ import RDPKit
 final class RDPClientSessionTests: XCTestCase {
 
     func testRDPClientInitialStateAndProperties() {
-        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "sprixin", password: "secretpassword")
-        XCTAssertEqual(client.host, "10.8.8.250")
+        let client = RDPClient(host: "192.0.2.50", port: 3389, username: "rdpuser", password: "secretpassword")
+        XCTAssertEqual(client.host, "192.0.2.50")
         XCTAssertEqual(client.port, 3389)
-        XCTAssertEqual(client.username, "sprixin")
+        XCTAssertEqual(client.username, "rdpuser")
         XCTAssertEqual(client.password, "secretpassword")
         XCTAssertEqual(client.state, .disconnected)
         XCTAssertNotNil(client.framebuffer)
@@ -17,7 +17,7 @@ final class RDPClientSessionTests: XCTestCase {
     }
 
     func testRDPClientPublishLocalFilesSafeWhenDisconnected() {
-        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "sprixin", password: "123")
+        let client = RDPClient(host: "192.0.2.50", port: 3389, username: "rdpuser", password: "123")
         let file = RDPClipboardLocalFile(fileName: "test.txt", contents: Data("hello".utf8))
         XCTAssertFalse(client.publishLocalFiles([file]))
     }
@@ -82,7 +82,7 @@ final class RDPClientSessionTests: XCTestCase {
     }
 
     func testRDPClientAudioCallbackAndSimulation() throws {
-        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "sprixin", password: "123", audioEnabled: true)
+        let client = RDPClient(host: "192.0.2.50", port: 3389, username: "rdpuser", password: "123", audioEnabled: true)
         XCTAssertTrue(client.audioEnabled)
 
         let box = Box<RDPAudioSample?>(nil)
@@ -110,7 +110,7 @@ final class RDPClientSessionTests: XCTestCase {
     }
 
     func testRDPClientConnectWithoutCredentialsFailsImmediately() {
-        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "", password: "")
+        let client = RDPClient(host: "192.0.2.50", port: 3389, username: "", password: "")
         client.connect()
 
         if case .failed(let reason) = client.state {
@@ -121,13 +121,13 @@ final class RDPClientSessionTests: XCTestCase {
     }
 
     func testRDPClientDisconnectResetsState() {
-        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "sprixin", password: "123")
+        let client = RDPClient(host: "192.0.2.50", port: 3389, username: "rdpuser", password: "123")
         client.disconnect()
         XCTAssertEqual(client.state, .disconnected)
     }
 
     func testRDPClientPointerAndKeyboardEventsDoNotCrashWhenDisconnected() {
-        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "sprixin", password: "123")
+        let client = RDPClient(host: "192.0.2.50", port: 3389, username: "rdpuser", password: "123")
         // Should safely no-op when disconnected without crashing
         client.sendPointerEvent(buttonMask: .left, x: 100, y: 100)
         client.sendKeyEvent(down: true, keySym: 0xff0d) // Enter

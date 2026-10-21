@@ -81,7 +81,7 @@ final class NativeFileUploadLiveTests: XCTestCase {
         }
         let connected = expectation(description: "Coordinated upload authentication")
         connected.assertForOverFulfill = false
-        let client = RFBClient(host: "192.168.50.226", port: 5900, password: password, username: "chenxu")
+        let client = RFBClient(host: try liveHost(), port: 5900, password: password, username: try liveUsername())
         defer { client.disconnect() }
         client.onStateChanged = { state in
             if state == .connected { connected.fulfill() }
@@ -157,7 +157,7 @@ final class NativeFileUploadLiveTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("coordinated-download-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: root) }
-        let client = RFBClient(host: "192.168.50.226", port: 5900, password: password, username: "chenxu")
+        let client = RFBClient(host: try liveHost(), port: 5900, password: password, username: try liveUsername())
         defer { client.disconnect() }
         let connected = expectation(description: "Coordinated download authenticated")
         connected.assertForOverFulfill = false
@@ -292,7 +292,7 @@ final class NativeFileUploadLiveTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let connected = expectation(description: "Download connected")
         connected.assertForOverFulfill = false
-        let client = RFBClient(host: "192.168.50.226", port: 5900, password: password, username: "chenxu")
+        let client = RFBClient(host: try liveHost(), port: 5900, password: password, username: try liveUsername())
         defer { client.disconnect() }
         client.onStateChanged = { state in
             if state == .connected { connected.fulfill() }
@@ -408,8 +408,8 @@ final class NativeFileUploadLiveTests: XCTestCase {
         let logicalBytes = UInt64(data.count + (nested ? 3 : 0) + (resourceFork ? resourceData.count : 0))
         let connected = expectation(description: "Native upload authentication")
         connected.assertForOverFulfill = false
-        let client = RFBClient(host: "192.168.50.226", port: 5900,
-                               password: password, username: "chenxu")
+        let client = RFBClient(host: try liveHost(), port: 5900,
+                               password: password, username: try liveUsername())
         defer { client.disconnect() }
         client.onStateChanged = { state in
             if state == .connected { connected.fulfill() }
@@ -500,5 +500,20 @@ private final class LocalWriteResult: @unchecked Sendable {
     private var value = false
     func set(_ success: Bool) { lock.lock(); value = success; lock.unlock() }
     var success: Bool { lock.lock(); defer { lock.unlock() }; return value }
+}
+
+/// Live targets come only from the environment so no personal host or account ships in the repository.
+private func liveHost() throws -> String {
+    guard let host = ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_HOST"], !host.isEmpty else {
+        throw XCTSkip("Set AETHERSCREENS_LIVE_HOST for owned native transfer tests")
+    }
+    return host
+}
+
+private func liveUsername() throws -> String {
+    guard let username = ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_USERNAME"], !username.isEmpty else {
+        throw XCTSkip("Set AETHERSCREENS_LIVE_USERNAME for owned native transfer tests")
+    }
+    return username
 }
 #endif

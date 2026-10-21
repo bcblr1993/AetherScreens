@@ -58,8 +58,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: 1.3.2
-        CURRENT_PROJECT_VERSION: 2026102103
+        MARKETING_VERSION: 1.3.3
+        CURRENT_PROJECT_VERSION: 2026102104
         TARGETED_DEVICE_FAMILY: '1,2'
         SWIFT_VERSION: '5.9'
   AetherScreensIOSUITests:

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the Mac UI suite on a Tart VM or explicitly selected macOS 27 host using SSH key access."""
 import argparse
+import os
 import json
 import pathlib
 import plistlib
@@ -16,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--vm", default="macos27")
     parser.add_argument("--host", help="Explicitly authorized physical macOS 27 test host; bypasses Tart discovery")
-    parser.add_argument("--user", default="chenxu")
+    parser.add_argument("--user", default=os.environ.get("AETHERSCREENS_QA_USER", os.environ.get("USER", "")))
     parser.add_argument("--developer-dir", required=True, help="Xcode Contents/Developer path inside the VM")
     parser.add_argument("--app", required=True, type=pathlib.Path, help="Separately identified .vmqa app bundle")
     parser.add_argument("--release-candidate", action="store_true", help="Test the unmodified, signed production candidate explicitly")

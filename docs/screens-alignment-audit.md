@@ -80,7 +80,7 @@ product behaviors, not polish items that can be closed by another animation test
 
 | Priority / requirement | Current authoritative evidence | Completion evidence required |
 | --- | --- | --- |
-| P0 actual mouse, zoom edge-follow and sustained fluidity | Controlled native input/viewport gates exist; no current physical FPS/hitch/latency gate. LAN TCP probes to 192.168.50.226:22 and :5900 timed out, but existing Tailscale discovery recovered the Mac mini at 100.64.0.3. SSH identity and macOS 27.0.1 verified; actual RFB handshake and 4K/60-second VNC connection tests passed 2/2 (`/tmp/aetherscreens-macmini-mesh-handshake-20261008.log`); explicit Mac-account session subsequently passed 1/1 (`/tmp/aetherscreens-macmini-mesh-ard-session-20261008.log`). `devicectl list devices` reports the paired physical iPhone 12 Pro unavailable; the connected 12 Pro is explicitly simulated. | Reachable target Mac and physical phone; continuous 30-minute session covering arrow rendering, zoom/pan, edge following, reconnect, gestures; measured presentation, hitch and input latency evidence. Simulator success cannot close this row. |
+| P0 actual mouse, zoom edge-follow and sustained fluidity | Controlled native input/viewport gates exist; no current physical FPS/hitch/latency gate. LAN TCP probes to <mac-mini-lan>:22 and :5900 timed out, but existing Tailscale discovery recovered the Mac mini at <mac-mini-tailscale>. SSH identity and macOS 27.0.1 verified; actual RFB handshake and 4K/60-second VNC connection tests passed 2/2 (`/tmp/aetherscreens-macmini-mesh-handshake-20261008.log`); explicit Mac-account session subsequently passed 1/1 (`/tmp/aetherscreens-macmini-mesh-ard-session-20261008.log`). `devicectl list devices` reports the paired physical iPhone 12 Pro unavailable; the connected 12 Pro is explicitly simulated. | Reachable target Mac and physical phone; continuous 30-minute session covering arrow rendering, zoom/pan, edge following, reconnect, gestures; measured presentation, hitch and input latency evidence. Simulator success cannot close this row. |
 | P1 actual remote Curtain | `CurtainModeManager.swift` explicitly implements a local Lock Screen shortcut notice only. [Official Curtain behavior](https://help.edovia.com/en/screens-5/features/curtain-mode) requires remote display privacy while the client keeps seeing and controlling the desktop; Remote Management is required. | Verify target Remote Management capabilities and protocol; enable/disable on a real Mac, inspect its physical display and retained client control; login-window, headless and multi-display behavior. Do not change remote system settings without concrete authorization. |
 | P1 native bidirectional file drag/drop | Historical missing implementation has been superseded by the current native file-copy workers and transfer sheets described above. Physical drag/drop and picker/provider acceptance remain open. [Official Apple-device transfers](https://help.edovia.com/en/screens-5/features/file-transfers) use drag/drop, with direction-specific server requirements: mobile download requires macOS 14+, upload macOS 10.10+. | Real server transfer negotiation and upload/download byte integrity; destination selection, progress/cancel, overwrite and interrupted/reconnected cleanup; native mobile and Mac drag/drop. SFTP alone cannot establish this behavior. |
 | P1 Apple clipboard compatibility | Native receive is now integrated for exact Apple banner plus Mac-account authentication; eight TCP cases cover Unicode/empty, metadata isolation, coalescing, size/deadline and reconnect. Actual ordinary client 4K + 60-second stability passed 1/1 after integration (`/tmp/aetherscreens-apple-native-clipboard-client-live-20261008.log`). Read-only actual archive parsing passed in both standard/encrypted profiles, but current archive had unsupported flavor; text/write acceptance remains open. Read-only VNC-password native fetch also failed on this host both without ViewerInfo (45-second deadline) and with ViewerInfo (20 status messages, no archive); native VNC compatibility remains an open parity gap. Earlier actual Mac mini Unicode and ASCII/multiline gates both failed over the recovered Tailscale path; connection remained active and original board restoration passed. ASCII packet acceptance did not produce the remote pasteboard value. Verified Mac-account rerun also failed both cases; ASCII lost QA ownership and was not restored over the changed board, while Unicode restored (`/tmp/aetherscreens-macmini-mesh-ard-clipboard-20261008.log`). Logs: `/tmp/aetherscreens-macmini-mesh-unicode-clipboard-20261008.log` and `/tmp/aetherscreens-macmini-mesh-legacy-clipboard-20261008.log`. | Reachable actual Apple server and exclusive clipboard window; both directions, Unicode/multiline, reconnect and restoration of the pre-test board without retaining private contents. |
@@ -141,11 +141,11 @@ host and port and repairs only old generated addresses, preserving device IDs,
 accounts, Keychain associations and manually configured IP addresses. A live
 LAN discovery regression verifies a display name differing from its DNS host.
 The 12 Pro received a real framebuffer from its saved MacBook Pro after repair;
-that machine is 192.168.50.26, not the requested 192.168.50.226 target. The
+that machine is <other-lan-host>, not the requested <mac-mini-lan> target. The
 16 Pro Max's saved configuration lacked a username, so its Mac-only server
 rejected VNC authentication. Interactive Mac username/password prompting is now
 implemented with handshake and saved-versus-temporary persistence regressions.
-The 12 Pro subsequently passed the account-session test against 192.168.50.226;
+The 12 Pro subsequently passed the account-session test against <mac-mini-lan>;
 its screenshot shows the controlled QA desktop. The user confirmed connection
 but reported poorer responsiveness than Screens. The 16 Pro Max target test
 was interrupted before reaching Quick Connect and remains pending; its subsequent
@@ -798,8 +798,8 @@ Example (use the current isolated Xcode and freshly built QA app):
 
 ```sh
 python3 scripts/qa/run_macos_vm_ui_qa.py \
-  --vm macos27 --user chenxu \
-  --developer-dir /Users/chenxu/aetherscreens-ui-tools.ec1zbU/Xcode.app/Contents/Developer \
+  --vm macos27 --user <mac-user> \
+  --developer-dir ~/aetherscreens-ui-tools.ec1zbU/Xcode.app/Contents/Developer \
   --app /tmp/AetherScreens-macOS27-VM-QA.app \
   --output build/macos27-ui-qa-new-run
 ```
@@ -1120,8 +1120,8 @@ smoothness, cursor parity, commit, push or release acceptance.
 
 ## Actual route comparison and loopback SSH QA (2026-10-08)
 
-Read-only SSH on the trusted Mac mini reports en0 192.168.50.79 and en1
-192.168.50.226; TCP 22/5900 on both addresses timed out from this host.
+Read-only SSH on the trusted Mac mini reports en0 <mac-mini-lan-alt> and en1
+<mac-mini-lan>; TCP 22/5900 on both addresses timed out from this host.
 The mesh addresses remain reachable. A bounded, compression-disabled SSH probe
 read/discarded 262,144 generated random bytes in 14.776 seconds including SSH
 startup, exit 0. No remote file was created or user content transferred. This
@@ -1973,7 +1973,7 @@ monitoring requested20:20:42.425/42.958, capture_stop20:21:40.055 near test end.
 No intervening stop is logged; this does not prove absence of server stalls or
 correct RPC results. Post-run tailscale ping returned DERP(baizhiedu)427/22/72ms
 and exited1 because direct was not established; successful pongs prove mesh
-reachability, not direct reachability. Known LAN target192.168.50.226 ports22 and
+reachability, not direct reachability. Known LAN target<mac-mini-lan> ports22 and
 5900 both failed3-second connect probes. Thus no LAN-vs-mesh causal comparison
 is available presently. No service/network/security settings changed. Evidence:
 `/tmp/aetherscreens-arrival-capture-events-20261008.jsonl`,

@@ -28,7 +28,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
         let clipboardBox = Box("Copied on local Mac")
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -71,7 +71,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
         let clipboardBox = Box("Local text")
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -117,7 +117,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
         let clipboardBox = Box("Confidential local text")
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -153,7 +153,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
         let clipboardBox = Box("Text to keep local")
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -189,7 +189,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
         let clipboardBox = Box("Instant Cmd+V Text")
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -227,7 +227,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
         let clipboardBox = Box("Instant Raw Key Text")
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -267,7 +267,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
         let clipboardBox = Box("Initial")
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
@@ -312,7 +312,7 @@ final class BidirectionalClipboardSyncTests: XCTestCase {
     func testWindowsRDPCommandShortcutTranslatesToControl() async throws {
         let device = RemoteDevice(
             name: "Windows Server",
-            host: "10.8.8.250",
+            host: "192.0.2.50",
             port: 3389,
             deviceType: .windows,
             remoteProtocol: .rdp,
