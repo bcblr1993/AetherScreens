@@ -182,7 +182,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public let frameUpdates = PassthroughSubject<Void, Never>()
     public let pointerUpdates = PassthroughSubject<CGPoint, Never>()
     public let cursorUpdates = CurrentValueSubject<RFBRemoteCursor?, Never>(nil)
-    @Published private var lastFramebufferSize = CGSize.zero
+    @Published public private(set) var remoteDesktopSize = CGSize.zero
 
     public let isTemporary: Bool
     @Published public var keyboardConfiguration: KeyboardToolbarConfiguration {
@@ -254,17 +254,25 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             requiresLoopbackForwarding: device.ssh != nil
         )
         self.client = rfb
+        let initialDesktopSize: CGSize
         if device.remoteProtocol == .rdp {
+            let rdpWidth = device.desktopWidth ?? 1920
+            let rdpHeight = device.desktopHeight ?? 1080
+            initialDesktopSize = CGSize(width: rdpWidth, height: rdpHeight)
             self.rdpClient = RDPClient(
                 host: device.host,
                 port: device.port,
                 username: device.username,
-                password: password
+                password: password,
+                width: rdpWidth,
+                height: rdpHeight
             )
         } else {
             self.rdpClient = nil
+            initialDesktopSize = CGSize(width: rfb.framebuffer.width, height: rfb.framebuffer.height)
         }
-        self.trackpadEngine = TrackpadEngine(remoteWidth: 1920, remoteHeight: 1080)
+        self.remoteDesktopSize = initialDesktopSize
+        self.trackpadEngine = TrackpadEngine(remoteWidth: initialDesktopSize.width, remoteHeight: initialDesktopSize.height)
         self.curtainManager = CurtainModeManager()
         self.multiDisplayManager = MultiDisplayManager()
         self.metrics = PerformanceMetrics()
@@ -455,8 +463,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 let w = self.client.framebuffer.width
                 let h = self.client.framebuffer.height
                 let size = CGSize(width: w, height: h)
-                if self.lastFramebufferSize != size {
-                    self.lastFramebufferSize = size
+                if self.remoteDesktopSize != size {
+                    self.remoteDesktopSize = size
                     if self.activeCropRect == nil {
                         self.trackpadEngine.remoteWidth = CGFloat(w)
                         self.trackpadEngine.remoteHeight = CGFloat(h)
@@ -574,8 +582,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 let w = self.framebuffer.width
                 let h = self.framebuffer.height
                 let size = CGSize(width: w, height: h)
-                if self.lastFramebufferSize != size {
-                    self.lastFramebufferSize = size
+                if self.remoteDesktopSize != size {
+                    self.remoteDesktopSize = size
                     if self.activeCropRect == nil {
                         self.trackpadEngine.remoteWidth = CGFloat(w)
                         self.trackpadEngine.remoteHeight = CGFloat(h)
@@ -766,7 +774,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         metrics.reset()
         hasReceivedFirstFrame = false
         downloadProgress = nil
-        lastFramebufferSize = .zero
+        remoteDesktopSize = .zero
         multiDisplayManager.reset(width: framebuffer.width, height: framebuffer.height)
         if isRDP {
             rdpClient?.setInputEnabled(isForegroundSession && !isObserveOnly)

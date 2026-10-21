@@ -17,6 +17,7 @@ public struct AddDeviceSheet: View {
     @State private var macAddress: String = ""
     @State private var isFavorite = false
     @State private var tagsString = ""
+    @State private var desktopResolution = "1920x1080"
     @State private var saveComputer = false
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
@@ -40,12 +41,16 @@ public struct AddDeviceSheet: View {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+        let dims = desktopResolution.split(separator: "x").compactMap { Int($0) }
+        let dw = remoteProtocol == .rdp ? (dims.count == 2 ? dims[0] : 1920) : nil
+        let dh = remoteProtocol == .rdp ? (dims.count == 2 ? dims[1] : 1080) : nil
         return ConnectionRequest(host: host, port: portString, name: includesSavedDetails ? name : "",
                           username: username, password: password, type: deviceType,
                           remoteProtocol: remoteProtocol,
                           macAddress: includesSavedDetails ? macAddress : "",
                           ssh: sshDraft.settings, sshPassword: sshDraft.passwordToSave ?? "", sshPrivateKey: sshDraft.privateKeyToSave,
-                          isFavorite: isFavorite, tags: tags)
+                          isFavorite: isFavorite, tags: tags,
+                          desktopWidth: dw, desktopHeight: dh)
     }
 
     public var body: some View {
@@ -107,6 +112,16 @@ public struct AddDeviceSheet: View {
                                 remoteProtocol = .rdp
                                 if portString == "5900" || portString.isEmpty { portString = "3389" }
                             }
+                        }
+                    }
+
+                    if remoteProtocol == .rdp {
+                        Picker(AppLocalization.string("Resolution"), selection: $desktopResolution) {
+                            Text(AppLocalization.string("1920 × 1080 (1080p Full HD)")).tag("1920x1080")
+                            Text(AppLocalization.string("2560 × 1440 (2K QHD)")).tag("2560x1440")
+                            Text(AppLocalization.string("1680 × 1050 (16:10)")).tag("1680x1050")
+                            Text(AppLocalization.string("1280 × 720 (720p HD)")).tag("1280x720")
+                            Text(AppLocalization.string("3840 × 2160 (4K UHD)")).tag("3840x2160")
                         }
                     }
                 }

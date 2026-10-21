@@ -241,8 +241,11 @@ public struct RemoteDesktopView: View {
 
     @ViewBuilder
     private func remoteCanvas(geometry: GeometryProxy) -> some View {
-        let imageWidth = viewModel.activeCropRect?.width ?? CGFloat(viewModel.client.framebuffer.width)
-        let imageHeight = viewModel.activeCropRect?.height ?? CGFloat(viewModel.client.framebuffer.height)
+        let currentDesktopSize = viewModel.remoteDesktopSize != .zero
+            ? viewModel.remoteDesktopSize
+            : CGSize(width: viewModel.framebuffer.width, height: viewModel.framebuffer.height)
+        let imageWidth = viewModel.activeCropRect?.width ?? currentDesktopSize.width
+        let imageHeight = viewModel.activeCropRect?.height ?? currentDesktopSize.height
         let safeWidth = max(imageWidth, 1)
         let safeHeight = max(imageHeight, 1)
         let fitScale = min(geometry.size.width / safeWidth, geometry.size.height / safeHeight)
@@ -390,12 +393,20 @@ public struct RemoteDesktopView: View {
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isUploadDropTargeted)
         }
         .dropDestination(for: URL.self, action: { urls, _ in
-            guard canAcceptFileDrop, urls.count == 1,
-                  let url = urls.first, url.isFileURL else { return false }
+            guard canAcceptFileDrop, !urls.isEmpty else { return false }
             isUploadDropTargeted = false
-            droppedUploadURL = url
-            viewModel.fileUploadNotice = nil
-            showingFileUpload = true
+            let validURLs = urls.filter { $0.isFileURL }
+            guard !validURLs.isEmpty else { return false }
+
+            if viewModel.isRDP {
+                viewModel.transferDroppedFilesToRDP(urls: validURLs)
+            } else {
+                if let first = validURLs.first {
+                    droppedUploadURL = first
+                    viewModel.fileUploadNotice = nil
+                    showingFileUpload = true
+                }
+            }
             return true
         }, isTargeted: { isUploadDropTargeted = $0 })
         .onChange(of: fitScale, initial: true) { _, scale in

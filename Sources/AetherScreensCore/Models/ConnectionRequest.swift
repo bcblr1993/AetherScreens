@@ -13,8 +13,9 @@ public struct ConnectionRequest {
                  type: RemoteDevice.DeviceType = .mac,
                  remoteProtocol: RemoteDevice.RemoteProtocol? = nil,
                  macAddress: String = "",
-                 ssh: SSHConnectionSettings? = nil, sshPassword: String = "", sshPrivateKey: Data? = nil,
-                 isFavorite: Bool = false, tags: [String] = []) {
+                  ssh: SSHConnectionSettings? = nil, sshPassword: String = "", sshPrivateKey: Data? = nil,
+                  isFavorite: Bool = false, tags: [String] = [],
+                  desktopWidth: Int? = nil, desktopHeight: Int? = nil) {
         var address = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if address.hasPrefix("[") && address.hasSuffix("]") {
             address = String(address.dropFirst().dropLast())
@@ -43,6 +44,7 @@ public struct ConnectionRequest {
                               authMethod: auth,
                               username: account.isEmpty ? nil : account,
                               macAddress: mac.isEmpty ? nil : mac, ssh: ssh,
-                              isFavorite: isFavorite, tags: tags)
+                              isFavorite: isFavorite, tags: tags,
+                              desktopWidth: desktopWidth, desktopHeight: desktopHeight)
     }
 }

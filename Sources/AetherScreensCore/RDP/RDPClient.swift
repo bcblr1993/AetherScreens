@@ -30,6 +30,10 @@ public final class RDPClient: @unchecked Sendable {
         }
     }
 
+    public func simulateStateForTesting(_ newState: State) {
+        state = newState
+    }
+
     // Callbacks
     public var onStateChanged: (@Sendable (State) -> Void)?
     public var onFrameUpdated: (@Sendable () -> Void)?
@@ -42,7 +46,9 @@ public final class RDPClient: @unchecked Sendable {
     private var activeCancellation: RDPConnectionCancellation?
     private var inputSession: RDPInputSession?
     private var clipboardSession: RDPClipboardSession?
+    private var displayControlSession: RDPDisplayControlSession?
     public private(set) var lastPointerPosition: (UInt16, UInt16)?
+    public private(set) var lastPublishedFiles: [RDPClipboardLocalFile] = []
     private var lastButtons: RFBConstants.ButtonMask = []
     private let inputLock = NSLock()
     private var inputEnabled = true
@@ -54,8 +60,8 @@ public final class RDPClient: @unchecked Sendable {
         port: UInt16 = 3389,
         username: String? = nil,
         password: String? = nil,
-        width: Int = 1280,
-        height: Int = 720
+        width: Int = 1920,
+        height: Int = 1080
     ) {
         self.host = host
         self.port = port
@@ -162,6 +168,12 @@ public final class RDPClient: @unchecked Sendable {
                     self.inputLock.unlock()
                     self.transition(to: .connected)
                 },
+                onDisplayControlReady: { [weak self] session in
+                    guard let self else { return }
+                    self.inputLock.lock()
+                    self.displayControlSession = session
+                    self.inputLock.unlock()
+                },
                 onClipboardReady: { [weak self] session in
                     guard let self else { return }
                     self.inputLock.lock()
@@ -192,12 +204,20 @@ public final class RDPClient: @unchecked Sendable {
         activeCancellation = nil
         inputSession = nil
         clipboardSession = nil
+        displayControlSession = nil
         connectionTask?.cancel()
         connectionTask = nil
         inputLock.unlock()
 
         transition(to: .disconnected)
         AppLogger.shared.info("Disconnected RDP session with \(host)", category: "RDP")
+    }
+
+    public func updateDesktopResolution(width: Int, height: Int) {
+        inputLock.lock()
+        let dc = displayControlSession
+        inputLock.unlock()
+        dc?.sendSingleMonitorLayout(width: UInt32(width), height: UInt32(height))
     }
 
     private func transition(to newState: State) {
@@ -333,6 +353,16 @@ public final class RDPClient: @unchecked Sendable {
             .replacingOccurrences(of: "\n", with: "\r\n")
         clipboard.publishLocalUnicodeText(normalized)
         return "Copied text to remote clipboard."
+    }
+
+    public func publishLocalFiles(_ files: [RDPClipboardLocalFile]) -> Bool {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+
+        guard state == .connected || clipboardSession != nil else { return false }
+        lastPublishedFiles = files
+        clipboardSession?.publishLocalFiles(files)
+        return true
     }
 
     static func mapKeySymToScancode(_ keySym: UInt32) -> RDPKeyboardScancode? {

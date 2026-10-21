@@ -1,4 +1,5 @@
 import Foundation
+import RDPKit
 
 extension SessionViewModel {
     func stopFileTransfers() {
@@ -10,8 +11,50 @@ extension SessionViewModel {
     }
 
     var canStartFileUpload: Bool {
-        isForegroundSession && !isObserveOnly && client.fileCopyTransportGeneration != nil
+        if isRDP {
+            return isForegroundSession && !isObserveOnly && rdpClient != nil && sessionState == .connected
+        }
+        return isForegroundSession && !isObserveOnly && client.fileCopyTransportGeneration != nil
             && !isPreparingFileUpload && !fileUploadCoordinator.isBusy
+    }
+
+    public func transferDroppedFilesToRDP(urls: [URL]) {
+        guard isRDP, let rdp = rdpClient else { return }
+
+        var localFiles: [RDPClipboardLocalFile] = []
+        var transferredNames: [String] = []
+
+        for url in urls {
+            guard url.isFileURL else { continue }
+            let fileName = url.lastPathComponent
+            do {
+                let data = try Data(contentsOf: url, options: .mappedIfSafe)
+                localFiles.append(RDPClipboardLocalFile(fileName: fileName, contents: data))
+                transferredNames.append(fileName)
+            } catch {
+                AppLogger.shared.error("Failed to read file \(fileName) for RDP transfer: \(error)", category: "RDP")
+            }
+        }
+
+        guard !localFiles.isEmpty else { return }
+
+        let success = rdp.publishLocalFiles(localFiles)
+        if success {
+            let namesString = transferredNames.joined(separator: ", ")
+            for name in transferredNames {
+                FileTransferHistoryStore.shared.recordUploadDestination("Windows Desktop (\(name))")
+            }
+
+            let msg = String(format: AppLocalization.string("File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste."), namesString)
+            self.fileUploadNotice = msg
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                guard let self, self.isRDP, self.sessionState == .connected else { return }
+                self.sendCommandShortcut("v")
+            }
+        } else {
+            self.fileUploadNotice = AppLocalization.string("Cannot start file transfer on this connection.")
+        }
     }
 
     func beginFileUpload(url: URL, destination: String, onStarted: @escaping () -> Void) {

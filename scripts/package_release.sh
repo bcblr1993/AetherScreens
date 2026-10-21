@@ -6,8 +6,8 @@ cd "$DIR"
 if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
-VERSION="${AETHERSCREENS_VERSION:-1.2.0}"
-BUILD_NUMBER="${AETHERSCREENS_BUILD_NUMBER:-2026101601}"
+VERSION="${1:-${AETHERSCREENS_VERSION:-1.2.1}}"
+BUILD_NUMBER="${2:-${AETHERSCREENS_BUILD_NUMBER:-2026101602}}"
 SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
 NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
 OUTPUT="${AETHERSCREENS_OUTPUT_DIR:-$DIR/build/release}"
@@ -15,7 +15,9 @@ mkdir -p "$OUTPUT"
 STAGE="$(mktemp -d "$OUTPUT/staging.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 
-swift test
+if [ "${SKIP_TESTS:-0}" != "1" ]; then
+    swift test
+fi
 swift build -c release --arch arm64
 python3 scripts/generate_dependency_notices.py --check
 RELEASE_BIN="$(swift build -c release --arch arm64 --show-bin-path)/AetherScreensApp"

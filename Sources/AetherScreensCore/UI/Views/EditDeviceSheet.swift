@@ -20,6 +20,7 @@ public struct EditDeviceSheet: View {
     @State private var disconnectAction: DisconnectAction = .none
     @State private var isFavorite: Bool = false
     @State private var tagsString: String = ""
+    @State private var desktopResolution: String = "1920x1080"
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
 
@@ -96,6 +97,16 @@ public struct EditDeviceSheet: View {
                             if portString == "5900" || portString.isEmpty { portString = "3389" }
                         }
                     }
+
+                    if remoteProtocol == .rdp {
+                        Picker(AppLocalization.string("Resolution"), selection: $desktopResolution) {
+                            Text(AppLocalization.string("1920 × 1080 (1080p Full HD)")).tag("1920x1080")
+                            Text(AppLocalization.string("2560 × 1440 (2K QHD)")).tag("2560x1440")
+                            Text(AppLocalization.string("1680 × 1050 (16:10)")).tag("1680x1050")
+                            Text(AppLocalization.string("1280 × 720 (720p HD)")).tag("1280x720")
+                            Text(AppLocalization.string("3840 × 2160 (4K UHD)")).tag("3840x2160")
+                        }
+                    }
                 }
 
                 Section(header: Text(AppLocalization.string("On Disconnect")),
@@ -167,8 +178,13 @@ public struct EditDeviceSheet: View {
                         updatedDev.remoteProtocol = remoteProtocol
                         if remoteProtocol == .rdp {
                             updatedDev.authMethod = .windowsCredentials
+                            let dims = desktopResolution.split(separator: "x").compactMap { Int($0) }
+                            updatedDev.desktopWidth = dims.count == 2 ? dims[0] : 1920
+                            updatedDev.desktopHeight = dims.count == 2 ? dims[1] : 1080
                         } else {
                             updatedDev.authMethod = updatedDev.username == nil ? .vncPassword : .macAccount
+                            updatedDev.desktopWidth = nil
+                            updatedDev.desktopHeight = nil
                         }
                         updatedDev.deviceType = deviceType
                         updatedDev.macAddress = macAddress.isEmpty ? nil : macAddress
@@ -210,6 +226,11 @@ public struct EditDeviceSheet: View {
                 portString = "\(device.port)"
                 deviceType = device.deviceType
                 remoteProtocol = device.remoteProtocol
+                if let dw = device.desktopWidth, let dh = device.desktopHeight {
+                    desktopResolution = "\(dw)x\(dh)"
+                } else {
+                    desktopResolution = "1920x1080"
+                }
                 disconnectAction = DisconnectActionStore.shared.load(for: device.id, type: device.deviceType)
                 macAddress = device.macAddress ?? ""
                 isFavorite = device.isFavorite

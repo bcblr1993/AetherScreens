@@ -22,60 +22,76 @@ struct FileUploadSheet: View {
                     .font(.title2.bold())
                 Text(viewModel.device.name).font(.subheadline).foregroundStyle(.secondary)
                 filePickerCard
-                TextField(AppLocalization.string("Remote Folder"), text: $destination)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($destinationFocused)
-                    #if canImport(UIKit)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    #endif
-                    .onSubmit { destinationFocused = false }
-                    .accessibilityIdentifier("file-upload-destination")
-                    .disabled(viewModel.isPreparingFileUpload)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(AppLocalization.string("Common Locations"))
+                if viewModel.isRDP {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "window.casement")
+                                .foregroundStyle(.blue)
+                            Text(AppLocalization.string("Windows File Transfer"))
+                                .font(.subheadline.bold())
+                        }
+                        Text(AppLocalization.string("Files will be sent via Windows clipboard channel. After sending, press Ctrl+V or right-click to paste anywhere in Windows."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        let recents = FileTransferHistoryStore.shared.recentUploadDestinations
-                        if !recents.isEmpty {
-                            Menu {
-                                ForEach(recents, id: \.self) { recent in
-                                    Button(recent) { destination = recent }
-                                }
-                            } label: {
-                                Label(AppLocalization.string("Recent"), systemImage: "clock")
-                                    .font(.caption)
-                            }
-                            .menuStyle(.borderlessButton)
-                            .accessibilityIdentifier("file-upload-recent-menu")
-                        }
                     }
+                    .padding(12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                } else {
+                    TextField(AppLocalization.string("Remote Folder"), text: $destination)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($destinationFocused)
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        #endif
+                        .onSubmit { destinationFocused = false }
+                        .accessibilityIdentifier("file-upload-destination")
+                        .disabled(viewModel.isPreparingFileUpload)
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(FileTransferPresetLocation.standardPresets) { preset in
-                                Button {
-                                    destination = preset.path
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(AppLocalization.string("Common Locations"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            let recents = FileTransferHistoryStore.shared.recentUploadDestinations
+                            if !recents.isEmpty {
+                                Menu {
+                                    ForEach(recents, id: \.self) { recent in
+                                        Button(recent) { destination = recent }
+                                    }
                                 } label: {
-                                    Label(AppLocalization.string(preset.titleKey), systemImage: preset.systemIcon)
+                                    Label(AppLocalization.string("Recent"), systemImage: "clock")
                                         .font(.caption)
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(destination == preset.path ? .blue : .secondary)
-                                .accessibilityIdentifier("file-upload-preset-\(preset.id)")
+                                .menuStyle(.borderlessButton)
+                                .accessibilityIdentifier("file-upload-recent-menu")
+                            }
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(FileTransferPresetLocation.standardPresets) { preset in
+                                    Button {
+                                        destination = preset.path
+                                    } label: {
+                                        Label(AppLocalization.string(preset.titleKey), systemImage: preset.systemIcon)
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(destination == preset.path ? .blue : .secondary)
+                                    .accessibilityIdentifier("file-upload-preset-\(preset.id)")
+                                }
                             }
                         }
                     }
-                }
 
-                Text(AppLocalization.string("Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files."))
-                    .font(.caption).foregroundStyle(.secondary)
-                Text(AppLocalization.string("Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported."))
-                    .font(.caption).foregroundStyle(.secondary)
+                    Text(AppLocalization.string("Use an existing remote folder. Same-name files may be saved under a new name. Stopping may leave partial files."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(AppLocalization.string("Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if viewModel.isPreparingFileUpload {
                     ProgressView(AppLocalization.string("Preparing Files…"))
                 }
@@ -149,10 +165,15 @@ struct FileUploadSheet: View {
         Button {
             guard let selectedURL else { return }
             destinationFocused = false
-            FileTransferHistoryStore.shared.recordUploadDestination(destination)
-            viewModel.beginFileUpload(url: selectedURL, destination: destination) { dismiss() }
+            if viewModel.isRDP {
+                viewModel.transferDroppedFilesToRDP(urls: [selectedURL])
+                dismiss()
+            } else {
+                FileTransferHistoryStore.shared.recordUploadDestination(destination)
+                viewModel.beginFileUpload(url: selectedURL, destination: destination) { dismiss() }
+            }
         } label: {
-            actionTitle("Send")
+            actionTitle(viewModel.isRDP ? "Send to Windows" : "Send")
         }
         .buttonStyle(.borderedProminent)
         .keyboardShortcut(.defaultAction)

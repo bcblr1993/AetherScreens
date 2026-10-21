@@ -642,3 +642,23 @@
 
 "Type or paste text to send to Windows..." = "输入或粘贴要发送到 Windows 的文本…";
 
+"Resolution" = "分辨率";
+
+"1920 × 1080 (1080p Full HD)" = "1920 × 1080 (1080p 全高清)";
+
+"2560 × 1440 (2K QHD)" = "2560 × 1440 (2K 超清)";
+
+"1680 × 1050 (16:10)" = "1680 × 1050 (16:10)";
+
+"1280 × 720 (720p HD)" = "1280 × 720 (720p 高清)";
+
+"3840 × 2160 (4K UHD)" = "3840 × 2160 (4K 超高清)";
+
+"Windows File Transfer" = "Windows 文件传输";
+
+"Send to Windows" = "发送至 Windows";
+
+"Files will be sent via Windows clipboard channel. After sending, press Ctrl+V or right-click to paste anywhere in Windows." = "文件将通过 Windows 剪贴板通道传输。发送后，在 Windows 中按 Ctrl+V 或右键粘贴即可。";
+
+"File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste." = "文件“%@”已复制到 Windows 剪贴板，在 Windows 中按 Ctrl+V 即可粘贴。";
+

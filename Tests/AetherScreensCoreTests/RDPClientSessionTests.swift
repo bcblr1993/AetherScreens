@@ -1,4 +1,5 @@
 import XCTest
+import RDPKit
 @testable import AetherScreensCore
 
 final class RDPClientSessionTests: XCTestCase {
@@ -11,8 +12,51 @@ final class RDPClientSessionTests: XCTestCase {
         XCTAssertEqual(client.password, "secretpassword")
         XCTAssertEqual(client.state, .disconnected)
         XCTAssertNotNil(client.framebuffer)
-        XCTAssertEqual(client.framebuffer.width, 1280)
-        XCTAssertEqual(client.framebuffer.height, 720)
+        XCTAssertEqual(client.framebuffer.width, 1920)
+        XCTAssertEqual(client.framebuffer.height, 1080)
+    }
+
+    func testRDPClientPublishLocalFilesSafeWhenDisconnected() {
+        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "sprixin", password: "123")
+        let file = RDPClipboardLocalFile(fileName: "test.txt", contents: Data("hello".utf8))
+        XCTAssertFalse(client.publishLocalFiles([file]))
+    }
+
+    func testRemoteDeviceDesktopResolutionCodable() throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "192.168.1.50",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "admin",
+            desktopWidth: 2560,
+            desktopHeight: 1440
+        )
+        let data = try JSONEncoder().encode(device)
+        let decoded = try JSONDecoder().decode(RemoteDevice.self, from: data)
+        XCTAssertEqual(decoded.desktopWidth, 2560)
+        XCTAssertEqual(decoded.desktopHeight, 1440)
+
+        // Backward compatibility: JSON without desktopWidth/desktopHeight decodes nil
+        let legacyJSON = """
+        {
+            "id": "\(UUID().uuidString)",
+            "name": "Legacy Box",
+            "host": "192.168.1.60",
+            "port": 3389,
+            "deviceType": "Windows",
+            "remoteProtocol": "RDP",
+            "isOnline": true,
+            "isTailscaleNode": false,
+            "isFavorite": false,
+            "tags": []
+        }
+        """.data(using: .utf8)!
+        let legacyDecoded = try JSONDecoder().decode(RemoteDevice.self, from: legacyJSON)
+        XCTAssertNil(legacyDecoded.desktopWidth)
+        XCTAssertNil(legacyDecoded.desktopHeight)
     }
 
     func testRDPClientConnectWithoutCredentialsFailsImmediately() {
@@ -42,3 +86,4 @@ final class RDPClientSessionTests: XCTestCase {
         XCTAssertEqual(client.state, .disconnected)
     }
 }
+

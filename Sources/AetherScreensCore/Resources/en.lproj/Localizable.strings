@@ -642,3 +642,23 @@
 
 "Type or paste text to send to Windows..." = "Type or paste text to send to Windows...";
 
+"Resolution" = "Resolution";
+
+"1920 × 1080 (1080p Full HD)" = "1920 × 1080 (1080p Full HD)";
+
+"2560 × 1440 (2K QHD)" = "2560 × 1440 (2K QHD)";
+
+"1680 × 1050 (16:10)" = "1680 × 1050 (16:10)";
+
+"1280 × 720 (720p HD)" = "1280 × 720 (720p HD)";
+
+"3840 × 2160 (4K UHD)" = "3840 × 2160 (4K UHD)";
+
+"Windows File Transfer" = "Windows File Transfer";
+
+"Send to Windows" = "Send to Windows";
+
+"Files will be sent via Windows clipboard channel. After sending, press Ctrl+V or right-click to paste anywhere in Windows." = "Files will be sent via Windows clipboard channel. After sending, press Ctrl+V or right-click to paste anywhere in Windows.";
+
+"File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste." = "File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste.";
+

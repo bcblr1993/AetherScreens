@@ -182,7 +182,123 @@ final class SessionViewModelRDPTests: XCTestCase {
         XCTAssertEqual(rdpClient.lastPointerPosition?.0, 200)
         XCTAssertEqual(rdpClient.lastPointerPosition?.1, 300)
     }
+
+    @MainActor
+    func testSessionViewModelRDPDesktopResolutionAndRemoteSize() async throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "10.8.8.250",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "sprixin",
+            desktopWidth: 1920,
+            desktopHeight: 1080
+        )
+        let session = SessionViewModel(device: device, password: "123", isTemporary: true)
+        defer { session.endSession() }
+
+        guard let rdpClient = session.rdpClient else {
+            XCTFail("RDP client should be instantiated")
+            return
+        }
+
+        // Initial remote desktop size matches device preference
+        XCTAssertEqual(session.remoteDesktopSize, CGSize(width: 1920, height: 1080))
+        XCTAssertEqual(session.framebuffer.width, 1920)
+        XCTAssertEqual(session.framebuffer.height, 1080)
+
+        // Simulate remote desktop resize (e.g. 2560x1440)
+        rdpClient.framebuffer.resize(newWidth: 2560, newHeight: 1440)
+        rdpClient.onFrameUpdated?()
+
+        let resizeExp = expectation(description: "Remote desktop size update")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { resizeExp.fulfill() }
+        await fulfillment(of: [resizeExp], timeout: 1)
+
+        XCTAssertEqual(session.remoteDesktopSize, CGSize(width: 2560, height: 1440))
+        XCTAssertEqual(session.trackpadEngine.remoteWidth, 2560)
+        XCTAssertEqual(session.trackpadEngine.remoteHeight, 1440)
+    }
+
+    @MainActor
+    func testSessionViewModelRDPFileUploadAndDirectDrop() throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "10.8.8.250",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "sprixin"
+        )
+        let session = SessionViewModel(device: device, password: "123", isTemporary: true)
+        defer { session.endSession() }
+
+        guard let rdpClient = session.rdpClient else {
+            XCTFail("RDP client should be instantiated")
+            return
+        }
+
+        // Initially disconnected
+        XCTAssertFalse(session.canStartFileUpload)
+
+        // Connect
+        rdpClient.simulateStateForTesting(.connected)
+        let connExp = expectation(description: "Connected")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { connExp.fulfill() }
+        wait(for: [connExp], timeout: 1)
+
+        // When connected, file upload & drag drop should be enabled for RDP
+        XCTAssertTrue(session.canStartFileUpload)
+
+        // Create temporary test file
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("test-drop-\(UUID().uuidString).txt")
+        try "Test file contents for RDP transfer".write(to: tempURL, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        // Transfer dropped files
+        session.transferDroppedFilesToRDP(urls: [tempURL])
+
+        // Notice should be displayed
+        XCTAssertNotNil(session.fileUploadNotice)
+        XCTAssertTrue(session.fileUploadNotice?.contains(tempURL.lastPathComponent) == true)
+    }
+
+    @MainActor
+    func testSessionViewModelRDPMouseCoordinatesAccurateWithoutDistortion() {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "10.8.8.250",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "sprixin",
+            desktopWidth: 1920,
+            desktopHeight: 1080
+        )
+        let session = SessionViewModel(device: device, password: "123", isTemporary: true)
+        defer { session.endSession() }
+
+        guard let rdpClient = session.rdpClient else {
+            XCTFail("RDP client should be instantiated")
+            return
+        }
+
+        rdpClient.onStateChanged?(.connected)
+        let drain = expectation(description: "Connected")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { drain.fulfill() }
+        wait(for: [drain], timeout: 1)
+
+        // Send pointer at exact 1080p desktop location
+        session.sendNativePointer(buttonMask: .left, x: 1919, y: 1079)
+        XCTAssertEqual(rdpClient.lastPointerPosition?.0, 1919)
+        XCTAssertEqual(rdpClient.lastPointerPosition?.1, 1079)
+    }
 }
+
 
 private final class Box<T>: @unchecked Sendable {
     var value: T

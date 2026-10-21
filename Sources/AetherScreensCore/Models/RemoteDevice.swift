@@ -52,6 +52,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
     public var ssh: SSHConnectionSettings?
     public var isFavorite: Bool
     public var tags: [String]
+    public var desktopWidth: Int?
+    public var desktopHeight: Int?
 
     public init(
         id: UUID = UUID(),
@@ -68,7 +70,9 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         macAddress: String? = nil,
         ssh: SSHConnectionSettings? = nil,
         isFavorite: Bool = false,
-        tags: [String] = []
+        tags: [String] = [],
+        desktopWidth: Int? = nil,
+        desktopHeight: Int? = nil
     ) {
         self.id = id
         self.name = name
@@ -85,10 +89,12 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.ssh = ssh
         self.isFavorite = isFavorite
         self.tags = tags
+        self.desktopWidth = desktopWidth
+        self.desktopHeight = desktopHeight
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags
+        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight
     }
 
     public init(from decoder: Decoder) throws {
@@ -110,6 +116,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.ssh = try container.decodeIfPresent(SSHConnectionSettings.self, forKey: .ssh)
         self.isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         self.tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        self.desktopWidth = try container.decodeIfPresent(Int.self, forKey: .desktopWidth)
+        self.desktopHeight = try container.decodeIfPresent(Int.self, forKey: .desktopHeight)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -129,6 +137,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         try container.encodeIfPresent(ssh, forKey: .ssh)
         try container.encode(isFavorite, forKey: .isFavorite)
         try container.encode(tags, forKey: .tags)
+        try container.encodeIfPresent(desktopWidth, forKey: .desktopWidth)
+        try container.encodeIfPresent(desktopHeight, forKey: .desktopHeight)
     }
 
     /// Creates a RemoteDevice from a Tailscale node
