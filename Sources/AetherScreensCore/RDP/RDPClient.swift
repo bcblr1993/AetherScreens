@@ -62,6 +62,7 @@ public final class RDPClient: @unchecked Sendable {
     public private(set) var lastPointerPosition: (UInt16, UInt16)?
     public private(set) var lastPublishedFiles: [RDPClipboardLocalFile] = []
     private var lastButtons: RFBConstants.ButtonMask = []
+    private var keyTranslator = RDPKeyTranslator()
     private let inputLock = NSLock()
     private var inputEnabled = true
     private var pointerInputEnabled = true
@@ -236,6 +237,7 @@ public final class RDPClient: @unchecked Sendable {
         inputSession = nil
         clipboardSession = nil
         displayControlSession = nil
+        keyTranslator = RDPKeyTranslator()
         connectionTask?.cancel()
         connectionTask = nil
         inputLock.unlock()
@@ -362,11 +364,8 @@ public final class RDPClient: @unchecked Sendable {
 
         guard inputEnabled, let session = inputSession else { return }
 
-        if let scancode = Self.mapKeySymToScancode(keySym) {
-            session.send([.keyboard(scancode: scancode, isReleased: !down)])
-        } else if keySym < 0x10000 {
-            session.send([.unicode(codeUnit: UInt16(keySym), isReleased: !down)])
-        }
+        let events = keyTranslator.events(keySym: keySym, down: down)
+        if !events.isEmpty { session.send(events) }
     }
 
     public func sendText(_ text: String) {
@@ -469,6 +468,29 @@ public final class RDPClient: @unchecked Sendable {
         case 0x0038: return RDPKeyboardScancode(code: 0x09) // 8
         case 0x0039: return RDPKeyboardScancode(code: 0x0A) // 9
         case 0x0030: return RDPKeyboardScancode(code: 0x0B) // 0
+
+        // Lock, system and keypad keys
+        case 0xffe5: return RDPKeyboardScancode(code: 0x3A) // Caps Lock
+        case 0xff7f: return RDPKeyboardScancode(code: 0x45) // Num Lock
+        case 0xff14: return RDPKeyboardScancode(code: 0x46) // Scroll Lock
+        case 0xff67: return RDPKeyboardScancode(code: 0x5D, isExtended: true) // Menu
+        case 0xff61: return RDPKeyboardScancode(code: 0x37, isExtended: true) // Print Screen
+        case 0xff8d: return RDPKeyboardScancode(code: 0x1C, isExtended: true) // Keypad Enter
+        case 0xffaf: return RDPKeyboardScancode(code: 0x35, isExtended: true) // Keypad /
+        case 0xffaa: return RDPKeyboardScancode(code: 0x37) // Keypad *
+        case 0xffad: return RDPKeyboardScancode(code: 0x4A) // Keypad -
+        case 0xffab: return RDPKeyboardScancode(code: 0x4E) // Keypad +
+        case 0xffae: return RDPKeyboardScancode(code: 0x53) // Keypad .
+        case 0xffb0: return RDPKeyboardScancode(code: 0x52) // Keypad 0
+        case 0xffb1: return RDPKeyboardScancode(code: 0x4F) // Keypad 1
+        case 0xffb2: return RDPKeyboardScancode(code: 0x50) // Keypad 2
+        case 0xffb3: return RDPKeyboardScancode(code: 0x51) // Keypad 3
+        case 0xffb4: return RDPKeyboardScancode(code: 0x4B) // Keypad 4
+        case 0xffb5: return RDPKeyboardScancode(code: 0x4C) // Keypad 5
+        case 0xffb6: return RDPKeyboardScancode(code: 0x4D) // Keypad 6
+        case 0xffb7: return RDPKeyboardScancode(code: 0x47) // Keypad 7
+        case 0xffb8: return RDPKeyboardScancode(code: 0x48) // Keypad 8
+        case 0xffb9: return RDPKeyboardScancode(code: 0x49) // Keypad 9
 
         // Function keys F1-F12
         case 0xffbe: return RDPKeyboardScancode(code: 0x3B) // F1

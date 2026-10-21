@@ -820,6 +820,9 @@ public struct RemoteDesktopView: View {
             }
             #if os(macOS)
             .menuStyle(.borderlessButton)
+            // Match the neighbouring white icon buttons instead of the accent tint and disclosure arrow.
+            .menuIndicator(.hidden)
+            .tint(.white)
             .fixedSize()
             #endif
             .accessibilityLabel(AppLocalization.string("Session Options"))

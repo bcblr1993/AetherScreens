@@ -137,7 +137,7 @@ public struct AddDeviceSheet: View {
                     header: Text(AppLocalization.string(remoteProtocol == .rdp ? "Windows Authentication" : "Authentication")),
                     footer: Text(AppLocalization.string(remoteProtocol == .rdp
                         ? "Enter your Windows account username and password."
-                        : "Enter your Mac account username and password. Leave Username empty to use a VNC password."))
+                        : "Enter your Mac account username and password. Leave Username empty to use a VNC password.")).formFooterStyle()
                 ) {
                     TextField(AppLocalization.string(remoteProtocol == .rdp ? "Windows Username" : "Username (Mac account, optional)"), text: $username)
                         .autocorrectionDisabled()
@@ -154,7 +154,7 @@ public struct AddDeviceSheet: View {
                     Section { Text(saveError).foregroundStyle(.red) }
                 }
                 if isQuickConnect {
-                    Section(footer: Text(AppLocalization.string("Save this computer and its password for future connections. Leave off for a temporary session."))) {
+                    Section(footer: Text(AppLocalization.string("Save this computer and its password for future connections. Leave off for a temporary session.")).formFooterStyle()) {
                         Toggle(AppLocalization.string("Save Computer"), isOn: $saveComputer)
                     }
                 }
@@ -173,7 +173,7 @@ public struct AddDeviceSheet: View {
 
                     Section(
                         header: Text(AppLocalization.string("Wake-on-LAN (Optional)")),
-                        footer: Text(AppLocalization.string("Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping."))
+                        footer: Text(AppLocalization.string("Enter the remote Mac's hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake it when sleeping.")).formFooterStyle()
                     ) {
                         TextField(AppLocalization.string("MAC Address (Optional)"), text: $macAddress)
                             .autocorrectionDisabled()

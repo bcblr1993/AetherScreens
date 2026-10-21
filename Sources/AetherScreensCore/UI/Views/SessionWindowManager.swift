@@ -10,6 +10,14 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
     private let registry = SessionRegistry.shared
     private var controllers: [UUID: NSWindowController] = [:]
 
+    /// Only the minimum size constrains the window. The default options also apply the content's
+    /// intrinsic size, so a wide child (such as the keyboard toolbar) would resize and move the window.
+    static func makeHostingView<Content: View>(_ content: Content) -> NSHostingView<Content> {
+        let view = NSHostingView(rootView: content)
+        view.sizingOptions = [.minSize]
+        return view
+    }
+
     @discardableResult
     public func open(_ session: SessionViewModel, reuseExisting: Bool = true) -> UUID {
         let id = registry.register(session, reuseExisting: reuseExisting)
@@ -25,7 +33,7 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
         window.title = registry.sessions.first(where: { $0.id == id })?.title ?? registered.device.name
         window.minSize = NSSize(width: 800, height: 560)
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: content)
+        window.contentView = Self.makeHostingView(content)
         window.delegate = self
         window.center()
         if let previous = controllers.values.first?.window {

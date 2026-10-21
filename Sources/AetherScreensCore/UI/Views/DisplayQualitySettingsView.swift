@@ -14,7 +14,7 @@ struct DisplayQualitySettingsView: View {
                         .accessibilityIdentifier("automatic-display-quality")
                         .disabled(!viewModel.isForegroundSession || viewModel.client.isNativeDisplaySession)
                 } footer: {
-                    Text(AppLocalization.string("Adjusts compression for active transfers without reconnecting. Servers may ignore quality hints. Native Apple sessions use their own display configuration."))
+                    Text(AppLocalization.string("Adjusts compression for active transfers without reconnecting. Servers may ignore quality hints. Native Apple sessions use their own display configuration.")).formFooterStyle()
                 }
                 Section {
                     Picker(AppLocalization.string("Colors"), selection: Binding(
@@ -27,7 +27,7 @@ struct DisplayQualitySettingsView: View {
                     .accessibilityIdentifier("display-color-depth")
                     .disabled(!viewModel.isForegroundSession)
                 } footer: {
-                    Text(AppLocalization.string("Reduced colors use less data but may show color banding. Changing this setting reconnects. Desktop size stays the same."))
+                    Text(AppLocalization.string("Reduced colors use less data but may show color banding. Changing this setting reconnects. Desktop size stays the same.")).formFooterStyle()
                 }
             }
             .navigationTitle(AppLocalization.string("Display Quality"))

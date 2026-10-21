@@ -8,6 +8,7 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
     case nearby = "Nearby (Bonjour)"
     case tailscale = "Tailscale Nodes"
     case mac = "Macs"
+    case windows = "Windows PCs"
 
     public var id: String { rawValue }
 
@@ -18,6 +19,19 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
         case .nearby: return "dot.radiowaves.left.and.right"
         case .tailscale: return "point.3.connected.trianglepath.dotted"
         case .mac: return "apple.logo"
+        case .windows: return "pc"
+        }
+    }
+
+    /// Whether a saved computer belongs to this category. Nearby Macs are discovered, never saved.
+    public func matches(_ device: RemoteDevice) -> Bool {
+        switch self {
+        case .all: return true
+        case .favorites: return device.isFavorite
+        case .nearby: return false
+        case .tailscale: return device.isTailscaleNode
+        case .mac: return device.deviceType == .mac
+        case .windows: return device.deviceType == .windows
         }
     }
 }
@@ -37,6 +51,7 @@ public struct DeviceListView: View {
     @State private var showingSettingsSheet = false
     @State private var activeSessionVM: SessionViewModel?
     @State private var editingDevice: RemoteDevice?
+    @State private var pendingDeletion: RemoteDevice?
     @State private var showingLogs = false
     @State private var pendingConnectionLinks: [ConnectionLink.Resolved] = []
     @ObservedObject private var sessionRegistry = SessionRegistry.shared
@@ -148,27 +163,10 @@ public struct DeviceListView: View {
     #if os(macOS)
     private var sidebarContent: some View {
         List(DeviceCategory.allCases, selection: $selectedCategory) { category in
-            HStack {
-                Label(AppLocalization.string(category.rawValue), systemImage: category.icon)
-                Spacer()
-                if category == .favorites {
-                    let favCount = viewModel.devices.filter(\.isFavorite).count
-                    if favCount > 0 {
-                        Text("\(favCount)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 6)
-                    }
-                } else if category == .nearby && !viewModel.filteredNearbyMacs.isEmpty {
-                    Text("\(viewModel.filteredNearbyMacs.count)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor, in: Capsule())
-                }
-            }
-            .tag(category)
+            // Native sidebar badges keep every count in one style.
+            Label(AppLocalization.string(category.rawValue), systemImage: category.icon)
+                .badge(sidebarCount(for: category))
+                .tag(category)
         }
         .listStyle(.sidebar)
         .toolbar {
@@ -327,7 +325,7 @@ public struct DeviceListView: View {
                                     Divider()
 
                                     Button(role: .destructive) {
-                                        viewModel.deleteDevice(device)
+                                        pendingDeletion = device
                                     } label: {
                                         Label(AppLocalization.string("Delete"), systemImage: "trash")
                                     }
@@ -336,6 +334,21 @@ public struct DeviceListView: View {
                         }
                         .animation(libraryTransitionAnimation, value: selectedCategory)
                         .animation(libraryTransitionAnimation, value: viewModel.devices.map(\.id))
+                        // Deleting also removes Keychain credentials and syncs through iCloud, so confirm first.
+                        .confirmationDialog(
+                            String(format: AppLocalization.string("Delete \"%@\"?"), pendingDeletion?.name ?? ""),
+                            isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
+                            titleVisibility: .visible
+                        ) {
+                            Button(AppLocalization.string("Delete"), role: .destructive) {
+                                guard let device = pendingDeletion else { return }
+                                pendingDeletion = nil
+                                viewModel.deleteDevice(device)
+                            }
+                            Button(AppLocalization.string("Cancel"), role: .cancel) { pendingDeletion = nil }
+                        } message: {
+                            Text(AppLocalization.string("The saved password and SSH credentials for this computer are removed too. With iCloud Sync on, it is also removed from your other devices."))
+                        }
                         .padding(.horizontal, 20)
                     }
                 }
@@ -459,7 +472,7 @@ public struct DeviceListView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Text(AppLocalization.format(viewModel.filteredDevices.count == 1 ? "%d computer" : "%d computers", viewModel.filteredDevices.count))
+            Text(AppLocalization.format(displayedDevices.count == 1 ? "%d computer" : "%d computers", displayedDevices.count))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 11)
@@ -484,7 +497,8 @@ public struct DeviceListView: View {
             }
             .padding(.horizontal, 20)
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            // Mouse users need the scroller to discover cards beyond the window edge.
+            ScrollView(.horizontal, showsIndicators: Self.showsHorizontalScroller) {
                 HStack(spacing: 12) {
                     ForEach(viewModel.filteredNearbyMacs) { discovered in
                         Button {
@@ -531,19 +545,21 @@ public struct DeviceListView: View {
         }
     }
 
+    #if os(macOS)
+    static let showsHorizontalScroller = true
+    #else
+    static let showsHorizontalScroller = false
+    #endif
+
     private var displayedDevices: [RemoteDevice] {
-        let base = viewModel.filteredDevices
-        switch selectedCategory {
-        case .all:
-            return base
-        case .favorites:
-            return base.filter { $0.isFavorite }
-        case .nearby:
-            return []
-        case .tailscale:
-            return base.filter { $0.isTailscaleNode }
-        case .mac:
-            return base.filter { $0.deviceType == .mac }
+        viewModel.filteredDevices.filter(selectedCategory.matches)
+    }
+
+    private func sidebarCount(for category: DeviceCategory) -> Int {
+        switch category {
+        case .all: return 0
+        case .nearby: return viewModel.filteredNearbyMacs.count
+        default: return viewModel.devices.filter(category.matches).count
         }
     }
 
@@ -716,7 +732,7 @@ public struct TailscaleSettingsSheet: View {
 
                 Section(
                     header: Text(AppLocalization.string("iCloud Sync")),
-                    footer: Text(AppLocalization.string("Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain."))
+                    footer: Text(AppLocalization.string("Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain.")).formFooterStyle()
                 ) {
                     Toggle(AppLocalization.string("iCloud Sync"), isOn: Binding(
                         get: { viewModel.syncService.isEnabled },
@@ -752,7 +768,7 @@ public struct TailscaleSettingsSheet: View {
 
                 Section(
                     header: Text(AppLocalization.string("Security & Privacy")),
-                    footer: Text(AppLocalization.string("Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials."))
+                    footer: Text(AppLocalization.string("Require biometric authentication or passcode to unlock AetherScreens and protect saved computer credentials.")).formFooterStyle()
                 ) {
                     Toggle(
                         AppLocalization.string("App Lock"),
@@ -772,7 +788,7 @@ public struct TailscaleSettingsSheet: View {
 
                 Section(
                     header: Text(AppLocalization.string("Clipboard")),
-                    footer: Text(AppLocalization.string("Automatically synchronize the clipboard between your local device and the remote computer during active sessions."))
+                    footer: Text(AppLocalization.string("Automatically synchronize the clipboard between your local device and the remote computer during active sessions.")).formFooterStyle()
                 ) {
                     Toggle(
                         AppLocalization.string("Automatic Clipboard Sync"),
@@ -786,7 +802,7 @@ public struct TailscaleSettingsSheet: View {
 
                 Section(
                     header: Text(AppLocalization.string("Tailscale API Credentials")),
-                    footer: Text(AppLocalization.string("Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices."))
+                    footer: Text(AppLocalization.string("Generate an API Access Token or OAuth Client in your Tailscale Admin Console (Settings > Keys). This allows AetherScreens to automatically discover your online devices.")).formFooterStyle()
                 ) {
                     SecureField(AppLocalization.string("API Access Token (tskey-api-...)"), text: $viewModel.tailscaleApiKey)
                         .autocorrectionDisabled()
@@ -900,7 +916,7 @@ private struct SSHKeyLibraryView: View {
                 }
                 .accessibilityElement(children: .contain)
             } footer: {
-                Text(AppLocalization.string("Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain."))
+                Text(AppLocalization.string("Import an Ed25519 or ECDSA key, including encrypted ECDSA PKCS#8. Private keys stay in Keychain.")).formFooterStyle()
             }
             if let errorMessage {
                 Section {

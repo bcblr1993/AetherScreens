@@ -97,7 +97,7 @@ public struct MacKeyboardToolbar: View {
             }
 
             // The phone landscape dock scrolls vertically without resizing the canvas.
-            ScrollView(usesSideDock ? .vertical : .horizontal, showsIndicators: false) {
+            ScrollView(usesSideDock ? .vertical : .horizontal, showsIndicators: DeviceListView.showsHorizontalScroller && !usesSideDock) {
                 let layout = usesSideDock ? AnyLayout(VStackLayout(spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
                 layout {
                     ForEach(viewModel.keyboardConfiguration.items.filter(\.isVisible)) { item in

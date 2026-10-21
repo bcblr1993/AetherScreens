@@ -116,7 +116,7 @@ public struct EditDeviceSheet: View {
                 Section(header: Text(AppLocalization.string("On Disconnect")),
                         footer: Text(AppLocalization.string(disconnectAction == .logOut
                             ? "Logs out the remote user immediately when you disconnect. Save your work first."
-                            : "Runs only when you choose Disconnect. Hot corners use the remote Mac's configured actions."))) {
+                            : "Runs only when you choose Disconnect. Hot corners use the remote Mac's configured actions.")).formFooterStyle()) {
                     Picker(AppLocalization.string("Perform Action"), selection: $disconnectAction) {
                         ForEach(DisconnectAction.allCases.filter { $0.isSupported(on: deviceType) }) { action in
                             Text(AppLocalization.string(action.titleKey)).tag(action)
@@ -131,7 +131,7 @@ public struct EditDeviceSheet: View {
 
                 Section(
                     header: Text(AppLocalization.string(remoteProtocol == .rdp ? "Windows Authentication" : "Authentication")),
-                    footer: Text(AppLocalization.string("Saved in the system Keychain. Enter a new password to update or leave unchanged."))
+                    footer: Text(AppLocalization.string("Saved in the system Keychain. Enter a new password to update or leave unchanged.")).formFooterStyle()
                 ) {
                     TextField(AppLocalization.string(remoteProtocol == .rdp ? "Windows Username" : "Username (Mac account, optional)"), text: $username)
                         .autocorrectionDisabled()
@@ -150,7 +150,7 @@ public struct EditDeviceSheet: View {
                 if let saveError { Section { Text(saveError).foregroundStyle(.red) } }
                 Section(
                     header: Text(AppLocalization.string("Wake-on-LAN (Optional)")),
-                    footer: Text(AppLocalization.string("Hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake this Mac remotely."))
+                    footer: Text(AppLocalization.string("Hardware MAC address (e.g. AA:BB:CC:DD:EE:FF) to wake this Mac remotely.")).formFooterStyle()
                 ) {
                     TextField(AppLocalization.string("MAC Address"), text: $macAddress)
                         .autocorrectionDisabled()

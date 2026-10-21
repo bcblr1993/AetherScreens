@@ -88,7 +88,7 @@
 "Mission Control" = "Mission Control";
 "Name" = "Name";
 "Name (e.g. Studio Mac)" = "Name (e.g. Studio Mac)";
-"Nearby (Bonjour)" = "Nearby (Bonjour)";
+"Nearby (Bonjour)" = "Nearby";
 "Nearby Macs (Local Wi-Fi)" = "Nearby Macs (Local Wi-Fi)";
 "Negotiating protocol…" = "Negotiating protocol…";
 "New Window" = "New Window";
@@ -682,3 +682,9 @@
 "The remote computer closed the connection before Screen Sharing responded. Check that Screen Sharing is enabled on it and that no proxy, VPN or firewall intercepts the connection." = "The remote computer closed the connection before Screen Sharing responded. Check that Screen Sharing is enabled on it and that no proxy, VPN or firewall intercepts the connection.";
 
 "No saved computers yet. Select + on a nearby Mac or add one by address." = "No saved computers yet. Select + on a nearby Mac or add one by address.";
+
+"Windows PCs" = "Windows PCs";
+
+"Delete \"%@\"?" = "Delete \"%@\"?";
+
+"The saved password and SSH credentials for this computer are removed too. With iCloud Sync on, it is also removed from your other devices." = "The saved password and SSH credentials for this computer are removed too. With iCloud Sync on, it is also removed from your other devices.";

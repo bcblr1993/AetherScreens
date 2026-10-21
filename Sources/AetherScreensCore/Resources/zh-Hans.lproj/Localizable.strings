@@ -88,7 +88,7 @@
 "Mission Control" = "调度中心";
 "Name" = "名称";
 "Name (e.g. Studio Mac)" = "名称（如 工作室 Mac）";
-"Nearby (Bonjour)" = "附近设备（Bonjour）";
+"Nearby (Bonjour)" = "附近设备";
 "Nearby Macs (Local Wi-Fi)" = "附近的 Mac（本地网络）";
 "Negotiating protocol…" = "正在协商协议…";
 "New Window" = "新建窗口";
@@ -682,3 +682,9 @@
 "The remote computer closed the connection before Screen Sharing responded. Check that Screen Sharing is enabled on it and that no proxy, VPN or firewall intercepts the connection." = "远端电脑在屏幕共享响应前关闭了连接。请确认对方已开启屏幕共享，并检查是否有代理、VPN 或防火墙拦截了连接。";
 
 "No saved computers yet. Select + on a nearby Mac or add one by address." = "还没有保存的电脑。点按附近 Mac 上的 + 或按地址添加。";
+
+"Windows PCs" = "Windows 电脑";
+
+"Delete \"%@\"?" = "删除“%@”？";
+
+"The saved password and SSH credentials for this computer are removed too. With iCloud Sync on, it is also removed from your other devices." = "这台电脑保存的密码和 SSH 凭据也会一并删除。开启 iCloud 同步时，其他设备上的这台电脑也会被移除。";

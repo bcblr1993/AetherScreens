@@ -144,9 +144,12 @@ public struct DeviceCardView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-            HStack(spacing: 5) {
-                Text(device.host)
+            // Separate texts let a long host truncate while the port stays visible.
+            HStack(spacing: 0) {
+                Text(device.host.contains(":") ? "[\(device.host)]" : device.host)
+                    .truncationMode(.middle)
                 Text(":" + String(device.port))
+                    .layoutPriority(1)
             }
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(.secondary)

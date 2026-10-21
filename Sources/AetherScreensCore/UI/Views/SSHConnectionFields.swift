@@ -17,7 +17,7 @@ struct SSHConnectionFields: View {
 
     var body: some View {
         Section(header: Text(AppLocalization.string("Secure Connection")),
-                footer: Text(AppLocalization.string("SSH encrypts the connection. The SSH account is separate from the remote desktop account. Leave the password empty to keep a saved password or enter it when connecting."))) {
+                footer: Text(AppLocalization.string("SSH encrypts the connection. The SSH account is separate from the remote desktop account. Leave the password empty to keep a saved password or enter it when connecting.")).formFooterStyle()) {
             Toggle(AppLocalization.string("Use SSH Tunnel"), isOn: $draft.enabled)
                 .accessibilityIdentifier("ssh-enabled")
                 .onChange(of: draft.enabled) { _, enabled in
