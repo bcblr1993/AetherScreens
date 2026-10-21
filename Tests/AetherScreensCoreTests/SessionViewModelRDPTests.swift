@@ -1,4 +1,5 @@
 import XCTest
+import RDPKit
 @testable import AetherScreensCore
 
 final class SessionViewModelRDPTests: XCTestCase {
@@ -296,6 +297,92 @@ final class SessionViewModelRDPTests: XCTestCase {
         session.sendNativePointer(buttonMask: .left, x: 1919, y: 1079)
         XCTAssertEqual(rdpClient.lastPointerPosition?.0, 1919)
         XCTAssertEqual(rdpClient.lastPointerPosition?.1, 1079)
+    }
+
+    @MainActor
+    func testSessionViewModelRDPAudioHandlingAndMuteToggle() async throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "10.8.8.250",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "sprixin",
+            remoteAudioEnabled: true
+        )
+        let session = SessionViewModel(device: device, password: "123", isTemporary: true)
+        defer { session.endSession() }
+
+        guard let rdpClient = session.rdpClient else {
+            XCTFail("RDP client should be instantiated")
+            return
+        }
+
+        XCTAssertTrue(session.isRemoteAudioEnabled)
+        XCTAssertFalse(session.isRemoteAudioMuted)
+
+        // Test mute toggle
+        session.toggleRemoteAudioMute()
+        XCTAssertTrue(session.isRemoteAudioMuted)
+
+        session.setRemoteAudioMuted(false)
+        XCTAssertFalse(session.isRemoteAudioMuted)
+
+        // Connect
+        rdpClient.onStateChanged?(.connected)
+        let drain = expectation(description: "Connected")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { drain.fulfill() }
+        await fulfillment(of: [drain], timeout: 1)
+
+        // Simulate audio sample delivery
+        let format = try RDPAudioFormat(
+            formatTag: RDPAudioFormatTag.pcm,
+            channelCount: 2,
+            samplesPerSecond: 44100,
+            averageBytesPerSecond: 176400,
+            blockAlign: 4,
+            bitsPerSample: 16
+        )
+        let sample = RDPAudioSample(
+            format: format,
+            timestamp: 0,
+            blockNo: 0,
+            data: Data(repeating: 0, count: 256),
+            receivedAt: Date()
+        )
+        rdpClient.simulateAudioSampleForTesting(sample)
+
+        // Mute and deliver sample again (should not crash and cleanly drop)
+        session.setRemoteAudioMuted(true)
+        rdpClient.simulateAudioSampleForTesting(sample)
+
+        session.endSession()
+    }
+
+    @MainActor
+    func testSessionViewModelRDPAutoFitAndResolutionUpdate() {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "10.8.8.250",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "sprixin",
+            autoFitResolution: true
+        )
+        let session = SessionViewModel(device: device, password: "123", isTemporary: true)
+        defer { session.endSession() }
+
+        XCTAssertTrue(session.autoFitResolution)
+        session.toggleAutoFitResolution()
+        XCTAssertFalse(session.autoFitResolution)
+        session.toggleAutoFitResolution()
+        XCTAssertTrue(session.autoFitResolution)
+
+        // Resolution update does not crash when disconnected or connected
+        session.updateRemoteDesktopResolution(width: 1440, height: 900)
     }
 }
 

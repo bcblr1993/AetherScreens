@@ -18,6 +18,8 @@ public struct AddDeviceSheet: View {
     @State private var isFavorite = false
     @State private var tagsString = ""
     @State private var desktopResolution = "1920x1080"
+    @State private var remoteAudioEnabled = true
+    @State private var autoFitResolution = false
     @State private var saveComputer = false
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
@@ -44,13 +46,16 @@ public struct AddDeviceSheet: View {
         let dims = desktopResolution.split(separator: "x").compactMap { Int($0) }
         let dw = remoteProtocol == .rdp ? (dims.count == 2 ? dims[0] : 1920) : nil
         let dh = remoteProtocol == .rdp ? (dims.count == 2 ? dims[1] : 1080) : nil
+        let audio = remoteProtocol == .rdp ? remoteAudioEnabled : nil
+        let autoFit = remoteProtocol == .rdp ? autoFitResolution : nil
         return ConnectionRequest(host: host, port: portString, name: includesSavedDetails ? name : "",
                           username: username, password: password, type: deviceType,
                           remoteProtocol: remoteProtocol,
                           macAddress: includesSavedDetails ? macAddress : "",
                           ssh: sshDraft.settings, sshPassword: sshDraft.passwordToSave ?? "", sshPrivateKey: sshDraft.privateKeyToSave,
                           isFavorite: isFavorite, tags: tags,
-                          desktopWidth: dw, desktopHeight: dh)
+                          desktopWidth: dw, desktopHeight: dh,
+                          remoteAudioEnabled: audio, autoFitResolution: autoFit)
     }
 
     public var body: some View {
@@ -123,6 +128,8 @@ public struct AddDeviceSheet: View {
                             Text(AppLocalization.string("1280 × 720 (720p HD)")).tag("1280x720")
                             Text(AppLocalization.string("3840 × 2160 (4K UHD)")).tag("3840x2160")
                         }
+                        Toggle(AppLocalization.string("Auto-Fit Resolution"), isOn: $autoFitResolution)
+                        Toggle(AppLocalization.string("Remote Audio Playback"), isOn: $remoteAudioEnabled)
                     }
                 }
 

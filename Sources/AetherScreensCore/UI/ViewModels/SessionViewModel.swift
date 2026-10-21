@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import CoreGraphics
 import Combine
+import RDPKit
 
 #if canImport(UIKit)
 import UIKit
@@ -82,6 +83,10 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             inputGeneration = UUID()
         }
     }
+    @Published public var isRemoteAudioEnabled: Bool
+    @Published public var isRemoteAudioMuted: Bool = false
+    @Published public var autoFitResolution: Bool
+    private var rdpAudioPlayer: RDPAudioPlayer?
     private var pointerButtonsForModifiers: RFBConstants.ButtonMask = []
     private var toolbarHeldKeys: Set<UInt32> = []
     private var pendingModifierWheels = 0
@@ -254,8 +259,13 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             requiresLoopbackForwarding: device.ssh != nil
         )
         self.client = rfb
+        let isRDP = device.remoteProtocol == .rdp
+        let audioPref = device.remoteAudioEnabled ?? isRDP
+        self.isRemoteAudioEnabled = audioPref
+        self.isRemoteAudioMuted = false
+        self.autoFitResolution = device.autoFitResolution ?? false
         let initialDesktopSize: CGSize
-        if device.remoteProtocol == .rdp {
+        if isRDP {
             let rdpWidth = device.desktopWidth ?? 1920
             let rdpHeight = device.desktopHeight ?? 1080
             initialDesktopSize = CGSize(width: rdpWidth, height: rdpHeight)
@@ -265,10 +275,13 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 username: device.username,
                 password: password,
                 width: rdpWidth,
-                height: rdpHeight
+                height: rdpHeight,
+                audioEnabled: audioPref
             )
+            self.rdpAudioPlayer = RDPAudioPlayer()
         } else {
             self.rdpClient = nil
+            self.rdpAudioPlayer = nil
             initialDesktopSize = CGSize(width: rfb.framebuffer.width, height: rfb.framebuffer.height)
         }
         self.remoteDesktopSize = initialDesktopSize
@@ -616,6 +629,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 self.clipboardWriter(text)
             }
         }
+
+        rdp.onAudioSampleReceived = { [weak self] sample in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.isRemoteAudioEnabled, !self.isRemoteAudioMuted else { return }
+                try? self.rdpAudioPlayer?.enqueue(sample)
+            }
+        }
     }
 
     private func applyDisplaySelection(resetInput: Bool = false) {
@@ -777,6 +798,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         remoteDesktopSize = .zero
         multiDisplayManager.reset(width: framebuffer.width, height: framebuffer.height)
         if isRDP {
+            if rdpAudioPlayer == nil && isRemoteAudioEnabled {
+                rdpAudioPlayer = RDPAudioPlayer()
+            }
             rdpClient?.setInputEnabled(isForegroundSession && !isObserveOnly)
             rdpClient?.connect()
         } else if let settings = device.ssh {
@@ -798,6 +822,29 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         if isRDP { rdpClient?.disconnect() }
         else { client.disconnect() }
         startSession()
+    }
+
+    public func toggleRemoteAudioMute() {
+        isRemoteAudioMuted.toggle()
+        if isRemoteAudioMuted {
+            rdpAudioPlayer?.reset()
+        }
+    }
+
+    public func setRemoteAudioMuted(_ muted: Bool) {
+        isRemoteAudioMuted = muted
+        if muted {
+            rdpAudioPlayer?.reset()
+        }
+    }
+
+    public func toggleAutoFitResolution() {
+        autoFitResolution.toggle()
+    }
+
+    public func updateRemoteDesktopResolution(width: Int, height: Int) {
+        guard isRDP else { return }
+        rdpClient?.updateDesktopResolution(width: width, height: height)
     }
 
     public func selectDisplayColorDepth(_ depth: RFBColorDepth) {
@@ -866,6 +913,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         releaseToolbarHeldKeys()
         releaseAllModifiers()
         trackpadEngine.releaseAllButtons()
+        rdpAudioPlayer?.reset()
+        rdpAudioPlayer = nil
         let framebuffer = self.framebuffer
         let deviceId = device.id
         // A failed/unopened attempt may still have an allocated blank framebuffer.

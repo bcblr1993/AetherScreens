@@ -21,6 +21,8 @@ public struct EditDeviceSheet: View {
     @State private var isFavorite: Bool = false
     @State private var tagsString: String = ""
     @State private var desktopResolution: String = "1920x1080"
+    @State private var remoteAudioEnabled: Bool = true
+    @State private var autoFitResolution: Bool = false
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
 
@@ -106,6 +108,8 @@ public struct EditDeviceSheet: View {
                             Text(AppLocalization.string("1280 × 720 (720p HD)")).tag("1280x720")
                             Text(AppLocalization.string("3840 × 2160 (4K UHD)")).tag("3840x2160")
                         }
+                        Toggle(AppLocalization.string("Auto-Fit Resolution"), isOn: $autoFitResolution)
+                        Toggle(AppLocalization.string("Remote Audio Playback"), isOn: $remoteAudioEnabled)
                     }
                 }
 
@@ -181,10 +185,14 @@ public struct EditDeviceSheet: View {
                             let dims = desktopResolution.split(separator: "x").compactMap { Int($0) }
                             updatedDev.desktopWidth = dims.count == 2 ? dims[0] : 1920
                             updatedDev.desktopHeight = dims.count == 2 ? dims[1] : 1080
+                            updatedDev.remoteAudioEnabled = remoteAudioEnabled
+                            updatedDev.autoFitResolution = autoFitResolution
                         } else {
                             updatedDev.authMethod = updatedDev.username == nil ? .vncPassword : .macAccount
                             updatedDev.desktopWidth = nil
                             updatedDev.desktopHeight = nil
+                            updatedDev.remoteAudioEnabled = nil
+                            updatedDev.autoFitResolution = nil
                         }
                         updatedDev.deviceType = deviceType
                         updatedDev.macAddress = macAddress.isEmpty ? nil : macAddress
@@ -231,6 +239,8 @@ public struct EditDeviceSheet: View {
                 } else {
                     desktopResolution = "1920x1080"
                 }
+                remoteAudioEnabled = device.remoteAudioEnabled ?? true
+                autoFitResolution = device.autoFitResolution ?? false
                 disconnectAction = DisconnectActionStore.shared.load(for: device.id, type: device.deviceType)
                 macAddress = device.macAddress ?? ""
                 isFavorite = device.isFavorite

@@ -34,6 +34,10 @@ public final class RDPClient: @unchecked Sendable {
         state = newState
     }
 
+    public func simulateAudioSampleForTesting(_ sample: RDPAudioSample) {
+        onAudioSampleReceived?(sample)
+    }
+
     // Callbacks
     public var onStateChanged: (@Sendable (State) -> Void)?
     public var onFrameUpdated: (@Sendable () -> Void)?
@@ -41,6 +45,8 @@ public final class RDPClient: @unchecked Sendable {
     public var onClipboardReceived: (@Sendable (String) -> Void)?
     public var onCursorReceived: (@Sendable (RFBRemoteCursor) -> Void)?
     public var onTransportRTT: (@Sendable (Double) -> Void)?
+    public var onAudioSampleReceived: (@Sendable (RDPAudioSample) -> Void)?
+    public var audioEnabled: Bool = true
 
     private var connectionTask: Task<Void, Never>?
     private var activeCancellation: RDPConnectionCancellation?
@@ -61,12 +67,14 @@ public final class RDPClient: @unchecked Sendable {
         username: String? = nil,
         password: String? = nil,
         width: Int = 1920,
-        height: Int = 1080
+        height: Int = 1080,
+        audioEnabled: Bool = true
     ) {
         self.host = host
         self.port = port
         self.username = username
         self.password = password
+        self.audioEnabled = audioEnabled
         self.framebuffer = Framebuffer(width: width, height: height)
     }
 
@@ -105,8 +113,9 @@ public final class RDPClient: @unchecked Sendable {
 
         let cancellation = RDPConnectionCancellation()
         self.activeCancellation = cancellation
+        let isAudioEnabled = self.audioEnabled
 
-        connectionTask = Task.detached { [weak self, host, port, user, pass] in
+        connectionTask = Task.detached { [weak self, host, port, user, pass, isAudioEnabled] in
             guard let self else { return }
 
             let credentials: RDPCredentials?
@@ -134,7 +143,7 @@ public final class RDPClient: @unchecked Sendable {
                 desktopWidth: initialWidth,
                 desktopHeight: initialHeight,
                 clipboardEnabled: true,
-                audioPlaybackEnabled: false,
+                audioPlaybackEnabled: isAudioEnabled,
                 earlyUserAuthorizationEnabled: false,
                 graphicsCapabilityProfile: .automatic
             )
@@ -183,6 +192,9 @@ public final class RDPClient: @unchecked Sendable {
                 onClipboardText: { [weak self] text in
                     guard let self else { return }
                     self.onClipboardReceived?(text)
+                },
+                onAudioSample: { [weak self] sample in
+                    self?.onAudioSampleReceived?(sample)
                 },
                 cancellation: cancellation
             )

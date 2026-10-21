@@ -57,6 +57,56 @@ final class RDPClientSessionTests: XCTestCase {
         let legacyDecoded = try JSONDecoder().decode(RemoteDevice.self, from: legacyJSON)
         XCTAssertNil(legacyDecoded.desktopWidth)
         XCTAssertNil(legacyDecoded.desktopHeight)
+        XCTAssertNil(legacyDecoded.remoteAudioEnabled)
+        XCTAssertNil(legacyDecoded.autoFitResolution)
+    }
+
+    func testRemoteDeviceAudioAndAutoFitCodable() throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "192.168.1.50",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "admin",
+            desktopWidth: 2560,
+            desktopHeight: 1440,
+            remoteAudioEnabled: true,
+            autoFitResolution: true
+        )
+        let data = try JSONEncoder().encode(device)
+        let decoded = try JSONDecoder().decode(RemoteDevice.self, from: data)
+        XCTAssertEqual(decoded.remoteAudioEnabled, true)
+        XCTAssertEqual(decoded.autoFitResolution, true)
+    }
+
+    func testRDPClientAudioCallbackAndSimulation() throws {
+        let client = RDPClient(host: "10.8.8.250", port: 3389, username: "sprixin", password: "123", audioEnabled: true)
+        XCTAssertTrue(client.audioEnabled)
+
+        let box = Box<RDPAudioSample?>(nil)
+        client.onAudioSampleReceived = { sample in
+            box.value = sample
+        }
+
+        let format = try RDPAudioFormat(
+            formatTag: RDPAudioFormatTag.pcm,
+            channelCount: 2,
+            samplesPerSecond: 44100,
+            averageBytesPerSecond: 176400,
+            blockAlign: 4,
+            bitsPerSample: 16
+        )
+        let sample = RDPAudioSample(
+            format: format,
+            timestamp: 0,
+            blockNo: 0,
+            data: Data(repeating: 0x12, count: 64),
+            receivedAt: Date()
+        )
+        client.simulateAudioSampleForTesting(sample)
+        XCTAssertEqual(box.value?.data.count, 64)
     }
 
     func testRDPClientConnectWithoutCredentialsFailsImmediately() {
@@ -85,5 +135,10 @@ final class RDPClientSessionTests: XCTestCase {
         client.sendText("hello")
         XCTAssertEqual(client.state, .disconnected)
     }
+}
+
+private final class Box<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
 }
 

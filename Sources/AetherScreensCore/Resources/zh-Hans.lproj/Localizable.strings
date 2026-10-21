@@ -662,3 +662,11 @@
 
 "File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste." = "文件“%@”已复制到 Windows 剪贴板，在 Windows 中按 Ctrl+V 即可粘贴。";
 
+"Auto-Fit Resolution" = "自适应窗口分辨率";
+
+"Remote Audio Playback" = "播放远程音频";
+
+"Mute Remote Audio" = "静音远程音频";
+
+"Unmute Remote Audio" = "取消静音远程音频";
+

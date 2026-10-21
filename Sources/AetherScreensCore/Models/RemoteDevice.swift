@@ -54,6 +54,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
     public var tags: [String]
     public var desktopWidth: Int?
     public var desktopHeight: Int?
+    public var remoteAudioEnabled: Bool?
+    public var autoFitResolution: Bool?
 
     public init(
         id: UUID = UUID(),
@@ -72,7 +74,9 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         isFavorite: Bool = false,
         tags: [String] = [],
         desktopWidth: Int? = nil,
-        desktopHeight: Int? = nil
+        desktopHeight: Int? = nil,
+        remoteAudioEnabled: Bool? = nil,
+        autoFitResolution: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -91,10 +95,12 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.tags = tags
         self.desktopWidth = desktopWidth
         self.desktopHeight = desktopHeight
+        self.remoteAudioEnabled = remoteAudioEnabled
+        self.autoFitResolution = autoFitResolution
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight
+        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution
     }
 
     public init(from decoder: Decoder) throws {
@@ -118,6 +124,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         self.desktopWidth = try container.decodeIfPresent(Int.self, forKey: .desktopWidth)
         self.desktopHeight = try container.decodeIfPresent(Int.self, forKey: .desktopHeight)
+        self.remoteAudioEnabled = try container.decodeIfPresent(Bool.self, forKey: .remoteAudioEnabled)
+        self.autoFitResolution = try container.decodeIfPresent(Bool.self, forKey: .autoFitResolution)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -139,6 +147,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         try container.encode(tags, forKey: .tags)
         try container.encodeIfPresent(desktopWidth, forKey: .desktopWidth)
         try container.encodeIfPresent(desktopHeight, forKey: .desktopHeight)
+        try container.encodeIfPresent(remoteAudioEnabled, forKey: .remoteAudioEnabled)
+        try container.encodeIfPresent(autoFitResolution, forKey: .autoFitResolution)
     }
 
     /// Creates a RemoteDevice from a Tailscale node

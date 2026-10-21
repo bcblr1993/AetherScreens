@@ -131,6 +131,20 @@ public struct RemoteDesktopView: View {
                 .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.9),
                            value: viewModel.isKeyboardVisible)
             }
+            .task(id: "\(geometry.size.width)x\(geometry.size.height)_\(viewModel.autoFitResolution)_\(viewModel.sessionState == .connected)") {
+                guard viewModel.isRDP, viewModel.autoFitResolution, viewModel.sessionState == .connected else { return }
+                do {
+                    try await Task.sleep(nanoseconds: 350_000_000)
+                    let targetWidth = Int(geometry.size.width)
+                    let targetHeight = Int(geometry.size.height)
+                    guard targetWidth >= 640, targetHeight >= 480 else { return }
+                    let currentW = Int(viewModel.remoteDesktopSize.width)
+                    let currentH = Int(viewModel.remoteDesktopSize.height)
+                    if abs(currentW - targetWidth) >= 4 || abs(currentH - targetHeight) >= 4 {
+                        viewModel.updateRemoteDesktopResolution(width: targetWidth, height: targetHeight)
+                    }
+                } catch {}
+            }
         }
         .overlay(alignment: .topTrailing) {
             FileTransferProgressView(store: viewModel.fileTransfers)
@@ -681,6 +695,16 @@ public struct RemoteDesktopView: View {
             .help(AppLocalization.string("View Diagnostic Logs"))
             #endif
 
+            if viewModel.isRDP && viewModel.isRemoteAudioEnabled {
+                Button {
+                    viewModel.toggleRemoteAudioMute()
+                } label: {
+                    controlIcon(viewModel.isRemoteAudioMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                }
+                .help(AppLocalization.string(viewModel.isRemoteAudioMuted ? "Unmute Remote Audio" : "Mute Remote Audio"))
+                .accessibilityLabel(AppLocalization.string(viewModel.isRemoteAudioMuted ? "Unmute Remote Audio" : "Mute Remote Audio"))
+            }
+
             // Keep secondary controls inside a menu on narrow screens.
             Menu {
                 if let onReturnToLibrary {
@@ -688,6 +712,13 @@ public struct RemoteDesktopView: View {
                         Label(AppLocalization.string("Return to Computers"), systemImage: "rectangle.grid.2x2")
                     }
                     .accessibilityIdentifier("session-return-to-library")
+                    Divider()
+                }
+                if viewModel.isRDP {
+                    Toggle(AppLocalization.string("Auto-Fit Resolution"), isOn: $viewModel.autoFitResolution)
+                    if viewModel.isRemoteAudioEnabled {
+                        Toggle(AppLocalization.string("Mute Remote Audio"), isOn: $viewModel.isRemoteAudioMuted)
+                    }
                     Divider()
                 }
                 Button { droppedUploadURL = nil; viewModel.fileUploadNotice = nil; showingFileUpload = true } label: {
