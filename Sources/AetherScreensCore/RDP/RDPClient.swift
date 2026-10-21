@@ -38,11 +38,16 @@ public final class RDPClient: @unchecked Sendable {
         onAudioSampleReceived?(sample)
     }
 
+    public func simulateClipboardFilesForTesting(_ urls: [URL]) {
+        onClipboardFilesReceived?(urls)
+    }
+
     // Callbacks
     public var onStateChanged: (@Sendable (State) -> Void)?
     public var onFrameUpdated: (@Sendable () -> Void)?
     public var onDisplayLayoutReceived: (@Sendable (RFBDisplayLayout?) -> Void)?
     public var onClipboardReceived: (@Sendable (String) -> Void)?
+    public var onClipboardFilesReceived: (@Sendable ([URL]) -> Void)?
     public var onCursorReceived: (@Sendable (RFBRemoteCursor) -> Void)?
     public var onTransportRTT: (@Sendable (Double) -> Void)?
     public var onAudioSampleReceived: (@Sendable (RDPAudioSample) -> Void)?
@@ -53,6 +58,7 @@ public final class RDPClient: @unchecked Sendable {
     private var inputSession: RDPInputSession?
     private var clipboardSession: RDPClipboardSession?
     private var displayControlSession: RDPDisplayControlSession?
+    private let fileDownloader = RDPClipboardFileDownloader()
     public private(set) var lastPointerPosition: (UInt16, UInt16)?
     public private(set) var lastPublishedFiles: [RDPClipboardLocalFile] = []
     private var lastButtons: RFBConstants.ButtonMask = []
@@ -193,6 +199,19 @@ public final class RDPClient: @unchecked Sendable {
                     guard let self else { return }
                     self.onClipboardReceived?(text)
                 },
+                onClipboardFileGroupDescriptor: { [weak self] descriptor in
+                    guard let self else { return }
+                    self.inputLock.lock()
+                    let session = self.clipboardSession
+                    self.inputLock.unlock()
+                    guard let session else { return }
+                    self.fileDownloader.downloadFiles(descriptors: descriptor.descriptors, session: session) { [weak self] urls in
+                        self?.onClipboardFilesReceived?(urls)
+                    }
+                },
+                onClipboardFileContents: { [weak self] response in
+                    self?.fileDownloader.handleFileContentsResponse(response)
+                },
                 onAudioSample: { [weak self] sample in
                     self?.onAudioSampleReceived?(sample)
                 },
@@ -220,6 +239,8 @@ public final class RDPClient: @unchecked Sendable {
         connectionTask?.cancel()
         connectionTask = nil
         inputLock.unlock()
+
+        fileDownloader.cancel()
 
         transition(to: .disconnected)
         AppLogger.shared.info("Disconnected RDP session with \(host)", category: "RDP")

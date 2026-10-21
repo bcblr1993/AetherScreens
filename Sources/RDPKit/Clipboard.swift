@@ -989,7 +989,7 @@ struct RDPClipboardFileContentsRequestPDU: Equatable, Sendable {
         }
         if requestsSize {
             guard position == 0,
-                  requestedByteCount == 8
+                  requestedByteCount == 8 || requestedByteCount == 4
             else {
                 throw RDPDecodeError.invalidClipboardPDU
             }
@@ -1234,7 +1234,7 @@ public final class RDPClipboardSession: @unchecked Sendable {
                 return
             }
             send(response.encoded())
-        case let .files(files) where request.formatID == RDPClipboardLocalFormatID.fileGroupDescriptorW:
+        case let .files(files) where request.formatID == RDPClipboardLocalFormatID.fileGroupDescriptorW || request.formatID >= 0xC000:
             let descriptors = files.map(\.descriptor)
             let response = RDPClipboardFormatDataResponsePDU.fileGroupDescriptorW(
                 RDPClipboardFileGroupDescriptorW(descriptors: descriptors)

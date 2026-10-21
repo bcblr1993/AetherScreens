@@ -204,6 +204,10 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     private var adaptiveDisplayQuality = AdaptiveDisplayQuality()
     private let clipboardReader: @MainActor @Sendable () -> String?
     private let clipboardWriter: @MainActor @Sendable (String) -> Void
+    private let clipboardFilesReader: @MainActor @Sendable () -> [URL]?
+    private let clipboardFilesWriter: @MainActor @Sendable ([URL]) -> Void
+    private var lastSentClipboardFileURLs: [URL]?
+    private var lastReceivedClipboardFileURLs: [URL]?
     public var canRememberPassword: Bool { !isTemporary }
     private let deviceStore: DeviceStore
     private nonisolated let callbackGeneration = SessionCallbackGeneration()
@@ -216,6 +220,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 deviceStore: DeviceStore = .shared, keyboardStore: KeyboardToolbarStore = .shared,
                 clipboardWriter: (@MainActor @Sendable (String) -> Void)? = nil,
                 clipboardReader: (@MainActor @Sendable () -> String?)? = nil,
+                clipboardFilesWriter: (@MainActor @Sendable ([URL]) -> Void)? = nil,
+                clipboardFilesReader: (@MainActor @Sendable () -> [URL]?)? = nil,
                 displayQualityStore: DisplayQualityStore = .shared,
                 sshCredentials: SSHCredentialStore = .shared,
                 sshTrust: SSHHostTrustStore = .shared,
@@ -247,6 +253,19 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             #elseif canImport(AppKit)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
+            #endif
+        }
+        self.clipboardFilesReader = clipboardFilesReader ?? {
+            #if canImport(AppKit)
+            return (NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: nil) as? [URL])?.filter { $0.isFileURL }
+            #else
+            return nil
+            #endif
+        }
+        self.clipboardFilesWriter = clipboardFilesWriter ?? { urls in
+            #if canImport(AppKit)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects(urls as [NSURL])
             #endif
         }
         self.keyboardConfiguration = isTemporary ? KeyboardToolbarConfiguration() : keyboardStore.load(for: device.id)
@@ -627,6 +646,25 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                       self.sessionState == .connected else { return }
                 self.lastReceivedClipboardText = text
                 self.clipboardWriter(text)
+            }
+        }
+
+        rdp.onClipboardFilesReceived = { [weak self] urls in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            let foreground = self.foregroundGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation),
+                      self.foregroundGeneration.matches(foreground), self.isForegroundSession,
+                      self.sessionState == .connected else { return }
+                self.lastReceivedClipboardFileURLs = urls
+                self.clipboardFilesWriter(urls)
+                let count = urls.count
+                if count == 1, let name = urls.first?.lastPathComponent {
+                    self.fileUploadNotice = String(format: AppLocalization.string("File \"%@\" copied from Windows. Press ⌘V in Mac Finder to paste."), name)
+                } else {
+                    self.fileUploadNotice = String(format: AppLocalization.string("%d files copied from Windows. Press ⌘V in Mac Finder to paste."), count)
+                }
             }
         }
 
@@ -1396,11 +1434,21 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             clipboardTransferNotice = "Clipboard transfer requires an active control session."
             return
         }
+        if isRDP, let urls = clipboardFilesReader(), !urls.isEmpty {
+            lastSentClipboardFileURLs = urls
+            lastSentClipboardText = nil
+            let success = publishFilesToRDP(urls: urls, notify: true)
+            clipboardTransferNotice = success
+                ? AppLocalization.string("File clipboard transfer requested. Paste on the remote computer to check.")
+                : AppLocalization.string("File clipboard transfer is unavailable.")
+            return
+        }
         guard let text = clipboardReader() else {
             clipboardTransferNotice = "The local clipboard contains no plain text."
             return
         }
         lastSentClipboardText = text
+        lastSentClipboardFileURLs = nil
         if isRDP {
             guard let rdp = rdpClient else { return }
             clipboardTransferNotice = rdp.sendCutText(text) != nil
@@ -1417,6 +1465,20 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public func syncLocalClipboardIfNeeded() {
         let isConnected = isRDP ? sessionState == .connected : client.state == .connected
         guard isAutoClipboardSyncEnabled, !isObserveOnly, isForegroundSession, isConnected else { return }
+
+        if isRDP, let urls = clipboardFilesReader(), !urls.isEmpty {
+            if let lastReceived = lastReceivedClipboardFileURLs, urls == lastReceived {
+                return
+            }
+            if let lastSent = lastSentClipboardFileURLs, urls == lastSent {
+                return
+            }
+            lastSentClipboardFileURLs = urls
+            lastSentClipboardText = nil
+            _ = publishFilesToRDP(urls: urls, notify: false)
+            return
+        }
+
         guard let text = clipboardReader(), !text.isEmpty else { return }
         let normalizedText = text.replacingOccurrences(of: "\r\n", with: "\n")
         if let lastReceived = lastReceivedClipboardText?.replacingOccurrences(of: "\r\n", with: "\n"),
@@ -1429,6 +1491,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
 
         lastSentClipboardText = text
+        lastSentClipboardFileURLs = nil
         if isRDP {
             _ = rdpClient?.sendCutText(text)
         } else {

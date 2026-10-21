@@ -406,14 +406,14 @@ public struct RemoteDesktopView: View {
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isUploadDropTargeted)
         }
-        .dropDestination(for: URL.self, action: { urls, _ in
+        .dropDestination(for: URL.self, action: { urls, location in
             guard canAcceptFileDrop, !urls.isEmpty else { return false }
             isUploadDropTargeted = false
             let validURLs = urls.filter { $0.isFileURL }
             guard !validURLs.isEmpty else { return false }
 
             if viewModel.isRDP {
-                viewModel.transferDroppedFilesToRDP(urls: validURLs)
+                viewModel.transferDroppedFilesToRDP(urls: validURLs, at: location, in: geometry.size)
             } else {
                 if let first = validURLs.first {
                     droppedUploadURL = first

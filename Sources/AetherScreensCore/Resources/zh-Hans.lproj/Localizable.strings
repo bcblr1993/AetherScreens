@@ -662,6 +662,14 @@
 
 "File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste." = "文件“%@”已复制到 Windows 剪贴板，在 Windows 中按 Ctrl+V 即可粘贴。";
 
+"File \"%@\" copied from Windows. Press ⌘V in Mac Finder to paste." = "文件“%@”已从 Windows 复制，在 Mac 访达中按 ⌘V 即可粘贴。";
+
+"%d files copied from Windows. Press ⌘V in Mac Finder to paste." = "%d 个文件已从 Windows 复制，在 Mac 访达中按 ⌘V 即可粘贴。";
+
+"File clipboard transfer requested. Paste on the remote computer to check." = "已请求传送文件剪贴板，请在远程电脑粘贴确认。";
+
+"File clipboard transfer is unavailable." = "文件剪贴板传送不可用。";
+
 "Auto-Fit Resolution" = "自适应窗口分辨率";
 
 "Remote Audio Playback" = "播放远程音频";

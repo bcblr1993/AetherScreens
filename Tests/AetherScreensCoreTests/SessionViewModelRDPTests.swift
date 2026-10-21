@@ -330,7 +330,7 @@ final class SessionViewModelRDPTests: XCTestCase {
         XCTAssertFalse(session.isRemoteAudioMuted)
 
         // Connect
-        rdpClient.onStateChanged?(.connected)
+        rdpClient.simulateStateForTesting(.connected)
         let drain = expectation(description: "Connected")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { drain.fulfill() }
         await fulfillment(of: [drain], timeout: 1)
@@ -383,6 +383,120 @@ final class SessionViewModelRDPTests: XCTestCase {
 
         // Resolution update does not crash when disconnected or connected
         session.updateRemoteDesktopResolution(width: 1440, height: 900)
+    }
+
+    @MainActor
+    func testSessionViewModelRDPBidirectionalFileClipboard() async throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "10.8.8.250",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "sprixin"
+        )
+
+        let writtenFilesBox = Box<[URL]>([])
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let sampleFile = tempDir.appendingPathComponent("note.txt")
+        try "hello windows rdp clipboard".write(to: sampleFile, atomically: true, encoding: .utf8)
+
+        let readFilesBox = Box<[URL]>([sampleFile])
+
+        let session = SessionViewModel(
+            device: device,
+            password: "123",
+            isTemporary: true,
+            clipboardFilesWriter: { urls in
+                writtenFilesBox.value = urls
+            },
+            clipboardFilesReader: {
+                readFilesBox.value
+            }
+        )
+        defer { session.endSession() }
+
+        guard let rdpClient = session.rdpClient else {
+            XCTFail("RDP client should be instantiated")
+            return
+        }
+
+        // Connect
+        rdpClient.simulateStateForTesting(.connected)
+        let drain = expectation(description: "Connected")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { drain.fulfill() }
+        await fulfillment(of: [drain], timeout: 1)
+
+        // 1. Test Mac -> Windows via syncLocalClipboardIfNeeded
+        session.syncLocalClipboardIfNeeded()
+        XCTAssertEqual(rdpClient.lastPublishedFiles.count, 1)
+        XCTAssertEqual(rdpClient.lastPublishedFiles.first?.descriptor.fileName, "note.txt")
+        XCTAssertEqual(String(data: rdpClient.lastPublishedFiles.first?.contents ?? Data(), encoding: .utf8), "hello windows rdp clipboard")
+
+        // 2. Test Windows -> Mac via simulateClipboardFilesForTesting
+        let remoteFileURL = tempDir.appendingPathComponent("from_windows.pdf")
+        try "pdf data".write(to: remoteFileURL, atomically: true, encoding: .utf8)
+
+        rdpClient.simulateClipboardFilesForTesting([remoteFileURL])
+
+        let receiveExp = expectation(description: "Receive clipboard files from Windows")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { receiveExp.fulfill() }
+        await fulfillment(of: [receiveExp], timeout: 1)
+
+        XCTAssertEqual(writtenFilesBox.value.count, 1)
+        XCTAssertEqual(writtenFilesBox.value.first?.lastPathComponent, "from_windows.pdf")
+        XCTAssertNotNil(session.fileUploadNotice)
+        XCTAssertTrue(session.fileUploadNotice?.contains("from_windows.pdf") == true)
+    }
+
+    @MainActor
+    func testSessionViewModelRDPDragAndDropTargetingCoordinates() async throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "10.8.8.250",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "sprixin"
+        )
+
+        let session = SessionViewModel(device: device, password: "123", isTemporary: true)
+        defer { session.endSession() }
+
+        guard let rdpClient = session.rdpClient else {
+            XCTFail("RDP client should be instantiated")
+            return
+        }
+
+        rdpClient.simulateStateForTesting(.connected)
+        let drain = expectation(description: "Connected")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { drain.fulfill() }
+        await fulfillment(of: [drain], timeout: 1)
+
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let dropFile = tempDir.appendingPathComponent("dropped.png")
+        try "png data".write(to: dropFile, atomically: true, encoding: .utf8)
+
+        // Drop file at point (200, 150) inside viewport (800, 600)
+        session.transferDroppedFilesToRDP(
+            urls: [dropFile],
+            at: CGPoint(x: 200, y: 150),
+            in: CGSize(width: 800, height: 600)
+        )
+
+        XCTAssertEqual(rdpClient.lastPublishedFiles.count, 1)
+        XCTAssertEqual(rdpClient.lastPublishedFiles.first?.descriptor.fileName, "dropped.png")
+        XCTAssertNotNil(session.fileUploadNotice)
+        XCTAssertTrue(session.fileUploadNotice?.contains("dropped.png") == true)
+        XCTAssertNotNil(rdpClient.lastPointerPosition)
     }
 }
 

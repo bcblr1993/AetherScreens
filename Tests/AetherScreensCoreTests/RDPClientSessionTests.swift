@@ -135,6 +135,84 @@ final class RDPClientSessionTests: XCTestCase {
         client.sendText("hello")
         XCTAssertEqual(client.state, .disconnected)
     }
+
+    func testRDPClipboardFileDownloaderZeroByteFileAndDirectoryStructure() async throws {
+        let downloader = RDPClipboardFileDownloader()
+        final class MockSession: RDPClipboardFileRangeRequester, @unchecked Sendable {
+            func requestRemoteFileRange(streamID: UInt32, fileIndex: Int32, position: UInt64, requestedByteCount: UInt32) throws {}
+        }
+        let session = MockSession()
+
+        let dirDesc = RDPClipboardFileDescriptorW(
+            flags: RDPClipboardFileDescriptorFlags.attributes | RDPClipboardFileDescriptorFlags.unicode,
+            fileAttributes: RDPClipboardFileAttributes.directory,
+            fileSize: 0,
+            fileName: "MyFolder"
+        )
+        let fileDesc = RDPClipboardFileDescriptorW(
+            flags: RDPClipboardFileDescriptorFlags.attributes | RDPClipboardFileDescriptorFlags.fileSize | RDPClipboardFileDescriptorFlags.unicode,
+            fileAttributes: RDPClipboardFileAttributes.archive,
+            fileSize: 0,
+            fileName: "MyFolder\\empty.txt"
+        )
+
+        let exp = expectation(description: "Directory and zero-byte file created")
+        let box = Box<[URL]>([])
+        downloader.downloadFiles(descriptors: [dirDesc, fileDesc], session: session) { urls in
+            box.value = urls
+            exp.fulfill()
+        }
+
+        await fulfillment(of: [exp], timeout: 2.0)
+        XCTAssertEqual(box.value.count, 1)
+        XCTAssertEqual(box.value.first?.lastPathComponent, "MyFolder")
+        if let topURL = box.value.first {
+            let nestedFile = topURL.appendingPathComponent("empty.txt")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: nestedFile.path))
+            try? FileManager.default.removeItem(at: topURL.deletingLastPathComponent())
+        }
+    }
+
+    func testRDPClipboardFileDownloaderChunkStreaming() async throws {
+        let downloader = RDPClipboardFileDownloader()
+        final class MockSession: RDPClipboardFileRangeRequester, @unchecked Sendable {
+            weak var downloader: RDPClipboardFileDownloader?
+            func requestRemoteFileRange(streamID: UInt32, fileIndex: Int32, position: UInt64, requestedByteCount: UInt32) throws {
+                let testData = Data("hello world chunk payload".utf8)
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.02) { [weak self] in
+                    self?.downloader?.handleFileContentsResponse(
+                        RDPClipboardFileContentsResponse(streamID: streamID, ok: true, data: testData)
+                    )
+                }
+            }
+        }
+        let session = MockSession()
+        session.downloader = downloader
+
+        let payloadData = Data("hello world chunk payload".utf8)
+        let fileDesc = RDPClipboardFileDescriptorW(
+            flags: RDPClipboardFileDescriptorFlags.attributes | RDPClipboardFileDescriptorFlags.fileSize | RDPClipboardFileDescriptorFlags.unicode,
+            fileAttributes: RDPClipboardFileAttributes.archive,
+            fileSize: UInt64(payloadData.count),
+            fileName: "data.bin"
+        )
+
+        let exp = expectation(description: "Chunk file streamed successfully")
+        let box = Box<[URL]>([])
+        downloader.downloadFiles(descriptors: [fileDesc], session: session) { urls in
+            box.value = urls
+            exp.fulfill()
+        }
+
+        await fulfillment(of: [exp], timeout: 2.0)
+        XCTAssertEqual(box.value.count, 1)
+        XCTAssertEqual(box.value.first?.lastPathComponent, "data.bin")
+        if let fileURL = box.value.first {
+            let readData = try? Data(contentsOf: fileURL)
+            XCTAssertEqual(readData, payloadData)
+            try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent())
+        }
+    }
 }
 
 private final class Box<T>: @unchecked Sendable {

@@ -662,6 +662,14 @@
 
 "File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste." = "File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste.";
 
+"File \"%@\" copied from Windows. Press ⌘V in Mac Finder to paste." = "File \"%@\" copied from Windows. Press ⌘V in Mac Finder to paste.";
+
+"%d files copied from Windows. Press ⌘V in Mac Finder to paste." = "%d files copied from Windows. Press ⌘V in Mac Finder to paste.";
+
+"File clipboard transfer requested. Paste on the remote computer to check." = "File clipboard transfer requested. Paste on the remote computer to check.";
+
+"File clipboard transfer is unavailable." = "File clipboard transfer is unavailable.";
+
 "Auto-Fit Resolution" = "Auto-Fit Resolution";
 
 "Remote Audio Playback" = "Remote Audio Playback";
