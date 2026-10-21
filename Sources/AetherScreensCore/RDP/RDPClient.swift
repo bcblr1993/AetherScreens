@@ -247,10 +247,18 @@ public final class RDPClient: @unchecked Sendable {
     }
 
     public func updateDesktopResolution(width: Int, height: Int) {
+        let size = Self.displayControlSize(width: width, height: height)
         inputLock.lock()
         let dc = displayControlSession
         inputLock.unlock()
-        dc?.sendSingleMonitorLayout(width: UInt32(width), height: UInt32(height))
+        dc?.sendSingleMonitorLayout(width: UInt32(size.width), height: UInt32(size.height))
+    }
+
+    /// MS-RDPEDISP requires 200...8192 pixels per side and an even width; other layouts are dropped silently.
+    static func displayControlSize(width: Int, height: Int) -> (width: Int, height: Int) {
+        let clampedWidth = min(max(width, 200), 8192)
+        let clampedHeight = min(max(height, 200), 8192)
+        return (clampedWidth - clampedWidth % 2, clampedHeight)
     }
 
     private func transition(to newState: State) {

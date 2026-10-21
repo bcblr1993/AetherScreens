@@ -84,7 +84,14 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         }
     }
     @Published public var isRemoteAudioEnabled: Bool
-    @Published public var isRemoteAudioMuted: Bool = false
+    @Published public var isRemoteAudioMuted: Bool = false {
+        // The session menu binds this directly, so flush already-queued audio here rather than in the toggle helpers.
+        didSet {
+            if isRemoteAudioMuted, !oldValue {
+                rdpAudioPlayer?.reset()
+            }
+        }
+    }
     @Published public var autoFitResolution: Bool
     private var rdpAudioPlayer: RDPAudioPlayer?
     private var pointerButtonsForModifiers: RFBConstants.ButtonMask = []
@@ -864,16 +871,10 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     public func toggleRemoteAudioMute() {
         isRemoteAudioMuted.toggle()
-        if isRemoteAudioMuted {
-            rdpAudioPlayer?.reset()
-        }
     }
 
     public func setRemoteAudioMuted(_ muted: Bool) {
         isRemoteAudioMuted = muted
-        if muted {
-            rdpAudioPlayer?.reset()
-        }
     }
 
     public func toggleAutoFitResolution() {
@@ -1461,16 +1462,24 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             : "Clipboard transfer is unavailable for this text. Use Paste Text instead."
     }
 
+    /// Pasteboard round-trips can add a trailing slash or resolve /private, so compare file paths, not URL strings.
+    nonisolated static func sameFileURLs(_ lhs: [URL], _ rhs: [URL]) -> Bool {
+        let normalize: ([URL]) -> [String] = { urls in
+            urls.map { $0.standardizedFileURL.resolvingSymlinksInPath().path }
+        }
+        return normalize(lhs) == normalize(rhs)
+    }
+
     /// Synchronize local clipboard to remote host automatically if changed.
     public func syncLocalClipboardIfNeeded() {
         let isConnected = isRDP ? sessionState == .connected : client.state == .connected
         guard isAutoClipboardSyncEnabled, !isObserveOnly, isForegroundSession, isConnected else { return }
 
         if isRDP, let urls = clipboardFilesReader(), !urls.isEmpty {
-            if let lastReceived = lastReceivedClipboardFileURLs, urls == lastReceived {
+            if let lastReceived = lastReceivedClipboardFileURLs, Self.sameFileURLs(urls, lastReceived) {
                 return
             }
-            if let lastSent = lastSentClipboardFileURLs, urls == lastSent {
+            if let lastSent = lastSentClipboardFileURLs, Self.sameFileURLs(urls, lastSent) {
                 return
             }
             lastSentClipboardFileURLs = urls

@@ -46,8 +46,8 @@ extension SessionViewModel {
                 ) {
                     for case let itemURL as URL in enumerator {
                         guard let resourceValues = try? itemURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey]) else { continue }
-                        let subPath = itemURL.path.replacingOccurrences(of: rootURL.path, with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                        let winRelativePath = (rootName + "/" + subPath).replacingOccurrences(of: "/", with: "\\")
+                        guard let subComponents = Self.relativeComponents(of: itemURL, under: rootURL) else { continue }
+                        let winRelativePath = ([rootName] + subComponents).joined(separator: "\\")
                         if resourceValues.isDirectory == true {
                             let subDirDesc = RDPClipboardFileDescriptorW(
                                 flags: RDPClipboardFileDescriptorFlags.attributes | RDPClipboardFileDescriptorFlags.unicode,
@@ -80,6 +80,17 @@ extension SessionViewModel {
         }
 
         return (localFiles, transferredNames)
+    }
+
+    /// Enumerators may report /private/var while the root is /var, so compare resolved path components.
+    nonisolated static func relativeComponents(of itemURL: URL, under rootURL: URL) -> [String]? {
+        let root = rootURL.standardizedFileURL.resolvingSymlinksInPath().pathComponents
+        // Resolve only the parent so a symlink inside the folder keeps its own name.
+        let standardizedItem = itemURL.standardizedFileURL
+        let item = standardizedItem.deletingLastPathComponent().resolvingSymlinksInPath().pathComponents
+            + [standardizedItem.lastPathComponent]
+        guard item.count > root.count, Array(item.prefix(root.count)) == root else { return nil }
+        return Array(item.dropFirst(root.count))
     }
 
     @discardableResult
@@ -128,8 +139,8 @@ extension SessionViewModel {
 
             let relativeX = max(0.0, min(1.0, (location.x - originX) / max(1.0, canvasWidth)))
             let relativeY = max(0.0, min(1.0, (location.y - originY) / max(1.0, canvasHeight)))
-            let targetX = UInt16(clamping: Int(relativeX * Double(imageWidth)))
-            let targetY = UInt16(clamping: Int(relativeY * Double(imageHeight)))
+            let targetX = UInt16(clamping: Int((activeCropRect?.minX ?? 0) + relativeX * Double(imageWidth)))
+            let targetY = UInt16(clamping: Int((activeCropRect?.minY ?? 0) + relativeY * Double(imageHeight)))
 
             rdp.sendPointerEvent(buttonMask: [.left], x: targetX, y: targetY)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in

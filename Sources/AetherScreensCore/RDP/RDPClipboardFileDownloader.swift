@@ -29,44 +29,36 @@ extension RDPClipboardSession: RDPClipboardFileRangeRequester {
 
 /// Downloads files advertised by a remote Windows host via MS-RDPECLIP into local temporary storage.
 public final class RDPClipboardFileDownloader: @unchecked Sendable {
-    private struct TimeoutError: Error {}
-    private struct DownloadFailedError: Error {}
+    struct TimeoutError: Error {}
+    struct DownloadFailedError: Error {}
+    struct CancelledError: Error {}
+
+    static let temporaryDirectoryPrefix = "AetherScreens_Clipboard_"
 
     private let lock = NSLock()
     private var streamContinuations: [UInt32: CheckedContinuation<Data, Error>] = [:]
     private var currentStreamID: UInt32 = 1000
-    private var isDownloading = false
     private var currentDownloadTask: Task<Void, Never>?
+    private let chunkTimeout: TimeInterval
+    private let temporaryRoot: URL
+    private let staleDirectoryAge: TimeInterval
 
-    public init() {}
-
-    private func setDownloading(_ value: Bool) {
-        lock.lock()
-        defer { lock.unlock() }
-        isDownloading = value
-    }
-
-    private func storeContinuation(_ continuation: CheckedContinuation<Data, Error>, for streamID: UInt32) {
-        lock.lock()
-        defer { lock.unlock() }
-        streamContinuations[streamID] = continuation
-    }
-
-    private func removeContinuation(for streamID: UInt32) {
-        lock.lock()
-        defer { lock.unlock() }
-        streamContinuations.removeValue(forKey: streamID)
+    public init(
+        chunkTimeout: TimeInterval = 8,
+        temporaryRoot: URL = FileManager.default.temporaryDirectory,
+        staleDirectoryAge: TimeInterval = 24 * 60 * 60
+    ) {
+        self.chunkTimeout = chunkTimeout
+        self.temporaryRoot = temporaryRoot
+        self.staleDirectoryAge = staleDirectoryAge
     }
 
     public func handleFileContentsResponse(_ response: RDPClipboardFileContentsResponse) {
-        lock.lock()
-        let continuation = streamContinuations.removeValue(forKey: response.streamID)
-        lock.unlock()
-
+        guard let continuation = takeContinuation(for: response.streamID) else { return }
         if response.ok {
-            continuation?.resume(returning: response.data)
+            continuation.resume(returning: response.data)
         } else {
-            continuation?.resume(throwing: DownloadFailedError())
+            continuation.resume(throwing: DownloadFailedError())
         }
     }
 
@@ -74,13 +66,13 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
         lock.lock()
         currentDownloadTask?.cancel()
         currentDownloadTask = nil
-        isDownloading = false
-        for continuation in streamContinuations.values {
-            struct CancelError: Error {}
-            continuation.resume(throwing: CancelError())
-        }
+        let pending = Array(streamContinuations.values)
         streamContinuations.removeAll()
         lock.unlock()
+
+        for continuation in pending {
+            continuation.resume(throwing: CancelledError())
+        }
     }
 
     public func downloadFiles(
@@ -89,118 +81,174 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
         onCompleted: @escaping @Sendable ([URL]) -> Void
     ) {
         cancel()
-        setDownloading(true)
 
-        currentDownloadTask = Task.detached { [weak self] in
+        let task = Task.detached { [weak self] in
             guard let self else { return }
-            defer { self.setDownloading(false) }
-
-            var downloadedURLs: [URL] = []
-            var topLevelNames: [String] = []
-            let tempDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("AetherScreens_Clipboard_\(UUID().uuidString)")
-            try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-
-            for (index, descriptor) in descriptors.enumerated() {
-                guard !Task.isCancelled else { break }
-
-                let relativePath = descriptor.fileName.replacingOccurrences(of: "\\", with: "/")
-                let targetURL = tempDir.appendingPathComponent(relativePath)
-                let topName = relativePath.components(separatedBy: "/").first ?? relativePath
-                if !topLevelNames.contains(topName) {
-                    topLevelNames.append(topName)
-                }
-
-                if descriptor.isDirectory {
-                    try? FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
-                    continue
-                }
-
-                try? FileManager.default.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-                let fileSize = descriptor.fileSize
-                if fileSize == 0 {
-                    FileManager.default.createFile(atPath: targetURL.path, contents: Data())
-                    continue
-                }
-
-                // Download file in 64 KB chunks
-                let chunkSize: UInt32 = 64 * 1024
-                var offset: UInt64 = 0
-                var fileData = Data()
-                fileData.reserveCapacity(Int(min(fileSize, 50 * 1024 * 1024)))
-                var fileFailed = false
-
-                while offset < fileSize && !Task.isCancelled {
-                    let remaining = fileSize - offset
-                    let bytesToRead = UInt32(min(UInt64(chunkSize), remaining))
-                    let streamID = self.nextStreamID()
-
-                    do {
-                        let chunk = try await withThrowingTaskGroup(of: Data.self) { group in
-                            group.addTask {
-                                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-                                    self.storeContinuation(continuation, for: streamID)
-
-                                    do {
-                                        try session.requestRemoteFileRange(
-                                            streamID: streamID,
-                                            fileIndex: Int32(index),
-                                            position: offset,
-                                            requestedByteCount: bytesToRead
-                                        )
-                                    } catch {
-                                        self.removeContinuation(for: streamID)
-                                        continuation.resume(throwing: error)
-                                    }
-                                }
-                            }
-
-                            group.addTask {
-                                try await Task.sleep(nanoseconds: 8_000_000_000) // 8s timeout per chunk
-                                throw TimeoutError()
-                            }
-
-                            guard let first = try await group.next() else {
-                                throw DownloadFailedError()
-                            }
-                            group.cancelAll()
-                            return first
-                        }
-
-                        guard !chunk.isEmpty else {
-                            fileFailed = true
-                            break
-                        }
-                        fileData.append(chunk)
-                        offset += UInt64(chunk.count)
-                    } catch {
-                        self.removeContinuation(for: streamID)
-                        fileFailed = true
-                        AppLogger.shared.error("Failed to receive chunk for \(descriptor.fileName) at offset \(offset): \(error)", category: "RDP")
-                        break
-                    }
-                }
-
-                if !fileFailed && !Task.isCancelled && fileData.count == Int(fileSize) {
-                    do {
-                        try fileData.write(to: targetURL)
-                    } catch {
-                        AppLogger.shared.error("Failed to write clipboard file \(descriptor.fileName): \(error)", category: "RDP")
-                    }
-                }
-            }
-
-            for topName in topLevelNames {
-                let url = tempDir.appendingPathComponent(topName)
-                if FileManager.default.fileExists(atPath: url.path) {
-                    downloadedURLs.append(url)
-                }
-            }
-
-            guard !Task.isCancelled && !downloadedURLs.isEmpty else { return }
-            onCompleted(downloadedURLs)
+            self.removeStaleTemporaryDirectories()
+            let urls = await self.download(descriptors: descriptors, session: session)
+            guard !Task.isCancelled, !urls.isEmpty else { return }
+            onCompleted(urls)
         }
+        lock.lock()
+        currentDownloadTask = task
+        lock.unlock()
+    }
+
+    /// Converts a remote Windows relative path into safe local path components.
+    /// Returns nil when the path is empty or tries to escape the destination directory.
+    static func sanitizedRelativeComponents(_ remotePath: String) -> [String]? {
+        let rawComponents = remotePath
+            .split(whereSeparator: { $0 == "\\" || $0 == "/" })
+            .map(String.init)
+        var components: [String] = []
+        for raw in rawComponents {
+            let cleaned = String(raw.unicodeScalars.filter {
+                !CharacterSet.controlCharacters.contains($0) && $0 != ":"
+            }).trimmingCharacters(in: .whitespaces)
+            if cleaned.isEmpty || cleaned == "." { continue }
+            if cleaned == ".." { return nil }
+            components.append(cleaned)
+        }
+        return components.isEmpty ? nil : components
+    }
+
+    private func download(
+        descriptors: [RDPClipboardFileDescriptorW],
+        session: any RDPClipboardFileRangeRequester
+    ) async -> [URL] {
+        let fileManager = FileManager.default
+        let tempDir = temporaryRoot
+            .appendingPathComponent(Self.temporaryDirectoryPrefix + UUID().uuidString, isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            AppLogger.shared.error("Failed to create clipboard download directory: \(error)", category: "RDP")
+            return []
+        }
+
+        var topLevelNames: [String] = []
+        for (index, descriptor) in descriptors.enumerated() {
+            guard !Task.isCancelled else { break }
+            guard let components = Self.sanitizedRelativeComponents(descriptor.fileName) else {
+                AppLogger.shared.error("Rejected unsafe clipboard file path \(descriptor.fileName)", category: "RDP")
+                continue
+            }
+            let targetURL = components.reduce(tempDir) { $0.appendingPathComponent($1) }
+            if !topLevelNames.contains(components[0]) {
+                topLevelNames.append(components[0])
+            }
+
+            if descriptor.isDirectory {
+                try? fileManager.createDirectory(at: targetURL, withIntermediateDirectories: true)
+                continue
+            }
+            try? fileManager.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+            let completed = await downloadFile(
+                descriptor: descriptor,
+                fileIndex: Int32(index),
+                to: targetURL,
+                session: session
+            )
+            if !completed {
+                try? fileManager.removeItem(at: targetURL)
+            }
+        }
+
+        guard !Task.isCancelled else {
+            try? fileManager.removeItem(at: tempDir)
+            return []
+        }
+        let urls = topLevelNames
+            .map { tempDir.appendingPathComponent($0) }
+            .filter { fileManager.fileExists(atPath: $0.path) }
+        if urls.isEmpty {
+            try? fileManager.removeItem(at: tempDir)
+        }
+        return urls
+    }
+
+    /// Streams one remote file to disk in 64 KB chunks so large files never sit fully in memory.
+    private func downloadFile(
+        descriptor: RDPClipboardFileDescriptorW,
+        fileIndex: Int32,
+        to targetURL: URL,
+        session: any RDPClipboardFileRangeRequester
+    ) async -> Bool {
+        guard FileManager.default.createFile(atPath: targetURL.path, contents: nil),
+              let handle = try? FileHandle(forWritingTo: targetURL)
+        else {
+            AppLogger.shared.error("Failed to create clipboard file \(descriptor.fileName)", category: "RDP")
+            return false
+        }
+        defer { try? handle.close() }
+
+        let fileSize = descriptor.fileSize
+        let chunkSize: UInt64 = 64 * 1024
+        var offset: UInt64 = 0
+        while offset < fileSize {
+            guard !Task.isCancelled else { return false }
+            let bytesToRead = UInt32(min(chunkSize, fileSize - offset))
+            do {
+                let chunk = try await requestChunk(
+                    session: session,
+                    fileIndex: fileIndex,
+                    position: offset,
+                    byteCount: bytesToRead
+                )
+                guard !chunk.isEmpty, UInt64(chunk.count) <= fileSize - offset else {
+                    AppLogger.shared.error("Unexpected chunk size for \(descriptor.fileName) at offset \(offset)", category: "RDP")
+                    return false
+                }
+                try handle.write(contentsOf: chunk)
+                offset += UInt64(chunk.count)
+            } catch {
+                AppLogger.shared.error("Failed to receive chunk for \(descriptor.fileName) at offset \(offset): \(error)", category: "RDP")
+                return false
+            }
+        }
+        return !Task.isCancelled
+    }
+
+    private func requestChunk(
+        session: any RDPClipboardFileRangeRequester,
+        fileIndex: Int32,
+        position: UInt64,
+        byteCount: UInt32
+    ) async throws -> Data {
+        let streamID = nextStreamID()
+        let timeout = chunkTimeout
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+            guard !Task.isCancelled else {
+                continuation.resume(throwing: CancelledError())
+                return
+            }
+            lock.lock()
+            streamContinuations[streamID] = continuation
+            lock.unlock()
+
+            // Whichever of response, timeout or cancel takes the continuation first resumes it exactly once.
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
+                self?.takeContinuation(for: streamID)?.resume(throwing: TimeoutError())
+            }
+
+            do {
+                try session.requestRemoteFileRange(
+                    streamID: streamID,
+                    fileIndex: fileIndex,
+                    position: position,
+                    requestedByteCount: byteCount
+                )
+            } catch {
+                takeContinuation(for: streamID)?.resume(throwing: error)
+            }
+        }
+    }
+
+    private func takeContinuation(for streamID: UInt32) -> CheckedContinuation<Data, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        return streamContinuations.removeValue(forKey: streamID)
     }
 
     private func nextStreamID() -> UInt32 {
@@ -209,5 +257,22 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
         currentStreamID = currentStreamID &+ 1
         if currentStreamID < 1000 { currentStreamID = 1000 }
         return currentStreamID
+    }
+
+    /// Previous downloads stay on disk so Finder can paste them later; drop ones older than a day.
+    private func removeStaleTemporaryDirectories() {
+        let fileManager = FileManager.default
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: temporaryRoot,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-staleDirectoryAge)
+        for entry in entries where entry.lastPathComponent.hasPrefix(Self.temporaryDirectoryPrefix) {
+            let modified = (try? entry.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified < cutoff {
+                try? fileManager.removeItem(at: entry)
+            }
+        }
     }
 }
