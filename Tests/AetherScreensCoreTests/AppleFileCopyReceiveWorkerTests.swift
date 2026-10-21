@@ -32,12 +32,14 @@ final class AppleFileCopyReceiveWorkerTests: XCTestCase {
         let queue = DispatchQueue(label: "file-worker-ignored-idle-qa")
         let failed = expectation(description: "No receive progress still expires")
         let worker = try AppleFileCopyReceiveWorker(sessionID: 7, parentDirectory: root,
-            maximumBytes: 0, maximumItems: 1, inactivityTimeout: 0.15, queue: queue,
+            maximumBytes: 0, maximumItems: 1, inactivityTimeout: 0.6, queue: queue,
             onEvent: { XCTAssertEqual($0, .ignored) }, onFailure: { failed.fulfill() },
             onPrepared: { files in files.forEach { $0.cancel() }; XCTFail("Control traffic is not completion") })
         let ignored = AppleFileCopyMessage(version: 1, command: 300, sessionID: 7, body: Data())
-        queue.asyncAfter(deadline: .now() + 0.1) { XCTAssertTrue(worker.enqueue(ignored)) }
-        wait(for: [failed], timeout: 0.22)
+        // Expiry is due at 0.6s; a renewal by the 0.55s message would delay it past 1.15s.
+        // The 1.1s window leaves 0.5s of scheduling slack on busy CI runners.
+        queue.asyncAfter(deadline: .now() + 0.55) { XCTAssertTrue(worker.enqueue(ignored)) }
+        wait(for: [failed], timeout: 1.1)
         XCTAssertFalse(worker.enqueue(ignored))
         queue.sync {}
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
@@ -51,16 +53,16 @@ final class AppleFileCopyReceiveWorkerTests: XCTestCase {
         let failed = expectation(description: "Active transfer must not expire")
         failed.isInverted = true
         let worker = try AppleFileCopyReceiveWorker(sessionID: 7, parentDirectory: root,
-            maximumBytes: 0, maximumItems: 1, inactivityTimeout: 0.3, queue: queue,
+            maximumBytes: 0, maximumItems: 1, inactivityTimeout: 1.2, queue: queue,
             onEvent: { _ in }, onFailure: { failed.fulfill() },
             onPrepared: { files in files.forEach { $0.cancel() }; done.fulfill() })
         let item = emptyItem
         let finish = end
-        queue.asyncAfter(deadline: .now() + 0.2) { XCTAssertTrue(worker.enqueue(item)) }
-        // Past the original deadline, but inside the renewed deadline.
-        queue.asyncAfter(deadline: .now() + 0.4) { XCTAssertTrue(worker.enqueue(finish)) }
-        wait(for: [done], timeout: 3)
-        wait(for: [failed], timeout: 0.35)
+        queue.asyncAfter(deadline: .now() + 0.8) { XCTAssertTrue(worker.enqueue(item)) }
+        // Past the original 1.2s deadline, but inside the renewed 2.0s deadline (0.4s slack each way).
+        queue.asyncAfter(deadline: .now() + 1.6) { XCTAssertTrue(worker.enqueue(finish)) }
+        wait(for: [done], timeout: 5)
+        wait(for: [failed], timeout: 0.5)
         queue.sync {}
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
     }
