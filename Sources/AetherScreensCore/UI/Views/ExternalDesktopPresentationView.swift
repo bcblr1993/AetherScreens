@@ -4,6 +4,7 @@ import SwiftUI
 public struct ExternalDesktopPresentationView: View {
     @ObservedObject private var registry: SessionRegistry
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
+    @ObservedObject private var appLockService = AppLockService.shared
 
     public init(registry: SessionRegistry? = nil) {
         self.registry = registry ?? .shared
@@ -12,7 +13,16 @@ public struct ExternalDesktopPresentationView: View {
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if let id = registry.activeSessionID, let session = registry.session(for: id) {
+            if appLockService.blocksAccess {
+                // Unlocking happens on the controlling device; the external screen only goes dark.
+                VStack(spacing: 16) {
+                    Image(systemName: "lock.fill").font(.system(size: 48))
+                    Text(AppLocalization.string("AetherScreens is Locked"))
+                        .font(.title2)
+                }
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(40)
+            } else if let id = registry.activeSessionID, let session = registry.session(for: id) {
                 ExternalSessionCanvas(viewModel: session).id(id)
             } else {
                 VStack(spacing: 16) {

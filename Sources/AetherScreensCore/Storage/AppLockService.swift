@@ -1,6 +1,11 @@
 import Foundation
 import LocalAuthentication
 import Combine
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 /// Timeout interval before application automatically locks when placed in background.
 public enum AutoLockInterval: Int, CaseIterable, Identifiable, Sendable {
@@ -52,7 +57,7 @@ public enum BiometryType: Sendable {
 /// Manages application locking state, biometric / passcode authentication, and background timeout protection.
 @MainActor
 public final class AppLockService: ObservableObject {
-    public static let shared = AppLockService()
+    public static let shared = AppLockService(observesApplicationLifecycle: true)
 
     private enum Keys {
         static let isLockEnabled = "com.aethernative.aetherscreens.applock.enabled"
@@ -60,6 +65,9 @@ public final class AppLockService: ObservableObject {
     }
 
     @Published public private(set) var isLocked: Bool = false
+
+    /// True while the lock must hide remote desktops and refuse new sessions.
+    public var blocksAccess: Bool { isLockEnabled && isLocked }
     @Published public var isLockEnabled: Bool {
         didSet {
             userDefaults.set(isLockEnabled, forKey: Keys.isLockEnabled)
@@ -81,11 +89,14 @@ public final class AppLockService: ObservableObject {
     private var lastBackgroundDate: Date?
     private let authEvaluator: (@Sendable (String) async -> Bool)?
     private let biometryEvaluator: (@Sendable () -> BiometryType)?
+    private var pendingUnlock: Task<Bool, Never>?
+    private var lifecycleObservers: [NSObjectProtocol] = []
 
     public init(
         userDefaults: UserDefaults = .standard,
         authEvaluator: (@Sendable (String) async -> Bool)? = nil,
-        biometryEvaluator: (@Sendable () -> BiometryType)? = nil
+        biometryEvaluator: (@Sendable () -> BiometryType)? = nil,
+        observesApplicationLifecycle: Bool = false
     ) {
         self.userDefaults = userDefaults
         self.authEvaluator = authEvaluator
@@ -105,6 +116,28 @@ public final class AppLockService: ObservableObject {
         if isLockEnabled {
             self.isLocked = true
         }
+        if observesApplicationLifecycle { observeApplicationLifecycle() }
+    }
+
+    /// Session windows outlive the library window, and on macOS switching apps never reports a
+    /// background scene phase, so lock timing follows the application rather than one scene.
+    private func observeApplicationLifecycle() {
+        let center = NotificationCenter.default
+        #if canImport(AppKit)
+        let background = NSApplication.didResignActiveNotification
+        let foreground = NSApplication.didBecomeActiveNotification
+        #elseif canImport(UIKit)
+        let background = UIApplication.didEnterBackgroundNotification
+        let foreground = UIApplication.willEnterForegroundNotification
+        #endif
+        lifecycleObservers = [
+            center.addObserver(forName: background, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.handleAppDidEnterBackground() }
+            },
+            center.addObserver(forName: foreground, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.handleAppWillEnterForeground() }
+            }
+        ]
     }
 
     public func refreshBiometryType() {
@@ -165,8 +198,18 @@ public final class AppLockService: ObservableObject {
     }
 
     /// Prompt user for biometric / passcode authentication to unlock.
+    /// Every locked window offers its own prompt; concurrent requests share one authentication.
     @discardableResult
     public func unlock(reason: String = AppLocalization.string("Unlock AetherScreens to access your remote computers")) async -> Bool {
+        if let pendingUnlock { return await pendingUnlock.value }
+        let task = Task { @MainActor in await self.performUnlock(reason: reason) }
+        pendingUnlock = task
+        let result = await task.value
+        pendingUnlock = nil
+        return result
+    }
+
+    private func performUnlock(reason: String) async -> Bool {
         guard isLockEnabled else {
             isLocked = false
             return true

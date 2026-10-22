@@ -78,8 +78,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             releaseAllModifiers()
             trackpadEngine.releaseAllButtons()
             if isObserveOnly { stopFileTransfers(); isKeyboardVisible = false }
-            client.setInputEnabled(!isObserveOnly && isForegroundSession)
-            rdpClient?.setInputEnabled(!isObserveOnly && isForegroundSession)
+            client.setInputEnabled(allowsRemoteInput)
+            rdpClient?.setInputEnabled(allowsRemoteInput)
             inputGeneration = UUID()
         }
     }
@@ -212,6 +212,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     private let clipboardReader: @MainActor @Sendable () -> String?
     private let clipboardWriter: @MainActor @Sendable (String) -> Void
     private let clipboardFilesReader: @MainActor @Sendable () -> [URL]?
+    private let clipboardChangeCount: @MainActor @Sendable () -> Int?
+    private let clipboardIsConcealed: @MainActor @Sendable () -> Bool
+    private var lastObservedClipboardChangeCount: Int?
     private let clipboardFilesWriter: @MainActor @Sendable ([URL]) -> Void
     private var lastSentClipboardFileURLs: [URL]?
     private var lastReceivedClipboardFileURLs: [URL]?
@@ -222,6 +225,10 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     private nonisolated let foregroundGeneration = SessionCallbackGeneration()
     private nonisolated let qualityGeneration = SessionCallbackGeneration()
     @Published public private(set) var isForegroundSession = true
+    /// Set while the app lock hides this session; the connection stays up but nothing crosses it.
+    @Published public private(set) var isSuspendedByAppLock = false
+    /// Remote input is sent only by the selected, unlocked, controlling session.
+    var allowsRemoteInput: Bool { isForegroundSession && !isObserveOnly && !isSuspendedByAppLock }
 
     public init(device: RemoteDevice, password: String?, isTemporary: Bool = false,
                 deviceStore: DeviceStore = .shared, keyboardStore: KeyboardToolbarStore = .shared,
@@ -229,6 +236,8 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 clipboardReader: (@MainActor @Sendable () -> String?)? = nil,
                 clipboardFilesWriter: (@MainActor @Sendable ([URL]) -> Void)? = nil,
                 clipboardFilesReader: (@MainActor @Sendable () -> [URL]?)? = nil,
+                clipboardChangeCount: (@MainActor @Sendable () -> Int?)? = nil,
+                clipboardIsConcealed: (@MainActor @Sendable () -> Bool)? = nil,
                 displayQualityStore: DisplayQualityStore = .shared,
                 sshCredentials: SSHCredentialStore = .shared,
                 sshTrust: SSHHostTrustStore = .shared,
@@ -269,6 +278,25 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             return nil
             #endif
         }
+        // An injected reader replaces the system pasteboard, so its change count and markers do not apply.
+        let usesSystemPasteboard = clipboardReader == nil && clipboardFilesReader == nil
+        self.clipboardChangeCount = clipboardChangeCount ?? (usesSystemPasteboard ? {
+            #if canImport(UIKit)
+            return UIPasteboard.general.changeCount
+            #elseif canImport(AppKit)
+            return NSPasteboard.general.changeCount
+            #else
+            return nil
+            #endif
+        } : { nil })
+        self.clipboardIsConcealed = clipboardIsConcealed ?? (usesSystemPasteboard ? {
+            #if canImport(AppKit)
+            let types = Set((NSPasteboard.general.types ?? []).map(\.rawValue))
+            return !types.isDisjoint(with: SessionViewModel.concealedPasteboardTypes)
+            #else
+            return false
+            #endif
+        } : { false })
         self.clipboardFilesWriter = clipboardFilesWriter ?? { urls in
             #if canImport(AppKit)
             NSPasteboard.general.clearContents()
@@ -544,6 +572,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             Task { @MainActor [weak self] in
                 guard let self, self.callbackGeneration.matches(generation),
                       self.foregroundGeneration.matches(foreground), self.isForegroundSession,
+                      !self.isSuspendedByAppLock,
                       self.client.state == .connected else { return }
                 self.lastReceivedClipboardText = text
                 self.clipboardWriter(text)
@@ -650,6 +679,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             Task { @MainActor [weak self] in
                 guard let self, self.callbackGeneration.matches(generation),
                       self.foregroundGeneration.matches(foreground), self.isForegroundSession,
+                      !self.isSuspendedByAppLock,
                       self.sessionState == .connected else { return }
                 self.lastReceivedClipboardText = text
                 self.clipboardWriter(text)
@@ -663,6 +693,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             Task { @MainActor [weak self] in
                 guard let self, self.callbackGeneration.matches(generation),
                       self.foregroundGeneration.matches(foreground), self.isForegroundSession,
+                      !self.isSuspendedByAppLock,
                       self.sessionState == .connected else { return }
                 self.lastReceivedClipboardFileURLs = urls
                 self.clipboardFilesWriter(urls)
@@ -678,7 +709,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         rdp.onAudioSampleReceived = { [weak self] sample in
             guard let self else { return }
             Task { @MainActor [weak self] in
-                guard let self, self.isRemoteAudioEnabled, !self.isRemoteAudioMuted else { return }
+                guard let self, self.isRemoteAudioEnabled, !self.isRemoteAudioMuted, !self.isSuspendedByAppLock else { return }
                 try? self.rdpAudioPlayer?.enqueue(sample)
             }
         }
@@ -732,9 +763,29 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             isKeyboardVisible = false
             isTextInputBarVisible = false
         }
-        client.setInputEnabled(foreground && !isObserveOnly)
-        rdpClient?.setInputEnabled(foreground && !isObserveOnly)
+        client.setInputEnabled(allowsRemoteInput)
+        rdpClient?.setInputEnabled(allowsRemoteInput)
         if foreground { scheduleAutomaticReconnect() }
+    }
+
+    /// Called when the app lock engages or releases. Held keys are released and transfers stop so a
+    /// locked window cannot keep acting on the remote computer.
+    public func setSuspendedByAppLock(_ locked: Bool) {
+        guard locked != isSuspendedByAppLock else { return }
+        if locked {
+            releaseToolbarHeldKeys()
+            releaseAllModifiers()
+            trackpadEngine.releaseAllButtons()
+            inputGeneration = UUID()
+            stopFileTransfers()
+            isKeyboardVisible = false
+            isTextInputBarVisible = false
+            rdpAudioPlayer?.reset()
+        }
+        isSuspendedByAppLock = locked
+        client.setInputEnabled(allowsRemoteInput)
+        rdpClient?.setInputEnabled(allowsRemoteInput)
+        if !locked && isForegroundSession { syncLocalClipboardIfNeeded() }
     }
 
     /// Submit entered password to active RFB handshake
@@ -832,7 +883,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         isDisconnectRequested = false
         thumbnailCadence = ThumbnailSnapshotCadence()
         startClipboardAutoSyncLoop()
-        client.setInputEnabled(isForegroundSession && !isObserveOnly)
+        client.setInputEnabled(allowsRemoteInput)
         resetPendingModifierWheels()
         pointerButtonsForModifiers = []
         fallbackFramePipeline.begin(generation: callbackGeneration.advance(frameGate: frameUpdateGate))
@@ -846,7 +897,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             if rdpAudioPlayer == nil && isRemoteAudioEnabled {
                 rdpAudioPlayer = RDPAudioPlayer()
             }
-            rdpClient?.setInputEnabled(isForegroundSession && !isObserveOnly)
+            rdpClient?.setInputEnabled(allowsRemoteInput)
             rdpClient?.connect()
         } else if let settings = device.ssh {
             startSSH(settings)
@@ -1470,10 +1521,26 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         return normalize(lhs) == normalize(rhs)
     }
 
+    /// Markers password managers put on secrets (nspasteboard.org). Automatic sync never sends these;
+    /// an explicit "Send to Remote Clipboard" still does, because the user asked for it.
+    nonisolated static let concealedPasteboardTypes: Set<String> = [
+        "org.nspasteboard.ConcealedType",
+        "org.nspasteboard.TransientType",
+        "org.nspasteboard.AutoGeneratedType"
+    ]
+
     /// Synchronize local clipboard to remote host automatically if changed.
     public func syncLocalClipboardIfNeeded() {
         let isConnected = isRDP ? sessionState == .connected : client.state == .connected
-        guard isAutoClipboardSyncEnabled, !isObserveOnly, isForegroundSession, isConnected else { return }
+        guard isAutoClipboardSyncEnabled, !isObserveOnly, isForegroundSession, !isSuspendedByAppLock, isConnected else { return }
+
+        // Only read contents after the pasteboard changes; reading is costly for files and shows a
+        // paste notice on iOS. Concealed items are skipped once and not revisited.
+        if let changeCount = clipboardChangeCount() {
+            guard changeCount != lastObservedClipboardChangeCount else { return }
+            lastObservedClipboardChangeCount = changeCount
+        }
+        guard !clipboardIsConcealed() else { return }
 
         if isRDP, let urls = clipboardFilesReader(), !urls.isEmpty {
             if let lastReceived = lastReceivedClipboardFileURLs, Self.sameFileURLs(urls, lastReceived) {

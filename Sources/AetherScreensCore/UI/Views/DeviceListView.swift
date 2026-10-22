@@ -40,7 +40,6 @@ public enum DeviceCategory: String, CaseIterable, Identifiable, Sendable {
 /// Fully optimized for both iOS (iPhone & iPad) and macOS (Apple Silicon Mac).
 public struct DeviceListView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject private var appLockService = AppLockService.shared
     @StateObject private var viewModel = DeviceListViewModel()
@@ -142,12 +141,9 @@ public struct DeviceListView: View {
                 Task { await viewModel.syncService.synchronize() }
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .background {
-                appLockService.handleAppDidEnterBackground()
-            } else if newPhase == .active {
-                appLockService.handleAppWillEnterForeground()
-            }
+        .onChange(of: appLockService.blocksAccess) { _, locked in
+            // Links and Shortcuts received while locked wait here until the user unlocks.
+            if !locked { openPendingConnectionLink() }
         }
         .overlay {
             if appLockService.isLockEnabled && appLockService.isLocked {
@@ -541,6 +537,8 @@ public struct DeviceListView: View {
                     }
                 }
                 .padding(.horizontal, 20)
+                // Keep a visible scroller clear of the card edges.
+                .padding(.bottom, Self.showsHorizontalScroller ? 8 : 0)
             }
         }
     }
@@ -618,6 +616,8 @@ public struct DeviceListView: View {
     }
 
     private func openPendingConnectionLink() {
+        // A locked app must not use saved Keychain passwords to open sessions from links or Shortcuts.
+        guard !appLockService.blocksAccess else { return }
         guard !showingAddSheet, !showingQuickConnectSheet, !showingSettingsSheet,
               !showingLogs, editingDevice == nil, pendingQuickSession == nil,
               !pendingConnectionLinks.isEmpty else { return }

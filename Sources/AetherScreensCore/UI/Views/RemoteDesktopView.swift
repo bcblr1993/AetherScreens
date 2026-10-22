@@ -10,6 +10,7 @@ public struct RemoteDesktopView: View {
     @ObservedObject public var viewModel: SessionViewModel
     @ObservedObject private var displayManager: MultiDisplayManager
     @ObservedObject private var lockNotice: CurtainModeManager
+    @ObservedObject private var appLockService = AppLockService.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -186,6 +187,18 @@ public struct RemoteDesktopView: View {
         }
         .onDisappear {
             if managesSessionLifecycle { viewModel.endSession() }
+        }
+        // Session windows live outside the library, so each one hides its desktop while the app is locked.
+        // The content underneath also stops taking clicks and leaves the accessibility tree.
+        .allowsHitTesting(!appLockService.blocksAccess)
+        .accessibilityHidden(appLockService.blocksAccess)
+        .overlay {
+            if appLockService.blocksAccess {
+                AppLockOverlayView(service: appLockService)
+            }
+        }
+        .onChange(of: appLockService.blocksAccess, initial: true) { _, locked in
+            viewModel.setSuspendedByAppLock(locked)
         }
         #if canImport(UIKit)
         .onChange(of: scenePhase) { _, phase in

@@ -28,6 +28,8 @@ struct AetherScreensMainApp: App {
                 .tint(.blue)
                 #if os(macOS)
                 .frame(minWidth: 800, minHeight: 520)
+                // Deliver connection links and Shortcuts to the open library instead of a new window.
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
                 #endif
         }
         #if os(macOS)
