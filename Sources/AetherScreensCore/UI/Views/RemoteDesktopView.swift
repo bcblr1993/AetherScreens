@@ -14,6 +14,7 @@ public struct RemoteDesktopView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.displayScale) private var displayScale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     #if canImport(UIKit)
     @Environment(\.scenePhase) private var scenePhase
     #endif
@@ -25,6 +26,7 @@ public struct RemoteDesktopView: View {
     @State private var droppedUploadURL: URL?
     @State private var isUploadDropTargeted = false
     @State private var showingFileDownload = false
+    @State private var topBarAutoHide = SessionTopBarAutoHide()
     private let managesSessionLifecycle: Bool
     private let onDisconnect: (() -> Void)?
     private let onReturnToLibrary: (() -> Void)?
@@ -45,6 +47,19 @@ public struct RemoteDesktopView: View {
     private var canAcceptFileDrop: Bool {
         viewModel.canStartFileUpload && !showingFileUpload && !showingFileDownload &&
             !showingLogs && !showingKeyboardCustomization && !showingDisplayQuality
+    }
+
+    /// The top bar stays visible whenever the session needs attention or a control it owns is in use.
+    private var keepsTopBarVisible: Bool {
+        #if os(macOS)
+        return viewModel.sessionState != .connected || !viewModel.hasReceivedFirstFrame
+            || viewModel.isAwaitingAutomaticReconnect || viewModel.isObserveOnly || voiceOverEnabled
+            || showingLogs || showingKeyboardCustomization || showingDisplayQuality
+            || showingFileUpload || showingFileDownload
+            || viewModel.isPromptingPassword || viewModel.sshPrompt != nil
+        #else
+        return true
+        #endif
     }
 
     private var isWaitingForFirstFrame: Bool {
@@ -98,9 +113,13 @@ public struct RemoteDesktopView: View {
                     let toolbarAtTop = sideDock || viewModel.keyboardConfiguration.position == .top
                     ZStack(alignment: toolbarAtTop ? .topLeading : .bottomLeading) {
                         VStack {
-                            floatingTopBar(availableWidth: geometry.size.width).padding(.top, 12)
+                            if topBarAutoHide.isRevealed {
+                                floatingTopBar(availableWidth: geometry.size.width).padding(.top, 12)
+                                    .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                            }
                             Spacer()
                         }
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: topBarAutoHide.isRevealed)
                         if viewModel.isKeyboardVisible && !floatingDock && !carouselDock {
                             // Keep one view identity across rotation so expansion and focus survive.
                             MacKeyboardToolbar(viewModel: viewModel, showingCustomization: $showingKeyboardCustomization, usesSideDock: sideDock)
@@ -131,6 +150,22 @@ public struct RemoteDesktopView: View {
                 }
                 .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.9),
                            value: viewModel.isKeyboardVisible)
+            }
+            #if os(macOS)
+            .background(TopEdgeHoverDetector { y in
+                // Write only on zone changes so pointer motion does not re-render the session view.
+                var next = topBarAutoHide
+                next.pointerMoved(toY: y)
+                if next != topBarAutoHide { topBarAutoHide = next }
+            })
+            #endif
+            .onChange(of: keepsTopBarVisible, initial: true) { _, keep in topBarAutoHide.setPinned(keep) }
+            .task(id: topBarAutoHide.timerGeneration) {
+                guard let timer = topBarAutoHide.pendingTimer else { return }
+                let generation = topBarAutoHide.timerGeneration
+                try? await Task.sleep(nanoseconds: UInt64(SessionTopBarAutoHide.delay(for: timer) * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                topBarAutoHide.timerFired(timer, generation: generation)
             }
             .task(id: "\(geometry.size.width)x\(geometry.size.height)_\(viewModel.autoFitResolution)_\(viewModel.sessionState == .connected)") {
                 guard viewModel.isRDP, viewModel.autoFitResolution, viewModel.sessionState == .connected else { return }
