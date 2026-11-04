@@ -223,6 +223,8 @@ public final class DeviceStore: @unchecked Sendable {
 
     /// Remove password from Keychain for a device.
     public func clearPassword(for device: RemoteDevice) {
+        lock.lock()
+        defer { lock.unlock() }
         keychain.deletePassword(forKey: device.id.uuidString)
         AppLogger.shared.info("Cleared password in Keychain for device '\(device.name)'", category: "Auth")
     }
@@ -368,12 +370,29 @@ public final class DeviceStore: @unchecked Sendable {
             }
             let index = candidate.firstIndex { $0.id == metadata.id }
             let local = index.map { candidate[$0] }
+            let remoteProtocol = metadata.remoteProtocol ?? local?.remoteProtocol
+            let isOnline = local?.isOnline ?? false
+            let isFavorite = metadata.isFavorite ?? local?.isFavorite ?? false
+            let tags = metadata.tags ?? local?.tags ?? []
+            let desktopWidth = metadata.desktopWidth ?? local?.desktopWidth
+            let desktopHeight = metadata.desktopHeight ?? local?.desktopHeight
+            let remoteAudioEnabled = metadata.remoteAudioEnabled ?? local?.remoteAudioEnabled
+            let autoFitResolution = metadata.autoFitResolution ?? local?.autoFitResolution
             let device = RemoteDevice(
                 id: metadata.id, name: metadata.name, host: metadata.host, port: metadata.port,
-                deviceType: metadata.deviceType, authMethod: metadata.authMethod,
-                username: metadata.username, isOnline: local?.isOnline ?? false,
+                deviceType: metadata.deviceType,
+                remoteProtocol: remoteProtocol,
+                authMethod: metadata.authMethod,
+                username: metadata.username, isOnline: isOnline,
                 lastConnected: local?.lastConnected, isTailscaleNode: metadata.isTailscaleNode,
-                macAddress: metadata.macAddress, ssh: metadata.ssh)
+                macAddress: metadata.macAddress,
+                ssh: metadata.ssh,
+                isFavorite: isFavorite,
+                tags: tags,
+                desktopWidth: desktopWidth,
+                desktopHeight: desktopHeight,
+                remoteAudioEnabled: remoteAudioEnabled,
+                autoFitResolution: autoFitResolution)
             if let index { candidate[index] = device }
             else { candidate.append(device) }
         }

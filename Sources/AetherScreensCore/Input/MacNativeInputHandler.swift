@@ -48,6 +48,9 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
     }
     public var onPan: ((CGFloat, CGFloat) -> Void)?
     public var onMagnification: ((CGFloat, CGPoint) -> Void)?
+    public var isRDP: Bool = false
+    public var onDragOutsideDetected: (() -> Void)?
+    private var didDragOutsideCanvas: Bool = false
     private var lastPanPosition: NSPoint?
     private var lastPointerWindowLocation: NSPoint?
     var viewport: CGRect? {
@@ -197,6 +200,10 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
 
     public override func mouseUp(with event: NSEvent) {
         if isPanning { lastPanPosition = nil; return }
+        if didDragOutsideCanvas {
+            didDragOutsideCanvas = false
+            onDragOutsideDetected?()
+        }
         remoteButtons.remove(.left)
         sendPointer(with: event)
     }
@@ -207,6 +214,12 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
             if let old = lastPanPosition { onPan?(point.x - old.x, old.y - point.y) }
             lastPanPosition = point
             return
+        }
+        if remoteButtons.contains(.left) {
+            let point = convert(event.locationInWindow, from: nil)
+            if !bounds.contains(point) {
+                didDragOutsideCanvas = true
+            }
         }
         sendPointer(with: event)
     }
@@ -292,6 +305,21 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard window?.firstResponder === self, event.modifierFlags.contains(.command) else {
             return super.performKeyEquivalent(with: event)
+        }
+        if isRDP {
+            let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
+            if let first = chars.first, ["c", "v", "x", "a", "z", "s", "f"].contains(first),
+               let key = mapMacKeyCode(event.keyCode, characters: event.charactersIgnoringModifiers) {
+                if lastModifierFlags.contains(.command) {
+                    onKeyEvent?(false, MacKeyMap.commandLeft)
+                    lastModifierFlags.remove(.command)
+                }
+                onKeyEvent?(true, MacKeyMap.controlLeft)
+                onKeyEvent?(true, key)
+                onKeyEvent?(false, key)
+                onKeyEvent?(false, MacKeyMap.controlLeft)
+                return true
+            }
         }
         flagsChanged(with: event)
         if let key = mapMacKeyCode(event.keyCode, characters: event.charactersIgnoringModifiers) {
@@ -406,9 +434,11 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
     public let remoteHeight: CGFloat
     public let viewport: CGRect?
     public let isPanning: Bool
+    public let isRDP: Bool
     public let onPan: (CGFloat, CGFloat) -> Void
     public let onMagnification: ((CGFloat, CGPoint) -> Void)?
     public let onTextEvent: ((String) -> Void)?
+    public let onDragOutsideDetected: (() -> Void)?
 
     public init(
         cursorUpdates: CurrentValueSubject<RFBRemoteCursor?, Never>? = nil,
@@ -416,9 +446,11 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         remoteHeight: CGFloat,
         viewport: CGRect? = nil,
         isPanning: Bool = false,
+        isRDP: Bool = false,
         onPan: @escaping (CGFloat, CGFloat) -> Void = { _, _ in },
         onMagnification: ((CGFloat, CGPoint) -> Void)? = nil,
         onTextEvent: ((String) -> Void)? = nil,
+        onDragOutsideDetected: (() -> Void)? = nil,
         onPointerEvent: @escaping (RFBConstants.ButtonMask, UInt16, UInt16) -> Void,
         onKeyEvent: @escaping (Bool, UInt32) -> Void
     ) {
@@ -427,9 +459,11 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         self.remoteHeight = remoteHeight
         self.viewport = viewport
         self.isPanning = isPanning
+        self.isRDP = isRDP
         self.onPan = onPan
         self.onMagnification = onMagnification
         self.onTextEvent = onTextEvent
+        self.onDragOutsideDetected = onDragOutsideDetected
         self.onPointerEvent = onPointerEvent
         self.onKeyEvent = onKeyEvent
     }
@@ -443,10 +477,12 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
         view.setAccessibilityRole(.group)
         view.setAccessibilityLabel("Remote desktop input")
         view.isPanning = isPanning
+        view.isRDP = isRDP
         view.viewport = viewport
         view.onPan = onPan
         view.onMagnification = onMagnification
         view.onTextEvent = onTextEvent
+        view.onDragOutsideDetected = onDragOutsideDetected
         view.remoteSize = CGSize(width: remoteWidth, height: remoteHeight)
         view.onPointerEvent = onPointerEvent
         view.onKeyEvent = onKeyEvent
@@ -464,10 +500,12 @@ public struct MacNativeInputRepresentable: NSViewRepresentable {
 
     public func updateNSView(_ nsView: MacNativeInputView, context: Context) {
         nsView.isPanning = isPanning
+        nsView.isRDP = isRDP
         nsView.viewport = viewport
         nsView.onPan = onPan
         nsView.onMagnification = onMagnification
         nsView.onTextEvent = onTextEvent
+        nsView.onDragOutsideDetected = onDragOutsideDetected
         nsView.remoteSize = CGSize(width: remoteWidth, height: remoteHeight)
         nsView.onPointerEvent = onPointerEvent
         nsView.onKeyEvent = onKeyEvent

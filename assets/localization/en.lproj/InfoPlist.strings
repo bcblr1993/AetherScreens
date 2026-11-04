@@ -1,1 +1,2 @@
 "NSLocalNetworkUsageDescription" = "Discover nearby computers and connect to their shared screens.";
+"NSFaceIDUsageDescription" = "Unlock your saved computers and remote sessions with Face ID.";

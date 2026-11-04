@@ -34,6 +34,8 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
     struct CancelledError: Error {}
 
     static let temporaryDirectoryPrefix = "AetherScreens_Clipboard_"
+    static let maximumFileCount = 1_024
+    static let maximumTotalBytes: UInt64 = 1_073_741_824
 
     private let lock = NSLock()
     private var streamContinuations: [UInt32: CheckedContinuation<Data, Error>] = [:]
@@ -78,15 +80,20 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
     public func downloadFiles(
         descriptors: [RDPClipboardFileDescriptorW],
         session: any RDPClipboardFileRangeRequester,
-        onCompleted: @escaping @Sendable ([URL]) -> Void
+        onProgress: (@Sendable (String, UInt64, UInt64) -> Void)? = nil,
+        onCompleted: @escaping @Sendable ([URL]) -> Void,
+        onFailed: (@Sendable () -> Void)? = nil
     ) {
         cancel()
 
         let task = Task.detached { [weak self] in
             guard let self else { return }
             self.removeStaleTemporaryDirectories()
-            let urls = await self.download(descriptors: descriptors, session: session)
-            guard !Task.isCancelled, !urls.isEmpty else { return }
+            let urls = await self.download(descriptors: descriptors, session: session, onProgress: onProgress)
+            if Task.isCancelled || urls.isEmpty {
+                onFailed?()
+                return
+            }
             onCompleted(urls)
         }
         lock.lock()
@@ -114,8 +121,23 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
 
     private func download(
         descriptors: [RDPClipboardFileDescriptorW],
-        session: any RDPClipboardFileRangeRequester
+        session: any RDPClipboardFileRangeRequester,
+        onProgress: (@Sendable (String, UInt64, UInt64) -> Void)? = nil
     ) async -> [URL] {
+        guard descriptors.count <= Self.maximumFileCount else {
+            AppLogger.shared.error("Rejected clipboard file download exceeding \(Self.maximumFileCount) files", category: "RDP")
+            return []
+        }
+        var totalAdvertisedBytes: UInt64 = 0
+        for descriptor in descriptors where !descriptor.isDirectory {
+            let (nextTotal, overflow) = totalAdvertisedBytes.addingReportingOverflow(descriptor.fileSize)
+            if overflow || nextTotal > Self.maximumTotalBytes {
+                AppLogger.shared.error("Rejected clipboard file download exceeding \(Self.maximumTotalBytes) bytes", category: "RDP")
+                return []
+            }
+            totalAdvertisedBytes = nextTotal
+        }
+
         let fileManager = FileManager.default
         let tempDir = temporaryRoot
             .appendingPathComponent(Self.temporaryDirectoryPrefix + UUID().uuidString, isDirectory: true)
@@ -142,13 +164,19 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
                 try? fileManager.createDirectory(at: targetURL, withIntermediateDirectories: true)
                 continue
             }
+            var isExistingDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: targetURL.path, isDirectory: &isExistingDirectory), isExistingDirectory.boolValue {
+                AppLogger.shared.error("Rejected clipboard file colliding with directory \(descriptor.fileName)", category: "RDP")
+                continue
+            }
             try? fileManager.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
             let completed = await downloadFile(
                 descriptor: descriptor,
                 fileIndex: Int32(index),
                 to: targetURL,
-                session: session
+                session: session,
+                onProgress: onProgress
             )
             if !completed {
                 try? fileManager.removeItem(at: targetURL)
@@ -173,7 +201,8 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
         descriptor: RDPClipboardFileDescriptorW,
         fileIndex: Int32,
         to targetURL: URL,
-        session: any RDPClipboardFileRangeRequester
+        session: any RDPClipboardFileRangeRequester,
+        onProgress: (@Sendable (String, UInt64, UInt64) -> Void)? = nil
     ) async -> Bool {
         guard FileManager.default.createFile(atPath: targetURL.path, contents: nil),
               let handle = try? FileHandle(forWritingTo: targetURL)
@@ -202,6 +231,7 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
                 }
                 try handle.write(contentsOf: chunk)
                 offset += UInt64(chunk.count)
+                onProgress?(descriptor.fileName, offset, fileSize)
             } catch {
                 AppLogger.shared.error("Failed to receive chunk for \(descriptor.fileName) at offset \(offset): \(error)", category: "RDP")
                 return false

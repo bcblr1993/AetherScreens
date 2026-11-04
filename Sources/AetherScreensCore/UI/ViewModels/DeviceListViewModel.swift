@@ -336,6 +336,7 @@ public final class DeviceListViewModel: ObservableObject {
             errorMessage = "Computer saved, but its password could not be saved to Keychain. Re-enter it after restarting the app."
         }
         reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
     }
 
     /// Wake a sleeping Mac via Wake-on-LAN Magic Packet

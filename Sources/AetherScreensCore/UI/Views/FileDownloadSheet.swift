@@ -20,67 +20,133 @@ struct FileDownloadSheet: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text(AppLocalization.string("Receive File or Folder")).font(.title2.bold())
                 Text(viewModel.device.name).font(.subheadline).foregroundStyle(.secondary)
-                TextField(AppLocalization.string("Remote File or Folder"), text: $remotePath)
-                    .textFieldStyle(.roundedBorder)
-                    .focused($pathFocused)
-                    #if canImport(UIKit)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    #endif
-                    .onSubmit { pathFocused = false }
-                    .accessibilityIdentifier("file-download-source")
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(AppLocalization.string("Quick Path Prefixes"))
-                            .font(.caption)
+                if viewModel.isRDP {
+                    VStack(alignment: .leading, spacing: 14) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundStyle(.blue)
+                                .font(.title3)
+                            Text(AppLocalization.string("Receive Files from Windows"))
+                                .font(.headline)
+                        }
+                        Text(AppLocalization.string("In Windows, press Ctrl+C or right-click Copy on any file or folder. AetherScreens will download it to your Mac in real time."))
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        let recents = FileTransferHistoryStore.shared.recentDownloadPaths
-                        if !recents.isEmpty {
-                            Menu {
-                                ForEach(recents, id: \.self) { recent in
-                                    Button(recent) {
-                                        remotePath = recent
-                                        pathFocused = false
-                                    }
-                                }
+
+                        Button {
+                            viewModel.sendCommandShortcut("c")
+                        } label: {
+                            Label(AppLocalization.string("Copy Selected Files in Windows"), systemImage: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Divider().padding(.vertical, 4)
+
+                        HStack {
+                            Text(AppLocalization.string("Received Files")).font(.subheadline.bold())
+                            Spacer()
+                            Button {
+                                viewModel.revealDownloadedFiles()
                             } label: {
-                                Label(AppLocalization.string("Recent"), systemImage: "clock")
-                                    .font(.caption)
+                                Label(AppLocalization.string("Show in Finder"), systemImage: "folder")
                             }
-                            .menuStyle(.borderlessButton)
-                            .accessibilityIdentifier("file-download-recent-menu")
+                            .buttonStyle(.bordered)
+                        }
+
+                        if viewModel.downloadedRemoteFiles.isEmpty {
+                            Text(AppLocalization.string("No files received yet in this session."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(viewModel.downloadedRemoteFiles, id: \.self) { url in
+                                HStack {
+                                    Image(systemName: "doc.fill")
+                                        .foregroundStyle(.blue)
+                                    Text(url.lastPathComponent)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                    Spacer()
+                                    Button {
+                                        #if canImport(AppKit)
+                                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                                        #endif
+                                    } label: {
+                                        Image(systemName: "arrow.up.right.square")
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .padding(8)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                #if canImport(AppKit)
+                                .draggable(url)
+                                #endif
+                            }
                         }
                     }
+                } else {
+                    TextField(AppLocalization.string("Remote File or Folder"), text: $remotePath)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($pathFocused)
+                        #if canImport(UIKit)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.done)
+                        #endif
+                        .onSubmit { pathFocused = false }
+                        .accessibilityIdentifier("file-download-source")
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(FileTransferPresetLocation.standardPresets) { preset in
-                                Button {
-                                    remotePath = preset.path.hasSuffix("/") ? preset.path : "\(preset.path)/"
-                                    pathFocused = true
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(AppLocalization.string("Quick Path Prefixes"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            let recents = FileTransferHistoryStore.shared.recentDownloadPaths
+                            if !recents.isEmpty {
+                                Menu {
+                                    ForEach(recents, id: \.self) { recent in
+                                        Button(recent) {
+                                            remotePath = recent
+                                            pathFocused = false
+                                        }
+                                    }
                                 } label: {
-                                    Label(AppLocalization.string(preset.titleKey), systemImage: preset.systemIcon)
+                                    Label(AppLocalization.string("Recent"), systemImage: "clock")
                                         .font(.caption)
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(remotePath.hasPrefix(preset.path) ? .blue : .secondary)
-                                .accessibilityIdentifier("file-download-preset-\(preset.id)")
+                                .menuStyle(.borderlessButton)
+                                .accessibilityIdentifier("file-download-recent-menu")
+                            }
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(FileTransferPresetLocation.standardPresets) { preset in
+                                    Button {
+                                        remotePath = preset.path.hasSuffix("/") ? preset.path : "\(preset.path)/"
+                                        pathFocused = true
+                                    } label: {
+                                        Label(AppLocalization.string(preset.titleKey), systemImage: preset.systemIcon)
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .tint(remotePath.hasPrefix(preset.path) ? .blue : .secondary)
+                                    .accessibilityIdentifier("file-download-preset-\(preset.id)")
+                                }
                             }
                         }
                     }
-                }
 
-                folderPickerCard
-                Text(AppLocalization.string("Choose an existing local folder. Existing files are never replaced; choose another folder if a name already exists."))
-                    .font(.caption).foregroundStyle(.secondary)
-                Text(AppLocalization.string("Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported."))
-                    .font(.caption).foregroundStyle(.secondary)
-                if let notice = viewModel.fileDownloadNotice {
-                    Text(notice).font(.callout).foregroundStyle(.red)
-                        .accessibilityIdentifier("file-download-error")
+                    folderPickerCard
+                    Text(AppLocalization.string("Choose an existing local folder. Existing files are never replaced; choose another folder if a name already exists."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(AppLocalization.string("Up to 1 GB and 1,024 items per transfer. Symbolic links are not supported."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    if let notice = viewModel.fileDownloadNotice {
+                        Text(notice).font(.callout).foregroundStyle(.red)
+                            .accessibilityIdentifier("file-download-error")
+                    }
                 }
             }
             .padding(24)
@@ -88,13 +154,27 @@ struct FileDownloadSheet: View {
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            ViewThatFits(in: .horizontal) {
-                HStack { Spacer(minLength: 0); cancelButton; receiveButton }
-                VStack(alignment: .trailing) { receiveButton; cancelButton }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+            if viewModel.isRDP {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        actionTitle("Done")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(.horizontal, 24).padding(.vertical, 12)
+                .background(.regularMaterial)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack { Spacer(minLength: 0); cancelButton; receiveButton }
+                    VStack(alignment: .trailing) { receiveButton; cancelButton }
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .padding(.horizontal, 24).padding(.vertical, 12)
+                .background(.regularMaterial)
             }
-            .padding(.horizontal, 24).padding(.vertical, 12)
-            .background(.regularMaterial)
         }
         #if os(macOS)
         .frame(width: 440, height: 400)

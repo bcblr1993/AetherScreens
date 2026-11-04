@@ -1,1 +1,2 @@
 "NSLocalNetworkUsageDescription" = "发现附近的电脑并连接其共享屏幕。";
+"NSFaceIDUsageDescription" = "使用面容 ID 解锁已保存的电脑和远程会话。";

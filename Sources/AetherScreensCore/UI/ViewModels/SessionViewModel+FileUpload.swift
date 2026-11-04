@@ -1,12 +1,26 @@
 import Foundation
+import SwiftUI
 import RDPKit
+#if canImport(AppKit)
+import AppKit
+#endif
 
 extension SessionViewModel {
+    func revealDownloadedFiles() {
+        #if canImport(AppKit)
+        if !downloadedRemoteFiles.isEmpty {
+            NSWorkspace.shared.activateFileViewerSelecting(downloadedRemoteFiles)
+        }
+        #endif
+    }
+
     func stopFileTransfers() {
         fileUploadPreparationID = UUID()
         fileUploadPreparationTask?.cancel()
         fileUploadPreparationTask = nil
         isPreparingFileUpload = false
+        activeUploadAttempts.removeAll()
+        activeDownloadAttempts.removeAll()
         fileTransfers.cancelAll()
     }
 
@@ -25,6 +39,8 @@ extension SessionViewModel {
 
         for rootURL in urls {
             guard rootURL.isFileURL else { continue }
+            let accessed = rootURL.startAccessingSecurityScopedResource()
+            defer { if accessed { rootURL.stopAccessingSecurityScopedResource() } }
             var isDir: ObjCBool = false
             guard fileManager.fileExists(atPath: rootURL.path, isDirectory: &isDir) else { continue }
             let rootName = rootURL.lastPathComponent
@@ -94,19 +110,49 @@ extension SessionViewModel {
     }
 
     @discardableResult
-    func publishFilesToRDP(urls: [URL], notify: Bool = true) -> Bool {
+    func publishFilesToRDP(
+        urls: [URL],
+        notify: Bool = true,
+        onAcknowledged: (@Sendable () -> Void)? = nil
+    ) -> Bool {
         guard isRDP, let rdp = rdpClient else { return false }
         let (localFiles, transferredNames) = collectLocalFiles(from: urls)
         guard !localFiles.isEmpty else { return false }
 
-        let success = rdp.publishLocalFiles(localFiles)
+        lastSentClipboardFileURLs = urls
+        clipboardFilesWriter(urls)
+        lastSentClipboardText = clipboardReader()
+        lastObservedClipboardChangeCount = clipboardChangeCount()
+
+        if notify {
+            for file in localFiles where !file.descriptor.isDirectory {
+                let job = FileTransferJob(direction: .upload, filename: file.descriptor.fileName, totalBytes: UInt64(file.contents.count))
+                if let attempt = fileTransfers.register(job, cancel: { [weak self] in
+                    self?.rdpClient?.publishLocalFiles([])
+                }) {
+                    if file.contents.isEmpty {
+                        fileTransfers.complete(attempt)
+                        let jobID = attempt.jobID
+                        Task { @MainActor [weak self] in
+                            try? await Task.sleep(nanoseconds: 2_500_000_000)
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                self?.fileTransfers.dismiss(jobID)
+                            }
+                        }
+                    } else {
+                        activeUploadAttempts[file.descriptor.fileName] = attempt
+                    }
+                }
+            }
+        }
+
+        let success = rdp.publishLocalFiles(localFiles, onAcknowledged: onAcknowledged)
         if success && notify {
             let namesString = transferredNames.joined(separator: ", ")
             for name in transferredNames {
-                FileTransferHistoryStore.shared.recordUploadDestination("Windows Desktop (\(name))")
+                FileTransferHistoryStore.shared.recordUploadDestination("Windows (\(name))")
             }
-            let msg = String(format: AppLocalization.string("File \"%@\" copied to Windows clipboard. Press Ctrl+V in Windows to paste."), namesString)
-            self.fileUploadNotice = msg
+            self.fileUploadNotice = String(format: AppLocalization.string("Sending \"%@\" to Windows..."), namesString)
         }
         return success
     }
@@ -114,11 +160,35 @@ extension SessionViewModel {
     public func transferDroppedFilesToRDP(urls: [URL], at dropPoint: CGPoint? = nil, in viewportSize: CGSize? = nil) {
         guard isRDP, let rdp = rdpClient else { return }
 
-        guard publishFilesToRDP(urls: urls, notify: true) else {
-            self.fileUploadNotice = AppLocalization.string("Cannot start file transfer on this connection.")
-            return
+        let transferredNames = urls.filter(\.isFileURL).map(\.lastPathComponent)
+        let namesString = transferredNames.joined(separator: ", ")
+
+        let pasteLock = NSLock()
+        var didPaste = false
+
+        let triggerPaste = { [weak self] in
+            pasteLock.lock()
+            defer { pasteLock.unlock() }
+            guard !didPaste else { return }
+            didPaste = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isRDP, self.sessionState == .connected, let rdp = self.rdpClient else { return }
+                // Send Ctrl+V directly to Windows without invoking command shortcut text sync
+                rdp.sendKeyEvent(down: true, keySym: MacKeyMap.controlLeft)
+                rdp.sendKeyEvent(down: true, keySym: MacKeyMap.v)
+                rdp.sendKeyEvent(down: false, keySym: MacKeyMap.v)
+                rdp.sendKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
+
+                self.fileUploadNotice = String(format: AppLocalization.string("Transferred \"%@\" to Windows."), namesString)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        self?.fileUploadNotice = nil
+                    }
+                }
+            }
         }
 
+        var focusDelay: TimeInterval = 0.05
         if let location = dropPoint, let size = viewportSize {
             let currentDesktopSize = remoteDesktopSize != .zero
                 ? remoteDesktopSize
@@ -142,21 +212,28 @@ extension SessionViewModel {
             let targetX = UInt16(clamping: Int((activeCropRect?.minX ?? 0) + relativeX * Double(imageWidth)))
             let targetY = UInt16(clamping: Int((activeCropRect?.minY ?? 0) + relativeY * Double(imageHeight)))
 
+            // Move pointer to drop location, then click to focus the destination window
+            rdp.sendPointerEvent(buttonMask: [], x: targetX, y: targetY)
             rdp.sendPointerEvent(buttonMask: [.left], x: targetX, y: targetY)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) { [weak self] in
                 guard let self, self.isRDP, self.sessionState == .connected else { return }
                 self.rdpClient?.sendPointerEvent(buttonMask: [], x: targetX, y: targetY)
+            }
+            focusDelay = 0.12
+        }
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-                    guard let self, self.isRDP, self.sessionState == .connected else { return }
-                    self.sendCommandShortcut("v")
-                }
+        let delay = focusDelay
+        guard publishFilesToRDP(urls: urls, notify: true, onAcknowledged: {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                triggerPaste()
             }
-        } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                guard let self, self.isRDP, self.sessionState == .connected else { return }
-                self.sendCommandShortcut("v")
-            }
+        }) else {
+            self.fileUploadNotice = AppLocalization.string("Cannot start file transfer on this connection.")
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0.35, delay + 0.15)) {
+            triggerPaste()
         }
     }
 

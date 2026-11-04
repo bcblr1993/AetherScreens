@@ -127,6 +127,8 @@ public struct DeviceListView: View {
         }
         #endif
         }
+        .allowsHitTesting(!appLockService.blocksAccess)
+        .accessibilityHidden(appLockService.blocksAccess)
         .environment(\.locale, languageSettings.locale)
         .onOpenURL(perform: receiveConnectionLink)
         .onReceive(SavedComputerIntentInbox.shared.$revision) { _ in
@@ -711,6 +713,48 @@ public struct DeviceListView: View {
 
 public typealias SettingsSheet = TailscaleSettingsSheet
 
+private struct ComputerSyncSettingsSection: View {
+    @ObservedObject var service: ComputerSyncService
+
+    var body: some View {
+        Section(
+            header: Text(AppLocalization.string("iCloud Sync")),
+            footer: Text(AppLocalization.string("Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain.")).formFooterStyle()
+        ) {
+            Toggle(AppLocalization.string("iCloud Sync"), isOn: Binding(
+                get: { service.isEnabled },
+                set: { enabled in
+                    Task { await service.setEnabled(enabled) }
+                }
+            ))
+            .accessibilityIdentifier("icloud-sync-toggle")
+
+            if service.isEnabled {
+                HStack {
+                    Text(service.status.localizedDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("icloud-sync-status")
+
+                    Spacer()
+
+                    if service.status == .syncing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Button(AppLocalization.string("Sync Now")) {
+                            Task { await service.synchronize() }
+                        }
+                        .font(.caption)
+                        .buttonStyle(.borderless)
+                        .accessibilityIdentifier("icloud-sync-now")
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Settings sheet for configuring Tailscale API credentials, iCloud Sync, and Security Lock
 public struct TailscaleSettingsSheet: View {
     @ObservedObject private var languageSettings = AppLanguageSettings.shared
@@ -730,41 +774,7 @@ public struct TailscaleSettingsSheet: View {
                     .accessibilityIdentifier("app-language")
                 }
 
-                Section(
-                    header: Text(AppLocalization.string("iCloud Sync")),
-                    footer: Text(AppLocalization.string("Sync your saved computers across Mac, iPhone and iPad using iCloud. Passwords and credentials remain encrypted in local Keychain.")).formFooterStyle()
-                ) {
-                    Toggle(AppLocalization.string("iCloud Sync"), isOn: Binding(
-                        get: { viewModel.syncService.isEnabled },
-                        set: { enabled in
-                            Task { await viewModel.syncService.setEnabled(enabled) }
-                        }
-                    ))
-                    .accessibilityIdentifier("icloud-sync-toggle")
-
-                    if viewModel.syncService.isEnabled {
-                        HStack {
-                            Text(viewModel.syncService.status.localizedDescription)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .accessibilityIdentifier("icloud-sync-status")
-
-                            Spacer()
-
-                            if viewModel.syncService.status == .syncing {
-                                ProgressView()
-                                    .controlSize(.small)
-                            } else {
-                                Button(AppLocalization.string("Sync Now")) {
-                                    Task { await viewModel.syncService.synchronize() }
-                                }
-                                .font(.caption)
-                                .buttonStyle(.borderless)
-                                .accessibilityIdentifier("icloud-sync-now")
-                            }
-                        }
-                    }
-                }
+                ComputerSyncSettingsSection(service: viewModel.syncService)
 
                 Section(
                     header: Text(AppLocalization.string("Security & Privacy")),

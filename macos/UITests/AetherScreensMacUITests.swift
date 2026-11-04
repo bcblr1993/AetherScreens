@@ -100,6 +100,56 @@ final class AetherScreensMacUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testSessionTopBarAutoHidesAndRevealsAtTopEdge() throws {
+        continueAfterFailure = false
+        let env = ProcessInfo.processInfo.environment
+        let path = try XCTUnwrap(env["AETHERSCREENS_MAC_QA_APP_PATH"])
+        let port = try XCTUnwrap(env["AETHERSCREENS_MAC_QA_RFB_PORT"])
+        let app = XCUIApplication(url: URL(fileURLWithPath: path))
+        app.launchArguments = ["-com.aethernative.aetherscreens.language", "en"]
+        app.launch()
+        defer { app.terminate() }
+        let quick = app.buttons["Quick Connect"]
+        XCTAssertTrue(quick.waitForExistence(timeout: 15))
+        quick.click()
+        let host = app.sheets.textFields.element(boundBy: 0)
+        XCTAssertTrue(host.waitForExistence(timeout: 5))
+        host.click(); host.typeText("127.0.0.1")
+        let portField = app.sheets.textFields.element(boundBy: 1)
+        portField.click(); portField.typeKey("a", modifierFlags: .command)
+        portField.typeText(port)
+        app.buttons["Connect"].click()
+        let input = app.descendants(matching: .any)["Remote desktop input"].firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 15))
+        let window = try XCTUnwrap(app.windows.allElementsBoundByIndex.first { $0.frame.contains(input.frame) })
+        let options = app.descendants(matching: .any)["Session Options"].firstMatch
+        func shot(_ name: String) {
+            let attachment = XCTAttachment(screenshot: window.screenshot())
+            attachment.name = name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+
+        // Rest the pointer on the remote desktop so the bar is free to leave.
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).hover()
+        XCTAssertTrue(options.waitForNonExistence(timeout: 6), "The top bar must hide once the session is running")
+        shot("Top bar hidden")
+
+        // Pointer well below the edge, where the bar used to sit, must not bring it back.
+        let origin = window.coordinate(withNormalizedOffset: .zero)
+        origin.withOffset(CGVector(dx: window.frame.width / 2, dy: 100)).hover()
+        XCTAssertFalse(options.waitForExistence(timeout: 1.5), "Only the top edge may reveal the bar")
+
+        // Pushing the pointer to the top edge (into the title bar) reveals it.
+        origin.withOffset(CGVector(dx: window.frame.width / 2, dy: 10)).hover()
+        XCTAssertTrue(options.waitForExistence(timeout: 3), "Resting at the top edge must reveal the bar")
+        shot("Top bar revealed from top edge")
+
+        // Leaving the bar area hides it again.
+        input.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).hover()
+        XCTAssertTrue(options.waitForNonExistence(timeout: 5), "Leaving the bar area must hide it again")
+    }
+
     private func checkQuickConnect(language: String) throws {
         continueAfterFailure = false
         let path = try XCTUnwrap(ProcessInfo.processInfo.environment["AETHERSCREENS_MAC_QA_APP_PATH"])

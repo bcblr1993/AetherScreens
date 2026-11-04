@@ -54,6 +54,7 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
     }
 
     @Published public private(set) var entries: [LogEntry] = []
+    private var buffer: [LogEntry] = []
     private let lock = NSLock()
     private let maxEntries = 600
 
@@ -93,14 +94,19 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
 
         // 2. Append to in-memory buffer for in-app UI display
         lock.lock()
-        if entries.count >= maxEntries {
-            entries.removeFirst(entries.count - maxEntries + 1)
+        if buffer.count >= maxEntries {
+            buffer.removeFirst(buffer.count - maxEntries + 1)
         }
-        entries.append(entry)
+        buffer.append(entry)
+        let snapshot = buffer
         lock.unlock()
 
-        Task { @MainActor in
-            self.objectWillChange.send()
+        if Thread.isMainThread {
+            self.entries = snapshot
+        } else {
+            Task { @MainActor in
+                self.entries = snapshot
+            }
         }
     }
 
@@ -122,16 +128,20 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
 
     public func clear() {
         lock.lock()
-        entries.removeAll()
+        buffer.removeAll()
         lock.unlock()
-        Task { @MainActor in
-            self.objectWillChange.send()
+        if Thread.isMainThread {
+            self.entries = []
+        } else {
+            Task { @MainActor in
+                self.entries = []
+            }
         }
     }
 
     public func exportLogs() -> String {
         lock.lock()
         defer { lock.unlock() }
-        return entries.map(\.fullLine).joined(separator: "\n")
+        return buffer.map(\.fullLine).joined(separator: "\n")
     }
 }

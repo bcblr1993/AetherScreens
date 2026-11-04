@@ -666,6 +666,16 @@
 
 "%d files copied from Windows. Press ⌘V in Mac Finder to paste." = "%d 个文件已从 Windows 复制，在 Mac 访达中按 ⌘V 即可粘贴。";
 
+"File \"%@\" ready from Windows" = "来自 Windows 的文件“%@”已就绪";
+
+"%d files ready from Windows" = "来自 Windows 的 %d 个文件已就绪";
+
+"Drag badge to Mac Finder/Desktop, or press ⌘V" = "可直接拖动标签到 Mac 访达/桌面，或按 ⌘V 粘贴";
+
+"Drag to Mac Finder or Desktop" = "拖动到 Mac 访达或桌面";
+
+"Show Received Files in Finder" = "在访达中显示接收到的文件";
+
 "File clipboard transfer requested. Paste on the remote computer to check." = "已请求传送文件剪贴板，请在远程电脑粘贴确认。";
 
 "File clipboard transfer is unavailable." = "文件剪贴板传送不可用。";
@@ -688,3 +698,32 @@
 "Delete \"%@\"?" = "删除“%@”？";
 
 "The saved password and SSH credentials for this computer are removed too. With iCloud Sync on, it is also removed from your other devices." = "这台电脑保存的密码和 SSH 凭据也会一并删除。开启 iCloud 同步时，其他设备上的这台电脑也会被移除。";
+
+"Sending \"%@\" to Windows..." = "正在向 Windows 传送文件 “%@”...";
+"Transferred \"%@\" to Windows." = "文件 “%@” 已成功传送到 Windows。";
+"File \"%@\" received from Windows." = "已从 Windows 接收文件 “%@”。";
+"%d files received from Windows." = "已从 Windows 接收 %d 个文件。";
+"Receive Files from Windows" = "从 Windows 接收文件";
+"In Windows, press Ctrl+C or right-click Copy on any file or folder. AetherScreens will download it to your Mac in real time." = "在 Windows 远程桌面上，对任意文件或文件夹按 Ctrl+C（复制），AetherScreens 会直接自动下载到 Mac。";
+"Copy Selected Files in Windows" = "在 Windows 中复制所选文件传送";
+"Received Files" = "已接收的文件";
+"No files received yet in this session." = "本次会话尚未接收文件。";
+"Selected files will be directly transferred to the active Windows window or Desktop." = "选中的文件将直接传送到当前 Windows 窗口或桌面。";
+"Tip: To transfer files from Windows to Mac, press Ctrl+C or Cmd+C in Windows to copy." = "提示：从 Windows 传文件到 Mac，在 Windows 中按 Ctrl+C 或 Cmd+C 复制即可自动接收。";
+"Display Quality & Resolution" = "画质与显示设置";
+"Windows Remote Desktop (RDP · 32-bit True Color)" = "Windows 远程桌面 (RDP · 32 位真彩色)";
+"Apple Screen Sharing / VNC Session" = "Apple 屏幕共享 / VNC 会话";
+"Current Resolution" = "当前分辨率";
+"Color Depth" = "色彩深度";
+"32-bit True Color (Hardware Accelerated)" = "32 位真彩色（Metal 硬件加速）";
+"Scaling & Zoom" = "缩放与画面大小";
+"Actual Size (1:1)" = "原始大小 (1:1)";
+"Fit to Window scales the remote desktop to fill your screen. Actual Size renders 1:1 pixel for pixel." = "“自适应窗口”自动缩放以填满当前窗口；“原始大小”按 1:1 点对点显示远程桌面。";
+"Automatic Compression" = "智能动态压缩";
+"Adjusts compression automatically based on network speed." = "根据网络状况自动调节画质与数据压缩率。";
+"Full Color (32-bit)" = "全彩 (32 位高画质)";
+"Reduced Colors (16-bit)" = "减少色彩 (16 位节省流量)";
+"Reduced colors use less network data but may show subtle color banding. Changing this setting will reconnect." = "减少色彩可大幅降低网络带宽占用，但渐变区域可能出现细微色带。更改此设置将重新连接。";
+"Done" = "完成";
+"File transfer cancelled or failed." = "文件传输已取消或失败。";
+

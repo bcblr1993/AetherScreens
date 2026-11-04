@@ -42,7 +42,7 @@ private final class ExternalCanvasRenderer: ObservableObject {
     let renderer: MetalScreenRenderer?
     init(viewModel: SessionViewModel) {
         renderer = MetalScreenRenderer(metrics: PerformanceMetrics())
-        renderer?.framebuffer = viewModel.client.framebuffer
+        renderer?.framebuffer = viewModel.framebuffer
     }
 }
 
@@ -67,8 +67,8 @@ private struct ExternalSessionCanvas: View {
             ZStack {
                 if viewModel.sessionState == .connected && viewModel.hasReceivedFirstFrame {
                     let crop = viewModel.activeCropRect
-                    let width = crop?.width ?? CGFloat(viewModel.client.framebuffer.width)
-                    let height = crop?.height ?? CGFloat(viewModel.client.framebuffer.height)
+                    let width = crop?.width ?? CGFloat(viewModel.framebuffer.width)
+                    let height = crop?.height ?? CGFloat(viewModel.framebuffer.height)
                     let ratio = max(width, 1) / max(height, 1)
                     if let renderer = surface.renderer {
                         MetalScreenView(renderer: renderer, sourceRect: crop)

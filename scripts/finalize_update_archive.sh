@@ -6,7 +6,7 @@ VERSION="${2:?Version required}"
 PROFILE="${3:?Keychain notary profile required}"
 DMG="$OUTPUT/AetherScreens-macOS-AppleSilicon-v$VERSION.dmg"
 ZIP="$OUTPUT/AetherScreens-macOS-AppleSilicon-v$VERSION.zip"
-xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait --timeout 10m --output-format json > "$OUTPUT/notarization-dmg-$VERSION.json"
+xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --no-s3-acceleration --wait --timeout 10m --output-format json > "$OUTPUT/notarization-dmg-$VERSION.json"
 python3 - "$OUTPUT/notarization-dmg-$VERSION.json" <<'PY'
 import json, sys
 with open(sys.argv[1]) as source:

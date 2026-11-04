@@ -6,8 +6,8 @@ cd "$DIR"
 if [ -f "$DIR/scripts/signing.local.env" ]; then
     source "$DIR/scripts/signing.local.env"
 fi
-VERSION="${1:-${AETHERSCREENS_VERSION:-1.3.5}}"
-BUILD_NUMBER="${2:-${AETHERSCREENS_BUILD_NUMBER:-2026102202}}"
+VERSION="${1:-${AETHERSCREENS_VERSION:-1.4.0}}"
+BUILD_NUMBER="${2:-${AETHERSCREENS_BUILD_NUMBER:-2026110401}}"
 SIGNING_IDENTITY="${AETHERSCREENS_SIGNING_IDENTITY:?Set AETHERSCREENS_SIGNING_IDENTITY or scripts/signing.local.env}"
 NOTARY_PROFILE="${AETHERSCREENS_NOTARY_PROFILE:?Set AETHERSCREENS_NOTARY_PROFILE to a Keychain notarytool profile}"
 OUTPUT="${AETHERSCREENS_OUTPUT_DIR:-$DIR/build/release}"
@@ -67,7 +67,7 @@ codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$APP_
 codesign --verify --deep --strict "$APP_DIR"
 NOTARY_ZIP="$STAGE/notarization.zip"
 ditto -c -k --keepParent "$APP_DIR" "$NOTARY_ZIP"
-xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait --timeout 10m --output-format json > "$OUTPUT/notarization-$VERSION.json"
+xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --no-s3-acceleration --wait --timeout 10m --output-format json > "$OUTPUT/notarization-$VERSION.json"
 python3 - "$OUTPUT/notarization-$VERSION.json" <<'PY'
 import json, sys
 result = json.load(open(sys.argv[1]))

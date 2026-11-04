@@ -73,6 +73,50 @@ struct RDPStaticVirtualChannelPDU: Equatable, Sendable {
         payload.count <= maximumPayloadByteCount
     }
 
+    static func chunkPayload(
+        _ payload: Data,
+        maximumChunkByteCount: Int = maximumPayloadByteCount
+    ) -> [RDPStaticVirtualChannelPDU] {
+        guard !payload.isEmpty else {
+            return [RDPStaticVirtualChannelPDU(
+                totalLength: 0,
+                flags: RDPStaticVirtualChannelFlags.completeWithShowProtocol,
+                payload: Data()
+            )]
+        }
+        guard payload.count > maximumChunkByteCount else {
+            return [RDPStaticVirtualChannelPDU(
+                totalLength: UInt32(payload.count),
+                flags: RDPStaticVirtualChannelFlags.completeWithShowProtocol,
+                payload: payload
+            )]
+        }
+
+        var pdus: [RDPStaticVirtualChannelPDU] = []
+        let totalLength = UInt32(payload.count)
+        var offset = 0
+        while offset < payload.count {
+            let chunkLength = min(maximumChunkByteCount, payload.count - offset)
+            let chunkData = payload.subdata(in: offset ..< offset + chunkLength)
+            let isFirst = (offset == 0)
+            let isLast = (offset + chunkLength == payload.count)
+            var flags = RDPStaticVirtualChannelFlags.showProtocol
+            if isFirst {
+                flags |= RDPStaticVirtualChannelFlags.first
+            }
+            if isLast {
+                flags |= RDPStaticVirtualChannelFlags.last
+            }
+            pdus.append(RDPStaticVirtualChannelPDU(
+                totalLength: totalLength,
+                flags: flags,
+                payload: chunkData
+            ))
+            offset += chunkLength
+        }
+        return pdus
+    }
+
     func encodedUserData() -> Data {
         var data = Data()
         data.appendLittleEndianUInt32(totalLength)
@@ -175,7 +219,7 @@ struct RDPStaticVirtualChannelPDU: Equatable, Sendable {
         )
     }
 
-    fileprivate init(totalLength: UInt32, flags: UInt32, payload: Data) {
+    init(totalLength: UInt32, flags: UInt32, payload: Data) {
         self.totalLength = totalLength
         self.flags = flags
         self.payload = payload
@@ -189,6 +233,7 @@ struct RDPStaticVirtualChannelPDU: Equatable, Sendable {
 }
 
 struct RDPStaticVirtualChannelReassembler: Sendable {
+    static let maximumReassemblyByteCount = 64 * 1024 * 1024
     private var totalLength: UInt32?
     private var payload = Data()
 
@@ -196,7 +241,8 @@ struct RDPStaticVirtualChannelReassembler: Sendable {
         _ pdu: RDPStaticVirtualChannelPDU,
         maximumChunkByteCount: Int = RDPStaticVirtualChannelPDU.maximumPayloadByteCount
     ) throws -> RDPStaticVirtualChannelPDU? {
-        guard pdu.payload.count <= maximumChunkByteCount else {
+        guard pdu.payload.count <= maximumChunkByteCount,
+              Int(pdu.totalLength) <= Self.maximumReassemblyByteCount else {
             throw RDPDecodeError.invalidStaticVirtualChannelPDU
         }
         if pdu.isFlowControl {

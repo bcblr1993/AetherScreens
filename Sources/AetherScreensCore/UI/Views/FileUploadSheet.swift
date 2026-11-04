@@ -30,7 +30,7 @@ struct FileUploadSheet: View {
                             Text(AppLocalization.string("Windows File Transfer"))
                                 .font(.subheadline.bold())
                         }
-                        Text(AppLocalization.string("Files will be sent via Windows clipboard channel. After sending, press Ctrl+V or right-click to paste anywhere in Windows."))
+                        Text(AppLocalization.string("Selected files will be directly transferred to the active Windows window or Desktop."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

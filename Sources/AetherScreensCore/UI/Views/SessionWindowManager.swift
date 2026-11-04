@@ -43,6 +43,7 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
         controllers[id] = controller
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
+        registry.activate(id)
         registered.startSession()
         return id
     }
@@ -51,14 +52,25 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
         guard let window = controllers[id]?.window else { return }
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
+        registry.activate(id)
     }
 
     public func close(_ id: UUID) { controllers[id]?.window?.close() }
 
+    public func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let id = controllers.first(where: { $0.value.window === window })?.key else { return }
+        registry.activate(id)
+    }
+
     public func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
               let id = controllers.first(where: { $0.value.window === window })?.key else { return }
-        registry.remove(id)?.endSession()
+        if let session = registry.remove(id) {
+            session.endSession()
+            session.client.disconnect()
+            session.rdpClient?.disconnect()
+        }
         controllers.removeValue(forKey: id)
     }
 }
@@ -69,7 +81,10 @@ private struct SessionWindowContent: View {
     let close: () -> Void
 
     var body: some View {
-        RemoteDesktopView(viewModel: session, managesSessionLifecycle: false, onDisconnect: close)
+        RemoteDesktopView(viewModel: session, managesSessionLifecycle: false, onDisconnect: {
+            session.requestDisconnect()
+            close()
+        })
             .environment(\.locale, languageSettings.locale)
             .tint(.blue)
     }

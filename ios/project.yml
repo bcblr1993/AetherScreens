@@ -9,6 +9,13 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: '17.0'
+    entitlements:
+      path: AetherScreensIOS.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.com.aethernative.aetherscreens
+        com.apple.developer.icloud-services:
+          - CloudKit
     sources:
       - AetherScreensIOSApp.swift
       - Assets.xcassets
@@ -51,6 +58,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSLocalNetworkUsageDescription: 'Discover nearby computers for remote screen sharing.'
+        NSFaceIDUsageDescription: 'Unlock your saved computers and remote sessions with Face ID.'
         NSBonjourServices:
           - _rfb._tcp
           - _apple-sas._tcp
@@ -58,8 +66,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aethernative.aetherscreens.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: 1.3.4
-        CURRENT_PROJECT_VERSION: 2026102201
+        MARKETING_VERSION: 1.4.0
+        CURRENT_PROJECT_VERSION: 2026110401
         TARGETED_DEVICE_FAMILY: '1,2'
         SWIFT_VERSION: '5.9'
   AetherScreensIOSUITests:

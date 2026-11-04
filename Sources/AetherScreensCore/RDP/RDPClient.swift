@@ -48,6 +48,10 @@ public final class RDPClient: @unchecked Sendable {
     public var onDisplayLayoutReceived: (@Sendable (RFBDisplayLayout?) -> Void)?
     public var onClipboardReceived: (@Sendable (String) -> Void)?
     public var onClipboardFilesReceived: (@Sendable ([URL]) -> Void)?
+    public var onClipboardFilesDownloadFailed: (@Sendable () -> Void)?
+    public var onRemoteFilesAdvertised: (@Sendable ([RDPClipboardFileDescriptorW]) -> Void)?
+    public var onFileUploadProgress: (@Sendable (String, UInt64, UInt64) -> Void)?
+    public var onFileDownloadProgress: (@Sendable (String, UInt64, UInt64) -> Void)?
     public var onCursorReceived: (@Sendable (RFBRemoteCursor) -> Void)?
     public var onTransportRTT: (@Sendable (Double) -> Void)?
     public var onAudioSampleReceived: (@Sendable (RDPAudioSample) -> Void)?
@@ -59,6 +63,7 @@ public final class RDPClient: @unchecked Sendable {
     private var clipboardSession: RDPClipboardSession?
     private var displayControlSession: RDPDisplayControlSession?
     private let fileDownloader = RDPClipboardFileDownloader()
+    private var pendingFormatListAck: (@Sendable () -> Void)?
     public private(set) var lastPointerPosition: (UInt16, UInt16)?
     public private(set) var lastPublishedFiles: [RDPClipboardLocalFile] = []
     private var lastButtons: RFBConstants.ButtonMask = []
@@ -166,15 +171,19 @@ public final class RDPClient: @unchecked Sendable {
                 },
                 onSkippedFrames: { _, _ in }
             )
+            defer { decodeQueue.cancel() }
 
             let report = RDPPreflightClient().run(
                 configuration: configuration,
                 onGraphicsFrame: { frame in
-                    try decodeQueue.submitAndWait(
+                    let outcome = decodeQueue.submitAndWait(
                         frame,
                         receivedAt: Date(),
                         shouldContinue: { !cancellation.isCancelled && !Task.isCancelled }
-                    ).requireDecoded()
+                    )
+                    if case .cancelled = outcome {
+                        try outcome.requireDecoded()
+                    }
                 },
                 onRemotePointer: nil,
                 onInputReady: { [weak self] session in
@@ -194,6 +203,12 @@ public final class RDPClient: @unchecked Sendable {
                     guard let self else { return }
                     self.inputLock.lock()
                     self.clipboardSession = session
+                    session.onFormatListResponse = { [weak self] ok in
+                        self?.handleFormatListResponse(ok: ok)
+                    }
+                    session.onFileContentsRangeServed = { [weak self] fileName, offset, total in
+                        self?.onFileUploadProgress?(fileName, offset, total)
+                    }
                     self.inputLock.unlock()
                 },
                 onClipboardText: { [weak self] text in
@@ -206,9 +221,20 @@ public final class RDPClient: @unchecked Sendable {
                     let session = self.clipboardSession
                     self.inputLock.unlock()
                     guard let session else { return }
-                    self.fileDownloader.downloadFiles(descriptors: descriptor.descriptors, session: session) { [weak self] urls in
-                        self?.onClipboardFilesReceived?(urls)
-                    }
+                    self.onRemoteFilesAdvertised?(descriptor.descriptors)
+                    self.fileDownloader.downloadFiles(
+                        descriptors: descriptor.descriptors,
+                        session: session,
+                        onProgress: { [weak self] fileName, offset, total in
+                            self?.onFileDownloadProgress?(fileName, offset, total)
+                        },
+                        onCompleted: { [weak self] urls in
+                            self?.onClipboardFilesReceived?(urls)
+                        },
+                        onFailed: { [weak self] in
+                            self?.onClipboardFilesDownloadFailed?()
+                        }
+                    )
                 },
                 onClipboardFileContents: { [weak self] response in
                     self?.fileDownloader.handleFileContentsResponse(response)
@@ -236,6 +262,7 @@ public final class RDPClient: @unchecked Sendable {
         activeCancellation = nil
         inputSession = nil
         clipboardSession = nil
+        pendingFormatListAck = nil
         displayControlSession = nil
         keyTranslator = RDPKeyTranslator()
         connectionTask?.cancel()
@@ -246,6 +273,11 @@ public final class RDPClient: @unchecked Sendable {
 
         transition(to: .disconnected)
         AppLogger.shared.info("Disconnected RDP session with \(host)", category: "RDP")
+    }
+
+    public func cancelFileDownload() {
+        fileDownloader.cancel()
+        onClipboardFilesDownloadFailed?()
     }
 
     public func updateDesktopResolution(width: Int, height: Int) {
@@ -386,6 +418,7 @@ public final class RDPClient: @unchecked Sendable {
         inputLock.lock()
         defer { inputLock.unlock() }
 
+        lastPublishedFiles = []
         guard let clipboard = clipboardSession else { return nil }
         let normalized = text
             .replacingOccurrences(of: "\r\n", with: "\n")
@@ -395,12 +428,25 @@ public final class RDPClient: @unchecked Sendable {
         return "Copied text to remote clipboard."
     }
 
-    public func publishLocalFiles(_ files: [RDPClipboardLocalFile]) -> Bool {
+    private func handleFormatListResponse(ok: Bool) {
+        inputLock.lock()
+        let handler = pendingFormatListAck
+        pendingFormatListAck = nil
+        inputLock.unlock()
+        if ok { handler?() }
+    }
+
+    @discardableResult
+    public func publishLocalFiles(
+        _ files: [RDPClipboardLocalFile],
+        onAcknowledged: (@Sendable () -> Void)? = nil
+    ) -> Bool {
         inputLock.lock()
         defer { inputLock.unlock() }
 
         guard state == .connected || clipboardSession != nil else { return false }
         lastPublishedFiles = files
+        pendingFormatListAck = onAcknowledged
         clipboardSession?.publishLocalFiles(files)
         return true
     }

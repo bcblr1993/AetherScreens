@@ -71,6 +71,7 @@ public final class RFBClient: @unchecked Sendable {
     private var lastTransferReportTime: TimeInterval = 0
     private let queue = DispatchQueue(label: "com.aethernative.aetherscreens.rfbclient", qos: .userInteractive)
     private var readBuffer = Data()
+    private var synchronousReadDepth = 0
     private var hasCompletedFramebufferUpdate = false
     private var hasReceivedPixelUpdate = false
     private var updateHasDisplayLayout = false
@@ -395,7 +396,11 @@ public final class RFBClient: @unchecked Sendable {
                 // Server reported an error, read reason
                 self.readExact(4) { lenData in
                     guard let lenData = lenData else { return }
-                    let reasonLen = Int(lenData.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+                    let reasonLen = Int(lenData.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
+                    guard (0...65_536).contains(reasonLen) else {
+                        self.handleFailure("Server rejected connection")
+                        return
+                    }
                     self.readExact(reasonLen) { msgData in
                         let reason = msgData.flatMap { String(data: $0, encoding: .utf8) } ?? "Unknown server error"
                         AppLogger.shared.error("Server rejected connection: \(reason)", category: "Security")
@@ -634,7 +639,11 @@ public final class RFBClient: @unchecked Sendable {
                 // Auth failed, read reason if 3.8
                 self.readExact(4) { lenData in
                     if let lenData = lenData {
-                        let len = Int(lenData.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+                        let len = Int(lenData.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
+                        guard (0...65_536).contains(len) else {
+                            self.handleFailure("Authentication failed (incorrect password)")
+                            return
+                        }
                         self.readExact(len) { errData in
                             let errStr = errData.flatMap { String(data: $0, encoding: .utf8) } ?? "Authentication failed (incorrect password)"
                             AppLogger.shared.error("Auth rejection detail: \(errStr)", category: "Auth")
@@ -661,14 +670,20 @@ public final class RFBClient: @unchecked Sendable {
         // Minimum ServerInit is 24 bytes
         readExact(24) { [weak self] headerData in
             guard let self = self, let headerData = headerData else { return }
-            let nameLen = Int(headerData.subdata(in: 20..<24).withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+            let nameLen = Int(headerData.subdata(in: 20..<24).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
+            guard (0...65_536).contains(nameLen) else {
+                self.handleFailure("Invalid ServerInit name length")
+                return
+            }
             
             self.readExact(nameLen) { nameData in
                 guard let nameData = nameData else { return }
                 var fullData = headerData
                 fullData.append(nameData)
 
-                guard let (serverInit, _) = RFBDecoder.parseServerInit(fullData) else {
+                guard let (serverInit, _) = RFBDecoder.parseServerInit(fullData),
+                      serverInit.width > 0, serverInit.height > 0,
+                      Int(serverInit.width) * Int(serverInit.height) * 4 <= ZRLEDecoder.maximumPixelBytes else {
                     AppLogger.shared.error("Failed to parse ServerInit packet", category: "RFB")
                     self.handleFailure("Failed to parse ServerInit")
                     return
@@ -1074,6 +1089,11 @@ public final class RFBClient: @unchecked Sendable {
 
             case .desktopSize:
                 guard let source = self.connection else { return }
+                guard header.width > 0, header.height > 0,
+                      Int(header.width) * Int(header.height) * 4 <= ZRLEDecoder.maximumPixelBytes else {
+                    self.handleFailure("Invalid remote desktop size")
+                    return
+                }
                 self.updateHasDisplayLayout = true
                 // Screen resolution changed on remote Mac!
                 AppLogger.shared.info("Remote desktop resized to \(header.width)x\(header.height)", category: "RFB")
@@ -1823,7 +1843,20 @@ public final class RFBClient: @unchecked Sendable {
         if decryptedReadBuffer.count >= count {
             let result = Data(decryptedReadBuffer.prefix(count))
             decryptedReadBuffer.removeFirst(count)
-            completion(result)
+            if synchronousReadDepth >= 32 {
+                let captured = connection
+                queue.async { [weak self] in
+                    guard let self, self.connection === captured else {
+                        completion(nil)
+                        return
+                    }
+                    completion(result)
+                }
+            } else {
+                synchronousReadDepth += 1
+                defer { synchronousReadDepth -= 1 }
+                completion(result)
+            }
             return
         }
         readRawExact(2) { [weak self] header in
@@ -1864,9 +1897,22 @@ public final class RFBClient: @unchecked Sendable {
     private func readRawExact(_ count: Int, trackPixelPayload: Bool = false, completion: @escaping @Sendable (Data?) -> Void) {
         // First check if readBuffer already contains enough bytes
         if readBuffer.count >= count {
-            let chunk = readBuffer.prefix(count)
+            let chunk = Data(readBuffer.prefix(count))
             readBuffer.removeSubrange(0..<count)
-            completion(Data(chunk))
+            if synchronousReadDepth >= 32 {
+                let captured = connection
+                queue.async { [weak self] in
+                    guard let self, self.connection === captured else {
+                        completion(nil)
+                        return
+                    }
+                    completion(chunk)
+                }
+            } else {
+                synchronousReadDepth += 1
+                defer { synchronousReadDepth -= 1 }
+                completion(chunk)
+            }
             return
         }
 

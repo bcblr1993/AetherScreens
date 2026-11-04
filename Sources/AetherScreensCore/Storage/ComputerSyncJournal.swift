@@ -13,16 +13,31 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
     public var macAddress: String?
     /// Opaque key identifiers may be shared; missing local keys remain fail-closed.
     public var ssh: SSHConnectionSettings?
+    public var remoteProtocol: RemoteDevice.RemoteProtocol?
+    public var isFavorite: Bool?
+    public var tags: [String]?
+    public var desktopWidth: Int?
+    public var desktopHeight: Int?
+    public var remoteAudioEnabled: Bool?
+    public var autoFitResolution: Bool?
 
     public init(device: RemoteDevice) {
         id = device.id; name = device.name; host = device.host; port = device.port
         deviceType = device.deviceType; authMethod = device.authMethod; username = device.username
         isTailscaleNode = device.isTailscaleNode; macAddress = device.macAddress; ssh = device.ssh
+        remoteProtocol = device.remoteProtocol
+        isFavorite = device.isFavorite
+        tags = device.tags
+        desktopWidth = device.desktopWidth
+        desktopHeight = device.desktopHeight
+        remoteAudioEnabled = device.remoteAudioEnabled
+        autoFitResolution = device.autoFitResolution
     }
 
     fileprivate var isValid: Bool {
         name.utf8.count <= 4096 && host.utf8.count <= 1024
             && (username?.utf8.count ?? 0) <= 1024 && (macAddress?.utf8.count ?? 0) <= 128
+            && (tags?.count ?? 0) <= 64
             && ConnectionRequest(host: host, port: String(port)) != nil
     }
 }

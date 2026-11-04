@@ -449,8 +449,11 @@ final class SessionViewModelRDPTests: XCTestCase {
 
         XCTAssertEqual(writtenFilesBox.value.count, 1)
         XCTAssertEqual(writtenFilesBox.value.first?.lastPathComponent, "from_windows.pdf")
+        XCTAssertEqual(session.downloadedRemoteFiles.count, 1)
+        XCTAssertEqual(session.downloadedRemoteFiles.first?.lastPathComponent, "from_windows.pdf")
         XCTAssertNotNil(session.fileUploadNotice)
         XCTAssertTrue(session.fileUploadNotice?.contains("from_windows.pdf") == true)
+        session.revealDownloadedFiles()
     }
 
     @MainActor

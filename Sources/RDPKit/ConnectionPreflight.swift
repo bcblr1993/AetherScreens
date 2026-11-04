@@ -3763,6 +3763,7 @@ private func performMCSConnectionSequence(
                         let clipboardChannelID = connectResponse.staticChannelAssignments.first(
                             where: { $0.name == RDPStaticVirtualChannel.cliprdr.name }
                         )?.channelID
+                        let clipboardSentLock = NSLock()
                         var clipboardSentMessageData: [Data] = []
                         var clipboardSentMessages: [RDPClipboardMessageSummary] = []
                         let clipboardSession = clipboardChannelID.map {
@@ -3771,8 +3772,12 @@ private func performMCSConnectionSequence(
                                 staticChannelID: $0,
                                 channel: channel,
                                 sentMessageHandler: { summary, packet in
-                                    clipboardSentMessages.append(summary)
-                                    clipboardSentMessageData.append(packet)
+                                    clipboardSentLock.lock()
+                                    if clipboardSentMessages.count < 32 {
+                                        clipboardSentMessages.append(summary)
+                                        clipboardSentMessageData.append(packet)
+                                    }
+                                    clipboardSentLock.unlock()
                                 }
                             )
                         }
@@ -3873,6 +3878,11 @@ private func performMCSConnectionSequence(
                             graphicsResult = nil
                         }
 
+                        clipboardSentLock.lock()
+                        let snapshotClipboardSentData = clipboardSentMessageData
+                        let snapshotClipboardSentMessages = clipboardSentMessages
+                        clipboardSentLock.unlock()
+
                         return MCSConnectionSequence(
                             connectInitial: connectInitial,
                             connectResponseData: connectResponseData,
@@ -3944,8 +3954,8 @@ private func performMCSConnectionSequence(
                             clipboardChannelID: clipboardChannelID,
                             clipboardMessageData: clipboardMessageData + (graphicsResult?.clipboardMessageData ?? []),
                             clipboardMessages: clipboardMessages + (graphicsResult?.clipboardMessages ?? []),
-                            clipboardSentMessageData: clipboardSentMessageData,
-                            clipboardSentMessages: clipboardSentMessages,
+                            clipboardSentMessageData: snapshotClipboardSentData,
+                            clipboardSentMessages: snapshotClipboardSentMessages,
                             audioChannelID: audioChannelID,
                             audioMessageData: audioMessageData + (graphicsResult?.audioMessageData ?? []),
                             audioMessages: audioMessages + (graphicsResult?.audioMessages ?? [])
@@ -4385,6 +4395,7 @@ private func performRDPGraphicsDynamicChannelHandshake(
                    try handleClipboardPacket(
                        packet,
                        session: clipboardSession,
+                       maximumChunkByteCount: maximumStaticVirtualChannelChunkSize,
                        onClipboardReady: onClipboardReady,
                        onClipboardText: onClipboardText,
                        onClipboardFileGroupDescriptor: onClipboardFileGroupDescriptor,
@@ -5346,6 +5357,7 @@ private func sendAudioInputDynamicChannelPayload(
 private func handleClipboardPacket(
     _ packet: Data,
     session: RDPClipboardSession,
+    maximumChunkByteCount: Int = RDPStaticVirtualChannelPDU.maximumPayloadByteCount,
     onClipboardReady: RDPClipboardSessionHandler?,
     onClipboardText: RDPClipboardTextHandler?,
     onClipboardFileGroupDescriptor: RDPClipboardFileGroupDescriptorHandler?,
@@ -5353,22 +5365,21 @@ private func handleClipboardPacket(
     messageData: inout [Data],
     messages: inout [RDPClipboardMessageSummary]
 ) throws -> Bool {
-    guard let staticPDU = try RDPStaticVirtualChannelPDU.parseIfPresent(
-        fromTPKT: packet,
-        channelID: session.staticChannelID
-    ) else {
+    let (isForChannel, clipboardPDU) = try session.receivePacket(
+        packet,
+        maximumChunkByteCount: maximumChunkByteCount
+    )
+    guard isForChannel else {
         return false
     }
-    guard staticPDU.canDispatchPayload else {
-        if staticPDU.isFlowControl {
-            return true
-        }
-        throw RDPDecodeError.invalidStaticVirtualChannelPDU
+    guard let clipboardPDU else {
+        return true
     }
 
-    let clipboardPDU = try RDPClipboardPDU.parse(from: staticPDU.payload)
-    messageData.append(packet)
-    messages.append(.summarize(clipboardPDU))
+    if messageData.count < 32 {
+        messageData.append(packet)
+        messages.append(.summarize(clipboardPDU))
+    }
 
     if let capabilities = try RDPClipboardCapabilitiesPDU.parseIfPresent(from: clipboardPDU) {
         session.updateServerCapabilities(capabilities)
@@ -5378,6 +5389,12 @@ private func handleClipboardPacket(
     if clipboardPDU.header.messageType == RDPClipboardMessageType.monitorReady {
         session.sendClientCapabilities()
         onClipboardReady?(session)
+        return true
+    }
+
+    if clipboardPDU.header.messageType == RDPClipboardMessageType.formatListResponse {
+        let ok = clipboardPDU.header.messageFlags == RDPClipboardMessageFlags.responseOK
+        session.onFormatListResponse?(ok)
         return true
     }
 
@@ -5483,13 +5500,15 @@ private func handleAudioPayload(
     messages: inout [RDPAudioMessageSummary]
 ) throws {
     if let sample = try session.receiveWaveData(payload, receivedAt: Date()) {
-        messageData.append(packet)
-        messages.append(
-            RDPAudioMessageSummary(
-                typeName: "audio-wave-data",
-                bodySize: UInt16(clamping: payload.count)
+        if messageData.count < 32 {
+            messageData.append(packet)
+            messages.append(
+                RDPAudioMessageSummary(
+                    typeName: "audio-wave-data",
+                    bodySize: UInt16(clamping: payload.count)
+                )
             )
-        )
+        }
         onAudioSample?(sample)
         session.confirmConsumed(sample)
         return
@@ -5497,8 +5516,10 @@ private func handleAudioPayload(
 
     let receivedAt = Date()
     let audioPDU = try RDPAudioPDU.parse(from: payload)
-    messageData.append(packet)
-    messages.append(.summarize(audioPDU))
+    if messageData.count < 32 {
+        messageData.append(packet)
+        messages.append(.summarize(audioPDU))
+    }
 
     if let formats = try RDPAudioFormatsPDU.parseIfPresent(from: audioPDU) {
         session.respondToServerFormats(formats)
@@ -5894,6 +5915,7 @@ private func receiveRDPGraphicsUpdateBatch(
                try handleClipboardPacket(
                    packet,
                    session: clipboardSession,
+                   maximumChunkByteCount: maximumStaticVirtualChannelChunkSize,
                    onClipboardReady: onClipboardReady,
                    onClipboardText: onClipboardText,
                    onClipboardFileGroupDescriptor: onClipboardFileGroupDescriptor,
@@ -5929,13 +5951,17 @@ private func receiveRDPGraphicsUpdateBatch(
             staticPDU,
             maximumChunkByteCount: maximumStaticVirtualChannelChunkSize
         ) else {
-            result.dynamicChannelRequestData.append(packet)
+            if result.dynamicChannelRequestData.count < 32 {
+                result.dynamicChannelRequestData.append(packet)
+            }
             continue
         }
 
         if let createRequest = try RDPDynamicVirtualChannelCreateRequest.parseIfPresent(from: staticPDU.payload) {
-            result.dynamicChannelRequestData.append(packet)
-            result.dynamicChannelRequestTypes.append("\(createRequest.typeName):\(createRequest.channelName)")
+            if result.dynamicChannelRequestData.count < 32 {
+                result.dynamicChannelRequestData.append(packet)
+                result.dynamicChannelRequestTypes.append("\(createRequest.typeName):\(createRequest.channelName)")
+            }
             if try handleDisplayControlCreateRequest(
                 createRequest,
                 userChannelID: userChannelID,

@@ -204,6 +204,9 @@ public struct EditDeviceSheet: View {
                             .filter { !$0.isEmpty }
                         
                         let newPassword = isPasswordModified ? (password.isEmpty ? nil : password) : DeviceStore.shared.getPassword(for: device)
+                        if isPasswordModified && password.isEmpty {
+                            DeviceStore.shared.clearPassword(for: device)
+                        }
                         
                         do {
                             try viewModel.saveConfiguredDevice(updatedDev, password: newPassword,

@@ -2,7 +2,10 @@ import Foundation
 
 extension SessionViewModel {
     var canStartFileDownload: Bool {
-        isForegroundSession && !isObserveOnly && client.fileCopyTransportGeneration != nil
+        if isRDP {
+            return isForegroundSession && !isObserveOnly && sessionState == .connected
+        }
+        return isForegroundSession && !isObserveOnly && client.fileCopyTransportGeneration != nil
             && !fileDownloadCoordinator.isBusy
     }
 

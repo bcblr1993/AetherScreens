@@ -1099,6 +1099,39 @@ public final class RDPClipboardSession: @unchecked Sendable {
     private var localContent = RDPClipboardLocalContent.empty
     private var pendingFormatDataResponse: RDPClipboardRequestedFormatDataResponse?
     private var serverGeneralFlags: UInt32 = 0
+    private var reassembler = RDPStaticVirtualChannelReassembler()
+    public var onFormatListResponse: (@Sendable (Bool) -> Void)?
+    public var onFileContentsRangeServed: (@Sendable (String, UInt64, UInt64) -> Void)?
+
+    func receivePacket(
+        _ packet: Data,
+        maximumChunkByteCount: Int = RDPStaticVirtualChannelPDU.maximumPayloadByteCount
+    ) throws -> (isForChannel: Bool, pdu: RDPClipboardPDU?) {
+        guard let staticPDU = try RDPStaticVirtualChannelPDU.parseIfPresent(
+            fromTPKT: packet,
+            channelID: staticChannelID,
+            maximumChunkByteCount: maximumChunkByteCount
+        ) else {
+            return (false, nil)
+        }
+        lock.lock()
+        let completePDU: RDPStaticVirtualChannelPDU?
+        do {
+            completePDU = try reassembler.append(
+                staticPDU,
+                maximumChunkByteCount: maximumChunkByteCount
+            )
+            lock.unlock()
+        } catch {
+            lock.unlock()
+            throw error
+        }
+        guard let completePDU else {
+            return (true, nil)
+        }
+        let clipboardPDU = try RDPClipboardPDU.parse(from: completePDU.payload)
+        return (true, clipboardPDU)
+    }
 
     init(
         userChannelID: UInt16,
@@ -1265,19 +1298,20 @@ public final class RDPClipboardSession: @unchecked Sendable {
 
         guard request.flags & RDPClipboardFileContentsFlags.range != 0,
               request.position <= UInt64(file.contents.count),
-              UInt64(request.requestedByteCount) <= UInt64(file.contents.count) - request.position,
-              let lowerBound = Int(exactly: request.position),
-              let requestedByteCount = Int(exactly: request.requestedByteCount)
+              let lowerBound = Int(exactly: request.position)
         else {
             send(RDPClipboardFileContentsResponsePDU.failure(streamID: request.streamID).encoded())
             return
         }
 
-        let upperBound = lowerBound + requestedByteCount
+        let remainingBytes = UInt64(file.contents.count) - request.position
+        let bytesToSend = Int(min(UInt64(request.requestedByteCount), remainingBytes))
+        let upperBound = lowerBound + bytesToSend
         send(RDPClipboardFileContentsResponsePDU.range(
             streamID: request.streamID,
             data: file.contents.subdata(in: lowerBound ..< upperBound)
         ).encoded())
+        onFileContentsRangeServed?(file.descriptor.fileName, UInt64(upperBound), UInt64(file.contents.count))
     }
 
     private func currentContent() -> RDPClipboardLocalContent {
@@ -1294,28 +1328,29 @@ public final class RDPClipboardSession: @unchecked Sendable {
 
     @discardableResult
     private func send(_ payload: Data) -> Bool {
-        guard RDPStaticVirtualChannelPDU.canEncodeSinglePayload(payload) else {
-            return false
-        }
+        let pdus = RDPStaticVirtualChannelPDU.chunkPayload(payload)
+        guard !pdus.isEmpty else { return false }
+        let packets = pdus.map { $0.encodedTPKT(initiator: userChannelID, channelID: staticChannelID) }
 
-        let packet = RDPStaticVirtualChannelPDU(
-            payload: payload,
-            flags: RDPStaticVirtualChannelFlags.first
-                | RDPStaticVirtualChannelFlags.last
-                | RDPStaticVirtualChannelFlags.showProtocol
-        )
-            .encodedTPKT(initiator: userChannelID, channelID: staticChannelID)
         if let sentMessageHandler,
            let pdu = try? RDPClipboardPDU.parse(from: payload)
         {
-            sentMessageHandler(.summarize(pdu), packet)
+            let summary = RDPClipboardMessageSummary.summarize(pdu)
+            let firstPacket = packets[0]
+            lock.lock()
+            sentMessageHandler(summary, firstPacket)
+            lock.unlock()
         }
         channel.eventLoop.execute {
             guard self.channel.isActive else {
                 return
             }
-            var buffer = self.channel.allocator.buffer(capacity: packet.count)
-            buffer.writeBytes(packet)
+            var totalCount = 0
+            for packet in packets { totalCount += packet.count }
+            var buffer = self.channel.allocator.buffer(capacity: totalCount)
+            for packet in packets {
+                buffer.writeBytes(packet)
+            }
             self.channel.writeAndFlush(buffer, promise: nil)
         }
         return true

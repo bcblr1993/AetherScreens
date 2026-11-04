@@ -1,5 +1,6 @@
 import XCTest
 import RDPKit
+@testable import RDPKit
 @testable import AetherScreensCore
 
 final class RDPClipboardFileDownloaderTests: XCTestCase {
@@ -186,5 +187,31 @@ final class RDPClipboardFilePathTests: XCTestCase {
         let relative = enumerated.compactMap { SessionViewModel.relativeComponents(of: $0, under: root) }
         XCTAssertEqual(Set(relative.map { $0.joined(separator: "\\") }), ["Sub", "Sub\\a.txt"])
         XCTAssertNil(SessionViewModel.relativeComponents(of: URL(fileURLWithPath: "/etc/hosts"), under: root))
+    }
+
+    func testStaticVirtualChannelChunkPayloadAndReassembly() throws {
+        let largeData = Data((0..<(64 * 1024)).map { UInt8($0 % 256) })
+        let chunks = RDPStaticVirtualChannelPDU.chunkPayload(largeData)
+        XCTAssertGreaterThan(chunks.count, 1)
+
+        var reassembler = RDPStaticVirtualChannelReassembler()
+        var assembledPDU: RDPStaticVirtualChannelPDU?
+        for chunk in chunks {
+            assembledPDU = try reassembler.append(chunk)
+        }
+        XCTAssertNotNil(assembledPDU)
+        XCTAssertEqual(assembledPDU?.payload, largeData)
+    }
+
+    func testStaticVirtualChannelChunkPayloadSingleSmallPacket() throws {
+        let smallData = Data("hello clipboard".utf8)
+        let chunks = RDPStaticVirtualChannelPDU.chunkPayload(smallData)
+        XCTAssertEqual(chunks.count, 1)
+        XCTAssertEqual(chunks[0].totalLength, UInt32(smallData.count))
+        XCTAssertTrue(chunks[0].isComplete)
+
+        var reassembler = RDPStaticVirtualChannelReassembler()
+        let assembled = try reassembler.append(chunks[0])
+        XCTAssertEqual(assembled?.payload, smallData)
     }
 }

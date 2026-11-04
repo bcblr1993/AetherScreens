@@ -19,7 +19,7 @@ struct ExternalPointerOverlay: UIViewRepresentable {
 
     func updateUIView(_ uiView: ExternalPointerView, context: Context) {
         uiView.remoteRect = viewModel.activeCropRect
-            ?? CGRect(x: 0, y: 0, width: viewModel.client.framebuffer.width, height: viewModel.client.framebuffer.height)
+            ?? CGRect(x: 0, y: 0, width: viewModel.framebuffer.width, height: viewModel.framebuffer.height)
         uiView.setNeedsLayout()
     }
 }

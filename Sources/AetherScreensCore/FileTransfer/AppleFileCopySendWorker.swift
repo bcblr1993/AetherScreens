@@ -102,7 +102,7 @@ final class AppleFileCopySendWorker: @unchecked Sendable {
                     guard let self else { return }
                     // Even synchronous transport callbacks run after pump commits
                     // admission, and duplicate/late callbacks cannot advance it.
-                    self.queue.async { [self] in processed(token: token, success: success) }
+                    self.queue.async { self.processed(token: token, success: success) }
                 }
             }
             if !accepted { inFlight = nil; fail() }

@@ -21,12 +21,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published var isPreparingFileUpload = false
     @Published var fileUploadNotice: String?
     @Published var fileDownloadNotice: String?
+    @Published var downloadedRemoteFiles: [URL] = []
+    var activeUploadAttempts: [String: FileTransferTaskStore.Attempt] = [:]
+    var activeDownloadAttempts: [String: FileTransferTaskStore.Attempt] = [:]
     var fileUploadPreparationTask: Task<Void, Never>?
     var fileUploadPreparationID = UUID()
     public let client: RFBClient
     public let rdpClient: RDPClient?
-    public var isRDP: Bool { device.remoteProtocol == .rdp }
-    public var framebuffer: Framebuffer {
+    public nonisolated var isRDP: Bool { device.remoteProtocol == .rdp }
+    public nonisolated var framebuffer: Framebuffer {
         if isRDP, let rdp = rdpClient {
             return rdp.framebuffer
         }
@@ -128,7 +131,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             }
         }
     }
-    public private(set) var lastSentClipboardText: String?
+    public internal(set) var lastSentClipboardText: String?
     public private(set) var lastReceivedClipboardText: String?
     private var clipboardPollingTask: Task<Void, Never>?
 
@@ -209,15 +212,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     @Published public private(set) var displayColorDepth: RFBColorDepth = .fullColor
     @Published public private(set) var automaticDisplayQuality = false
     private var adaptiveDisplayQuality = AdaptiveDisplayQuality()
-    private let clipboardReader: @MainActor @Sendable () -> String?
-    private let clipboardWriter: @MainActor @Sendable (String) -> Void
-    private let clipboardFilesReader: @MainActor @Sendable () -> [URL]?
-    private let clipboardChangeCount: @MainActor @Sendable () -> Int?
-    private let clipboardIsConcealed: @MainActor @Sendable () -> Bool
-    private var lastObservedClipboardChangeCount: Int?
-    private let clipboardFilesWriter: @MainActor @Sendable ([URL]) -> Void
-    private var lastSentClipboardFileURLs: [URL]?
-    private var lastReceivedClipboardFileURLs: [URL]?
+    let clipboardReader: @MainActor @Sendable () -> String?
+    let clipboardWriter: @MainActor @Sendable (String) -> Void
+    let clipboardFilesReader: @MainActor @Sendable () -> [URL]?
+    let clipboardChangeCount: @MainActor @Sendable () -> Int?
+    let clipboardIsConcealed: @MainActor @Sendable () -> Bool
+    var lastObservedClipboardChangeCount: Int?
+    let clipboardFilesWriter: @MainActor @Sendable ([URL]) -> Void
+    var lastSentClipboardFileURLs: [URL]?
+    var lastReceivedClipboardFileURLs: [URL]?
     public var canRememberPassword: Bool { !isTemporary }
     private let deviceStore: DeviceStore
     private nonisolated let callbackGeneration = SessionCallbackGeneration()
@@ -271,13 +274,19 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             NSPasteboard.general.setString(text, forType: .string)
             #endif
         }
-        self.clipboardFilesReader = clipboardFilesReader ?? {
+        self.clipboardFilesReader = clipboardFilesReader ?? (clipboardReader != nil ? { @MainActor in nil } : { @MainActor in
             #if canImport(AppKit)
             return (NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: nil) as? [URL])?.filter { $0.isFileURL }
             #else
             return nil
             #endif
-        }
+        })
+        self.clipboardFilesWriter = clipboardFilesWriter ?? (clipboardWriter != nil ? { @MainActor _ in } : { @MainActor urls in
+            #if canImport(AppKit)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects(urls as [NSURL])
+            #endif
+        })
         // An injected reader replaces the system pasteboard, so its change count and markers do not apply.
         let usesSystemPasteboard = clipboardReader == nil && clipboardFilesReader == nil
         self.clipboardChangeCount = clipboardChangeCount ?? (usesSystemPasteboard ? {
@@ -297,12 +306,6 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             return false
             #endif
         } : { false })
-        self.clipboardFilesWriter = clipboardFilesWriter ?? { urls in
-            #if canImport(AppKit)
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects(urls as [NSURL])
-            #endif
-        }
         self.keyboardConfiguration = isTemporary ? KeyboardToolbarConfiguration() : keyboardStore.load(for: device.id)
         let rfb = RFBClient(
             host: device.host,
@@ -682,7 +685,54 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                       !self.isSuspendedByAppLock,
                       self.sessionState == .connected else { return }
                 self.lastReceivedClipboardText = text
+                self.lastReceivedClipboardFileURLs = nil
                 self.clipboardWriter(text)
+                self.lastObservedClipboardChangeCount = self.clipboardChangeCount()
+            }
+        }
+
+        rdp.onRemoteFilesAdvertised = { [weak self] descriptors in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.isForegroundSession, self.sessionState == .connected else { return }
+                for desc in descriptors where !desc.isDirectory {
+                    let job = FileTransferJob(direction: .download, filename: desc.fileName, totalBytes: desc.fileSize)
+                    if let attempt = self.fileTransfers.register(job, cancel: { [weak self] in
+                        self?.rdpClient?.cancelFileDownload()
+                    }) {
+                        self.activeDownloadAttempts[desc.fileName] = attempt
+                        if desc.fileSize == 0 {
+                            self.fileTransfers.recordProgress(0, for: attempt)
+                        }
+                    }
+                }
+            }
+        }
+
+        rdp.onFileDownloadProgress = { [weak self] fileName, offset, total in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let attempt = self.activeDownloadAttempts[fileName] else { return }
+                self.fileTransfers.recordProgress(offset, for: attempt)
+            }
+        }
+
+        rdp.onFileUploadProgress = { [weak self] fileName, offset, total in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let attempt = self.activeUploadAttempts[fileName] else { return }
+                self.fileTransfers.recordProgress(offset, for: attempt)
+                if offset >= total {
+                    self.fileTransfers.complete(attempt)
+                    self.activeUploadAttempts.removeValue(forKey: fileName)
+                    let jobID = attempt.jobID
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 2_500_000_000)
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            self?.fileTransfers.dismiss(jobID)
+                        }
+                    }
+                }
             }
         }
 
@@ -696,12 +746,51 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                       !self.isSuspendedByAppLock,
                       self.sessionState == .connected else { return }
                 self.lastReceivedClipboardFileURLs = urls
+                self.downloadedRemoteFiles = urls
                 self.clipboardFilesWriter(urls)
+                self.lastReceivedClipboardText = self.clipboardReader()
+                self.lastObservedClipboardChangeCount = self.clipboardChangeCount()
+                for url in urls {
+                    let name = url.lastPathComponent
+                    let matchingKeys = self.activeDownloadAttempts.keys.filter { key in
+                        key == name || key.hasPrefix(name + "\\") || key.hasPrefix(name + "/")
+                    }
+                    for key in matchingKeys {
+                        if let attempt = self.activeDownloadAttempts.removeValue(forKey: key) {
+                            let saved = FileTransferTaskStore.SavedFile(url: url, accessRoot: url.deletingLastPathComponent())
+                            self.fileTransfers.complete(attempt, savedFile: saved)
+                            let jobID = attempt.jobID
+                            Task { @MainActor [weak self] in
+                                try? await Task.sleep(nanoseconds: 3_500_000_000)
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    self?.fileTransfers.dismiss(jobID)
+                                }
+                            }
+                        }
+                    }
+                }
                 let count = urls.count
                 if count == 1, let name = urls.first?.lastPathComponent {
-                    self.fileUploadNotice = String(format: AppLocalization.string("File \"%@\" copied from Windows. Press ⌘V in Mac Finder to paste."), name)
+                    self.fileUploadNotice = String(format: AppLocalization.string("File \"%@\" received from Windows."), name)
                 } else {
-                    self.fileUploadNotice = String(format: AppLocalization.string("%d files copied from Windows. Press ⌘V in Mac Finder to paste."), count)
+                    self.fileUploadNotice = String(format: AppLocalization.string("%d files received from Windows."), count)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        self?.fileUploadNotice = nil
+                    }
+                }
+            }
+        }
+
+        rdp.onClipboardFilesDownloadFailed = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let pending = Array(self.activeDownloadAttempts.values)
+                self.activeDownloadAttempts.removeAll()
+                for attempt in pending {
+                    self.fileTransfers.fail(attempt, message: AppLocalization.string("File transfer cancelled or failed."))
                 }
             }
         }
@@ -710,7 +799,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             guard let self else { return }
             Task { @MainActor [weak self] in
                 guard let self, self.isRemoteAudioEnabled, !self.isRemoteAudioMuted, !self.isSuspendedByAppLock else { return }
-                try? self.rdpAudioPlayer?.enqueue(sample)
+                _ = try? self.rdpAudioPlayer?.enqueue(sample)
             }
         }
     }
@@ -840,6 +929,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         clearPasswordPrompt()
         stopFileTransfers()
         client.disconnect()
+        rdpClient?.disconnect()
     }
 
     private func clearPasswordPrompt() {
@@ -1048,6 +1138,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             self.automaticReconnectTask = nil
             self.clearPasswordPrompt()
             self.client.disconnect()
+            self.rdpClient?.disconnect()
             self.startSession(preservingReconnectBudget: true)
         }
         isAwaitingAutomaticReconnect = true
@@ -1299,7 +1390,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     public var canSendRemoteCommands: Bool {
         let isConnected = isRDP ? sessionState == .connected : client.state == .connected
-        return isForegroundSession && !isObserveOnly && isConnected
+        return allowsRemoteInput && isConnected
     }
 
     /// Send a single key tap (down + up)
@@ -1452,7 +1543,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     }
 
     public func handleThreeFingerSwipe(_ direction: MacKeyMap.ThreeFingerSwipe) {
-        guard !isObserveOnly, client.state == .connected else { return }
+        guard canSendRemoteCommands else { return }
         trackpadEngine.releaseAllButtons()
         // Sticky modifiers must not turn a standard Control-arrow into another shortcut.
         releaseAllModifiers()

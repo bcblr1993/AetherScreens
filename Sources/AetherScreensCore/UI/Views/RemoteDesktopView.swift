@@ -192,26 +192,46 @@ public struct RemoteDesktopView: View {
                 #endif
         }
         .overlay(alignment: .top) {
-            if let notice = viewModel.passwordSaveNotice {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text(AppLocalization.string(notice)).font(.caption)
-                    Spacer(minLength: 0)
-                    Button { viewModel.passwordSaveNotice = nil } label: {
-                        Image(systemName: "xmark")
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
+            VStack(spacing: 8) {
+                if let notice = viewModel.passwordSaveNotice {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        Text(AppLocalization.string(notice)).font(.caption)
+                        Spacer(minLength: 0)
+                        Button { viewModel.passwordSaveNotice = nil } label: {
+                            Image(systemName: "xmark")
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(AppLocalization.string("Dismiss"))
+                        .accessibilityHint(AppLocalization.string("Close this notice and continue the connection."))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(AppLocalization.string("Dismiss"))
-                    .accessibilityHint(AppLocalization.string("Close this notice and continue the connection."))
+                    .padding(12)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier("password-save-notice")
                 }
-                .padding(12)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 12)
-                .padding(.top, usesFullscreenLayout ? 12 : 68)
-                .accessibilityIdentifier("password-save-notice")
+
+                if let notice = viewModel.fileUploadNotice {
+                    fileUploadNoticeView(notice)
+                        .frame(maxWidth: 420)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                }
+
+                if !viewModel.downloadedRemoteFiles.isEmpty {
+                    downloadedRemoteFilesPillView
+                        .frame(maxWidth: 560)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .opacity
+                        ))
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.top, usesFullscreenLayout ? 12 : 68)
         }
         #if canImport(UIKit)
         .ignoresSafeArea(usesFullscreenLayout ? .all : [])
@@ -343,6 +363,7 @@ public struct RemoteDesktopView: View {
                 viewport: CGRect(x: -originX, y: -originY,
                     width: geometry.size.width, height: geometry.size.height),
                 isPanning: viewModel.isPanningViewport,
+                isRDP: viewModel.isRDP,
                 onPan: { dx, dy in
                     viewModel.panViewport(dx: dx, dy: dy, limitX: limitX, limitY: limitY)
                 },
@@ -356,6 +377,18 @@ public struct RemoteDesktopView: View {
                     if scale != viewModel.zoomScale { viewModel.zoomScale = scale }
                 },
                 onTextEvent: { text in viewModel.sendTextString(text) },
+                onDragOutsideDetected: {
+                    if viewModel.isRDP && viewModel.downloadedRemoteFiles.isEmpty {
+                        viewModel.fileUploadNotice = AppLocalization.string("Tip: To transfer files from Windows to Mac, press Ctrl+C or Cmd+C in Windows to copy.")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                if viewModel.fileUploadNotice?.contains("Ctrl+C") == true {
+                                    viewModel.fileUploadNotice = nil
+                                }
+                            }
+                        }
+                    }
+                },
                 onPointerEvent: { mask, x, y in
                     viewModel.sendNativePointer(buttonMask: mask, x: x, y: y)
                 },
@@ -537,6 +570,94 @@ public struct RemoteDesktopView: View {
         }
         .buttonStyle(.plain)
         .help(AppLocalization.string("Restore the session if input stops responding after unlocking"))
+    }
+
+    private func fileUploadNoticeView(_ notice: String) -> some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "doc.badge.arrow.up.fill")
+                .foregroundStyle(Color.accentColor)
+            Text(notice)
+                .font(.caption.weight(.medium))
+            Spacer(minLength: 0)
+            Button { viewModel.fileUploadNotice = nil } label: {
+                Image(systemName: "xmark")
+                    .frame(minWidth: 28, minHeight: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppLocalization.string("Dismiss"))
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .accessibilityIdentifier("file-upload-notice")
+    }
+
+    private var downloadedRemoteFilesPillView: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.doc.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.downloadedRemoteFiles.count == 1
+                     ? String(format: AppLocalization.string("File \"%@\" ready from Windows"), viewModel.downloadedRemoteFiles[0].lastPathComponent)
+                     : String(format: AppLocalization.string("%d files ready from Windows"), viewModel.downloadedRemoteFiles.count))
+                    .font(.caption.weight(.semibold))
+
+                Text(AppLocalization.string("Drag badge to Mac Finder/Desktop, or press ⌘V"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 6) {
+                ForEach(viewModel.downloadedRemoteFiles.prefix(2), id: \.self) { url in
+                    HStack(spacing: 4) {
+                        Image(systemName: "doc.fill")
+                            .font(.caption2)
+                        Text(url.lastPathComponent)
+                            .font(.caption2.weight(.medium))
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.accentColor.opacity(0.18), in: Capsule())
+                    .draggable(url)
+                    .help(AppLocalization.string("Drag to Mac Finder or Desktop"))
+                }
+            }
+
+            #if canImport(AppKit)
+            Button {
+                viewModel.revealDownloadedFiles()
+            } label: {
+                Label(AppLocalization.string("Show in Finder"), systemImage: "folder")
+                    .font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            #endif
+
+            Button {
+                viewModel.downloadedRemoteFiles = []
+            } label: {
+                Image(systemName: "xmark")
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppLocalization.string("Dismiss"))
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
+        .accessibilityIdentifier("downloaded-remote-files-pill")
     }
 
     // MARK: - Connecting State
@@ -796,6 +917,14 @@ public struct RemoteDesktopView: View {
                         Label(AppLocalization.string("Type Clipboard as Keystrokes"), systemImage: "keyboard.badge.ellipsis")
                     }
                     .disabled(viewModel.isObserveOnly || viewModel.sessionState != .connected)
+                    if !viewModel.downloadedRemoteFiles.isEmpty {
+                        Divider()
+                        Button {
+                            viewModel.revealDownloadedFiles()
+                        } label: {
+                            Label(AppLocalization.string("Show Received Files in Finder"), systemImage: "folder")
+                        }
+                    }
                 } label: {
                     Label(AppLocalization.string("Clipboard"), systemImage: "doc.on.clipboard")
                 }

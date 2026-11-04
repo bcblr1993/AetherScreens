@@ -2074,6 +2074,7 @@ final class AetherScreensIOSUITests: XCTestCase {
 
     private func verifyControlledConnectionRecovery(language: String) throws {
         guard ProcessInfo.processInfo.environment["AETHERSCREENS_GESTURE_QA"] == "1" else { throw XCTSkip("Requires the loopback RFB fixture") }
+        continueAfterFailure = false
         func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
         let app = makeApp(language: language)
         app.launch()
@@ -2097,9 +2098,16 @@ final class AetherScreensIOSUITests: XCTestCase {
         shift.tap()
         _ = try waitForFixtureEvents { $0.contains { $0["type"] as? String == "key" && $0["key"] as? Int == 65505 && $0["down"] as? Int == 1 } }
         _ = try gestureFixtureData(path: "drop")
-        XCTAssertTrue(app.buttons[label("Retry Connection", "重试连接")].waitForExistence(timeout: 10))
-        attachScreenshot(app, name: "Controlled Remote Connection Lost " + language)
-        app.buttons[label("Retry Connection", "重试连接")].tap()
+        let retry = app.buttons[label("Retry Connection", "重试连接")]
+        if retry.waitForExistence(timeout: 2), retry.isHittable {
+            attachScreenshot(app, name: "Controlled Remote Connection Lost " + language)
+            retry.tap()
+        }
+        // Foreground sessions can reconnect automatically before the retry
+        // button can be queried. Require a real frame on a different socket.
+        _ = try waitForFixtureEvents(timeout: 15) { events in
+            events.contains { $0["type"] as? String == "frame" && $0["connection"] as? Int != oldConnection }
+        }
         XCTAssertTrue(frame.waitForExistence(timeout: 10))
         let newConnection = try lastFixtureConnection()
         XCTAssertNotEqual(newConnection, oldConnection, "Recovery must establish a new TCP session")
@@ -2145,8 +2153,8 @@ final class AetherScreensIOSUITests: XCTestCase {
         try XCTUnwrap(JSONSerialization.jsonObject(with: gestureFixtureData(path: "events")) as? [[String: Any]])
     }
 
-    private func waitForFixtureEvents(_ predicate: ([[String: Any]]) -> Bool) throws -> [[String: Any]] {
-        let deadline = Date().addingTimeInterval(3)
+    private func waitForFixtureEvents(timeout: TimeInterval = 3, _ predicate: ([[String: Any]]) -> Bool) throws -> [[String: Any]] {
+        let deadline = Date().addingTimeInterval(timeout)
         var events = try fixtureEvents()
         while !predicate(events), Date() < deadline { Thread.sleep(forTimeInterval: 0.025); events = try fixtureEvents() }
         XCTAssertTrue(predicate(events), "Expected received packets must reach the new session")
@@ -2583,6 +2591,35 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Connect to quick-qa.invalid"].exists)
     }
 
+    func testPhysicalAppStoreScreenshots() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("App Store capture uses the authorized physical iPhone")
+        #endif
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_STORE_CAPTURE"] == "1" else {
+            throw XCTSkip("Requires explicit App Store screenshot capture opt-in")
+        }
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        for language in ["en", "zh-Hans"] {
+            func label(_ en: String, _ zh: String) -> String { language == "zh-Hans" ? zh : en }
+            let app = makeApp(language: language)
+            app.launch()
+            defer { app.terminate() }
+            let add = app.buttons[label("Add Computer", "添加电脑")]
+            XCTAssertTrue(add.waitForExistence(timeout: 15))
+            add.tap()
+            XCTAssertTrue(app.navigationBars[label("Add Computer", "添加电脑")].waitForExistence(timeout: 5))
+            // Capture the unsaved form only: never expose the user's library,
+            // connect to a private desktop, or modify stored credentials.
+            attachScreenshot(app, name: "AppStore Add Computer " + language)
+            app.buttons[label("Cancel", "取消")].tap()
+            app.buttons[label("Quick Connect", "快速连接")].tap()
+            XCTAssertTrue(app.navigationBars[label("Quick Connect", "快速连接")].waitForExistence(timeout: 5))
+            attachScreenshot(app, name: "AppStore Quick Connect " + language)
+            app.buttons[label("Cancel", "取消")].tap()
+        }
+    }
+
     func testPrimaryScreensOnIPhone() {
         let app = makeApp()
         app.launch()
@@ -2645,6 +2682,48 @@ final class AetherScreensIOSUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Hide Keyboard"].waitForExistence(timeout: 5))
         attachScreenshot(app, name: "Remote Keyboard")
         app.buttons["Disconnect"].tap()
+    }
+
+    func testPhysicalCloudKitSynchronization() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Requires the authorized physical device's iCloud account")
+        #endif
+        guard ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_ICLOUD_QA"] == "1" else {
+            throw XCTSkip("Requires explicit opt-in to live private-database synchronization")
+        }
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        let app = makeApp()
+        app.launch()
+        let menu = app.buttons["More Actions"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 15))
+        menu.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["Settings"].waitForExistence(timeout: 5))
+        app.buttons["Settings"].tap()
+        let toggle = app.switches["icloud-sync-toggle"].firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10))
+        let wasEnabled = toggle.value as? String == "1"
+        let restoreDisabled = ProcessInfo.processInfo.environment["AETHERSCREENS_LIVE_ICLOUD_RESTORE_DISABLED"] == "1"
+        // SwiftUI exposes both the full row and the trailing native switch.
+        // The row's center can miss the switch on a physical iPhone.
+        func tapSyncSwitch() {
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        }
+        defer {
+            if (!wasEnabled || restoreDisabled), toggle.exists, toggle.value as? String == "1" { tapSyncSwitch() }
+        }
+        if !wasEnabled {
+            tapSyncSwitch()
+            let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
+            XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed,
+                           "The physical switch must be enabled before testing synchronization")
+        }
+        let sync = app.buttons["Sync Now"]
+        XCTAssertTrue(sync.waitForExistence(timeout: 90))
+        sync.tap()
+        let completed = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Last synced:")).firstMatch
+        XCTAssertTrue(completed.waitForExistence(timeout: 90), "A live CloudKit read/write must complete successfully")
+        attachScreenshot(app, name: "Physical iCloud synchronization completed")
     }
 
     func testLiveRemoteSession() throws {

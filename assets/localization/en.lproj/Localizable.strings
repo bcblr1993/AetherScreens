@@ -666,6 +666,16 @@
 
 "%d files copied from Windows. Press ⌘V in Mac Finder to paste." = "%d files copied from Windows. Press ⌘V in Mac Finder to paste.";
 
+"File \"%@\" ready from Windows" = "File \"%@\" ready from Windows";
+
+"%d files ready from Windows" = "%d files ready from Windows";
+
+"Drag badge to Mac Finder/Desktop, or press ⌘V" = "Drag badge to Mac Finder/Desktop, or press ⌘V";
+
+"Drag to Mac Finder or Desktop" = "Drag to Mac Finder or Desktop";
+
+"Show Received Files in Finder" = "Show Received Files in Finder";
+
 "File clipboard transfer requested. Paste on the remote computer to check." = "File clipboard transfer requested. Paste on the remote computer to check.";
 
 "File clipboard transfer is unavailable." = "File clipboard transfer is unavailable.";
@@ -688,3 +698,32 @@
 "Delete \"%@\"?" = "Delete \"%@\"?";
 
 "The saved password and SSH credentials for this computer are removed too. With iCloud Sync on, it is also removed from your other devices." = "The saved password and SSH credentials for this computer are removed too. With iCloud Sync on, it is also removed from your other devices.";
+
+"Sending \"%@\" to Windows..." = "Sending \"%@\" to Windows...";
+"Transferred \"%@\" to Windows." = "Transferred \"%@\" to Windows.";
+"File \"%@\" received from Windows." = "File \"%@\" received from Windows.";
+"%d files received from Windows." = "%d files received from Windows.";
+"Receive Files from Windows" = "Receive Files from Windows";
+"In Windows, press Ctrl+C or right-click Copy on any file or folder. AetherScreens will download it to your Mac in real time." = "In Windows, press Ctrl+C or right-click Copy on any file or folder. AetherScreens will download it to your Mac in real time.";
+"Copy Selected Files in Windows" = "Copy Selected Files in Windows";
+"Received Files" = "Received Files";
+"No files received yet in this session." = "No files received yet in this session.";
+"Selected files will be directly transferred to the active Windows window or Desktop." = "Selected files will be directly transferred to the active Windows window or Desktop.";
+"Tip: To transfer files from Windows to Mac, press Ctrl+C or Cmd+C in Windows to copy." = "Tip: To transfer files from Windows to Mac, press Ctrl+C or Cmd+C in Windows to copy.";
+"Display Quality & Resolution" = "Display Quality & Resolution";
+"Windows Remote Desktop (RDP · 32-bit True Color)" = "Windows Remote Desktop (RDP · 32-bit True Color)";
+"Apple Screen Sharing / VNC Session" = "Apple Screen Sharing / VNC Session";
+"Current Resolution" = "Current Resolution";
+"Color Depth" = "Color Depth";
+"32-bit True Color (Hardware Accelerated)" = "32-bit True Color (Hardware Accelerated)";
+"Scaling & Zoom" = "Scaling & Zoom";
+"Actual Size (1:1)" = "Actual Size (1:1)";
+"Fit to Window scales the remote desktop to fill your screen. Actual Size renders 1:1 pixel for pixel." = "Fit to Window scales the remote desktop to fill your screen. Actual Size renders 1:1 pixel for pixel.";
+"Automatic Compression" = "Automatic Compression";
+"Adjusts compression automatically based on network speed." = "Adjusts compression automatically based on network speed.";
+"Full Color (32-bit)" = "Full Color (32-bit)";
+"Reduced Colors (16-bit)" = "Reduced Colors (16-bit)";
+"Reduced colors use less network data but may show subtle color banding. Changing this setting will reconnect." = "Reduced colors use less network data but may show subtle color banding. Changing this setting will reconnect.";
+"Done" = "Done";
+"File transfer cancelled or failed." = "File transfer cancelled or failed.";
+

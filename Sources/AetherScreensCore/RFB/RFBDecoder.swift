@@ -42,7 +42,7 @@ public enum RFBDecoder {
     /// Parses the 4-byte SecurityResult code (0 = OK, 1 = Failed).
     public static func parseSecurityResult(_ data: Data) -> UInt32? {
         guard data.count >= 4 else { return nil }
-        return data.withUnsafeBytes { $0.load(as: UInt32.self).bigEndian }
+        return data.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian }
     }
 
     /// Parses the ServerInit message.
@@ -50,13 +50,13 @@ public enum RFBDecoder {
         // Minimum size: 2 (width) + 2 (height) + 16 (pixel format) + 4 (name length) = 24 bytes
         guard data.count >= 24 else { return nil }
 
-        let width = data.subdata(in: 0..<2).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
-        let height = data.subdata(in: 2..<4).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+        let width = data.subdata(in: 0..<2).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
+        let height = data.subdata(in: 2..<4).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
 
         let pixelFormatData = data.subdata(in: 4..<20)
         guard let pixelFormat = RFBPixelFormat.parse(from: pixelFormatData) else { return nil }
 
-        let nameLength = Int(data.subdata(in: 20..<24).withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+        let nameLength = Int(data.subdata(in: 20..<24).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
         let totalNeeded = 24 + nameLength
         guard data.count >= totalNeeded else { return nil }
 
@@ -74,7 +74,7 @@ public enum RFBDecoder {
         guard data.count >= 4, data[0] == RFBConstants.ServerMessageType.framebufferUpdate.rawValue else {
             return nil
         }
-        return data.subdata(in: 2..<4).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+        return data.subdata(in: 2..<4).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
     }
 
     /// Parses a single rectangle header (12 bytes: x, y, width, height, encodingType).
@@ -86,11 +86,11 @@ public enum RFBDecoder {
         encoding: RFBConstants.EncodingType
     )? {
         guard data.count >= 12 else { return nil }
-        let x = data.subdata(in: 0..<2).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
-        let y = data.subdata(in: 2..<4).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
-        let width = data.subdata(in: 4..<6).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
-        let height = data.subdata(in: 6..<8).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
-        let encRaw = data.subdata(in: 8..<12).withUnsafeBytes { $0.load(as: Int32.self).bigEndian }
+        let x = data.subdata(in: 0..<2).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
+        let y = data.subdata(in: 2..<4).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
+        let width = data.subdata(in: 4..<6).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
+        let height = data.subdata(in: 6..<8).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
+        let encRaw = data.subdata(in: 8..<12).withUnsafeBytes { $0.loadUnaligned(as: Int32.self).bigEndian }
 
         return (x, y, width, height, RFBConstants.EncodingType(rawValue: encRaw))
     }
@@ -124,7 +124,7 @@ public enum RFBDecoder {
         guard data.count >= 8, data[0] == RFBConstants.ServerMessageType.serverCutText.rawValue else {
             return nil
         }
-        let length = Int(data.subdata(in: 4..<8).withUnsafeBytes { $0.load(as: UInt32.self).bigEndian })
+        let length = Int(data.subdata(in: 4..<8).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self).bigEndian })
         guard data.count >= 8 + length else { return nil }
 
         let textData = data.subdata(in: 8..<(8 + length))

@@ -17,92 +17,103 @@ struct FileTransferProgressView: View {
     #endif
 
     var body: some View {
-        if !store.jobs.isEmpty {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(visibleJobs) { job in
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack {
-                                    Image(systemName: job.direction == .upload ? "arrow.up.doc" : "arrow.down.doc")
-                                    Text(store.displayFilename(for: job)).lineLimit(1).truncationMode(.middle)
-                                    Spacer(minLength: 8)
-                                    if active(job) {
-                                        Button { _ = store.cancel(job.id) } label: { transferAction("xmark.circle") }
-                                            .accessibilityLabel(AppLocalization.string("Cancel transfer"))
-                                            .accessibilityIdentifier("file-transfer-cancel-\(job.id)")
-                                    } else {
-                                        Button { store.dismiss(job.id) } label: { transferAction("xmark") }
-                                            .accessibilityLabel(AppLocalization.string("Dismiss"))
-                                            .accessibilityIdentifier("file-transfer-dismiss-\(job.id)")
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                if active(job) {
-                                    if !job.isSizeKnown || job.transferredBytes == 0 { ProgressView() }
-                                    else { ProgressView(value: job.fractionCompleted) }
-                                }
-                                Text(status(job)).font(.caption).foregroundStyle(.secondary)
-                                #if canImport(AppKit)
-                                if let saved = store.savedFile(for: job.id) {
-                                    Button {
-                                        let opened = saved.accessRoot.startAccessingSecurityScopedResource()
-                                        defer { if opened { saved.accessRoot.stopAccessingSecurityScopedResource() } }
-                                        NSWorkspace.shared.activateFileViewerSelecting([saved.url])
-                                    } label: {
-                                        Label(AppLocalization.string("Show in Finder"), systemImage: "folder")
-                                    }
-                                    .font(.caption)
-                                    .accessibilityIdentifier("file-transfer-reveal-\(job.id)")
-                                }
-                                #elseif canImport(UIKit)
-                                if let saved = store.savedFile(for: job.id) {
-                                    Button {
-                                        guard shareSelection == nil else { return }
-                                        shareSelection = .init(jobID: job.id, saved: saved)
-                                    } label: {
-                                        Label(AppLocalization.string("Share"), systemImage: "square.and.arrow.up")
-                                            .frame(minHeight: 44)
-                                    }
-                                    .font(.caption)
-                                    .disabled(shareSelection != nil)
-                                    .accessibilityIdentifier("file-transfer-share-\(job.id)")
-                                    .background {
-                                        if let selection = shareSelection, selection.jobID == job.id {
-                                            DownloadedFileShareSheet(saved: selection.saved) {
-                                                Task { @MainActor in
-                                                    if shareSelection?.id == selection.id { shareSelection = nil }
-                                                }
-                                            }
-                                            .frame(width: 1, height: 1)
-                                            .accessibilityHidden(true)
+        if !visibleJobs.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(visibleJobs.prefix(3)) { job in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: job.direction == .upload ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Color.accentColor)
+                            Text(store.displayFilename(for: job))
+                                .font(.caption.weight(.semibold))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            if active(job) {
+                                Button { _ = store.cancel(job.id) } label: { transferAction("xmark.circle") }
+                                    .accessibilityLabel(AppLocalization.string("Cancel transfer"))
+                                    .accessibilityIdentifier("file-transfer-cancel-\(job.id)")
+                            } else {
+                                Button { store.dismiss(job.id) } label: { transferAction("xmark") }
+                                    .accessibilityLabel(AppLocalization.string("Dismiss"))
+                                    .accessibilityIdentifier("file-transfer-dismiss-\(job.id)")
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        if active(job) {
+                            if !job.isSizeKnown || job.transferredBytes == 0 {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                ProgressView(value: job.fractionCompleted)
+                                    .controlSize(.small)
+                            }
+                        }
+
+                        HStack {
+                            Text(status(job))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 4)
+                            Text(byteProgress(job))
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("file-transfer-bytes-\(job.id)")
+                        }
+
+                        #if canImport(AppKit)
+                        if let saved = store.savedFile(for: job.id) {
+                            Button {
+                                let opened = saved.accessRoot.startAccessingSecurityScopedResource()
+                                defer { if opened { saved.accessRoot.stopAccessingSecurityScopedResource() } }
+                                NSWorkspace.shared.activateFileViewerSelecting([saved.url])
+                            } label: {
+                                Label(AppLocalization.string("Show in Finder"), systemImage: "folder")
+                                    .font(.caption2)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .accessibilityIdentifier("file-transfer-reveal-\(job.id)")
+                        }
+                        #elseif canImport(UIKit)
+                        if let saved = store.savedFile(for: job.id) {
+                            Button {
+                                guard shareSelection == nil else { return }
+                                shareSelection = .init(jobID: job.id, saved: saved)
+                            } label: {
+                                Label(AppLocalization.string("Share"), systemImage: "square.and.arrow.up")
+                                    .frame(minHeight: 44)
+                            }
+                            .font(.caption)
+                            .disabled(shareSelection != nil)
+                            .accessibilityIdentifier("file-transfer-share-\(job.id)")
+                            .background {
+                                if let selection = shareSelection, selection.jobID == job.id {
+                                    DownloadedFileShareSheet(saved: selection.saved) {
+                                        Task { @MainActor in
+                                            if shareSelection?.id == selection.id { shareSelection = nil }
                                         }
                                     }
+                                    .frame(width: 1, height: 1)
+                                    .accessibilityHidden(true)
                                 }
-                                #endif
-                                Text(byteProgress(job))
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                                    .accessibilityIdentifier("file-transfer-bytes-\(job.id)")
                             }
-                            .id(job.id)
-                            .transition(.opacity)
                         }
+                        #endif
                     }
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: visibleJobs.map(\.id))
-                    .padding(12)
+                    .padding(8)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+                    .id(job.id)
+                    .transition(.opacity)
                 }
-                .scrollBounceBehavior(.basedOnSize)
-                .onChange(of: visibleJobs.first(where: { active($0) })?.id, initial: true) { _, id in
-                    guard let id else { return }
-                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
-                        proxy.scrollTo(id, anchor: .top)
-                    }
-                }
-                .frame(maxWidth: 320, maxHeight: 240)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-
             }
+            .padding(10)
+            .frame(width: 260)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 2)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: visibleJobs.map(\.id))
         }
     }
 
