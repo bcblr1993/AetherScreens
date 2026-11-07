@@ -1534,6 +1534,34 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         releaseActiveOnceModifiers()
     }
 
+    /// Execute a predefined remote media or hardware system key (Volume, Play/Pause, Brightness).
+    public func executeRemoteSystemKey(_ systemKey: MacKeyMap.RemoteSystemKey) {
+        guard canSendRemoteCommands else { return }
+        let sequence = systemKey.keySequence(forMac: device.deviceType == .mac)
+        for item in sequence {
+            sendRawKeyEvent(down: item.down, keySym: item.key)
+        }
+        releaseActiveOnceModifiers()
+    }
+
+    /// Type arbitrary text in paced chunks so long clipboard pastes or scripts do not overflow remote input queues.
+    public func typeTextPaced(_ text: String, chunkSize: Int = 64, interChunkDelayNanoseconds: UInt64 = 12_000_000) {
+        guard canSendRemoteCommands else { return }
+        let chunks = KeystrokePacer.chunkAndNormalize(text, chunkSize: chunkSize)
+        guard let first = chunks.first else { return }
+        sendTextString(first)
+        guard chunks.count > 1 else { return }
+        let remaining = Array(chunks.dropFirst())
+        let generation = inputGeneration
+        Task { @MainActor [weak self] in
+            for chunk in remaining {
+                try? await Task.sleep(nanoseconds: interChunkDelayNanoseconds)
+                guard let self, self.inputGeneration == generation, self.canSendRemoteCommands else { return }
+                self.sendTextString(chunk)
+            }
+        }
+    }
+
     /// Send a reusable quick snippet to the remote session, optionally appending Return.
     public func executeQuickSnippet(_ snippet: QuickSnippet) {
         guard canSendRemoteCommands, !snippet.content.isEmpty else { return }
@@ -1738,7 +1766,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// does not accept legacy ClientCutText in the tested account session.
     public func syncClipboardToMac() {
         guard !isObserveOnly else { return }
-        if let string = clipboardReader() { sendTextString(string) }
+        if let string = clipboardReader() {
+            typeTextPaced(string)
+        }
     }
 
     /// Explicit clipboard transfer, distinct from inserting text as key events.

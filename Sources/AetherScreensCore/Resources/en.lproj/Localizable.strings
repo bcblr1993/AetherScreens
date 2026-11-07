@@ -807,6 +807,15 @@
 "Active" = "Active";
 "Completed" = "Completed";
 "Failed" = "Failed";
+"Media & Hardware Keys" = "Media & Hardware Keys";
+"Volume Up" = "Volume Up";
+"Volume Down" = "Volume Down";
+"Mute Audio" = "Mute Audio";
+"Play / Pause" = "Play / Pause";
+"Next Track" = "Next Track";
+"Previous Track" = "Previous Track";
+"Brightness Up" = "Brightness Up";
+"Brightness Down" = "Brightness Down";
 
 
 

@@ -1244,6 +1244,16 @@ public struct RemoteDesktopView: View {
                 }
             }
             Divider()
+            Menu(AppLocalization.string("Media & Hardware Keys")) {
+                ForEach(MacKeyMap.RemoteSystemKey.allCases) { systemKey in
+                    Button {
+                        viewModel.executeRemoteSystemKey(systemKey)
+                    } label: {
+                        Label(AppLocalization.string(systemKey.rawValue), systemImage: systemKey.iconName)
+                    }
+                }
+            }
+            Divider()
             Menu(AppLocalization.string("Quick Snippets")) {
                 ForEach(QuickSnippetStore.shared.snippets) { snippet in
                     Button {

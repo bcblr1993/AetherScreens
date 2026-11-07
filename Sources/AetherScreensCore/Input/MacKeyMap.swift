@@ -45,6 +45,9 @@ public enum MacKeyMap {
     public static let f10: UInt32 = 0xFFC7
     public static let f11: UInt32 = 0xFFC8
     public static let f12: UInt32 = 0xFFC9
+    public static let f13: UInt32 = 0xFFCA
+    public static let f14: UInt32 = 0xFFCB
+    public static let f15: UInt32 = 0xFFCC
 
     /// Convert a single Character into an X11 KeySym.
     public static func keySym(for char: Character) -> UInt32? {
@@ -215,5 +218,121 @@ public enum MacKeyMap {
                 return [(commandLeft, true), (key, true), (key, false), (commandLeft, false)]
             }
         }
+    }
+
+    /// Predefined Remote Media & Hardware System Keys
+    public enum RemoteSystemKey: String, CaseIterable, Identifiable, Sendable {
+        case volumeUp = "Volume Up"
+        case volumeDown = "Volume Down"
+        case volumeMute = "Mute Audio"
+        case mediaPlayPause = "Play / Pause"
+        case mediaNextTrack = "Next Track"
+        case mediaPreviousTrack = "Previous Track"
+        case brightnessUp = "Brightness Up"
+        case brightnessDown = "Brightness Down"
+
+        public var id: String { rawValue }
+
+        public var iconName: String {
+            switch self {
+            case .volumeUp: return "speaker.wave.3.fill"
+            case .volumeDown: return "speaker.wave.1.fill"
+            case .volumeMute: return "speaker.slash.fill"
+            case .mediaPlayPause: return "playpause.fill"
+            case .mediaNextTrack: return "forward.end.fill"
+            case .mediaPreviousTrack: return "backward.end.fill"
+            case .brightnessUp: return "sun.max.fill"
+            case .brightnessDown: return "sun.min.fill"
+            }
+        }
+
+        /// Standard X11 XF86 keysym for the media or brightness key.
+        public var keySym: UInt32 {
+            switch self {
+            case .volumeUp: return 0x1008FF13       // XF86XK_AudioRaiseVolume
+            case .volumeDown: return 0x1008FF11     // XF86XK_AudioLowerVolume
+            case .volumeMute: return 0x1008FF12     // XF86XK_AudioMute
+            case .mediaPlayPause: return 0x1008FF14 // XF86XK_AudioPlay
+            case .mediaNextTrack: return 0x1008FF17 // XF86XK_AudioNext
+            case .mediaPreviousTrack: return 0x1008FF16 // XF86XK_AudioPrev
+            case .brightnessUp: return 0x1008FF02   // XF86XK_MonBrightnessUp
+            case .brightnessDown: return 0x1008FF03 // XF86XK_MonBrightnessDown
+            }
+        }
+
+        /// Keysym used when sending to macOS Screen Sharing (where F14/F15 control display brightness).
+        public var macEffectiveKeySym: UInt32 {
+            switch self {
+            case .brightnessUp: return MacKeyMap.f15
+            case .brightnessDown: return MacKeyMap.f14
+            default: return keySym
+            }
+        }
+
+        public func keySequence(forMac: Bool) -> [(key: UInt32, down: Bool)] {
+            let sym = forMac ? macEffectiveKeySym : keySym
+            return [(sym, true), (sym, false)]
+        }
+    }
+}
+
+/// Paces multi-character text and password keystrokes into bounded chunks with normalized line endings
+/// so remote VNC/RDP input queues do not drop characters under high-latency or lock-screen conditions.
+public enum KeystrokePacer {
+
+    /// Normalizes `\r\n` and `\r` to `\n` and splits into chunks of at most `chunkSize` characters.
+    public static func chunkAndNormalize(_ text: String, chunkSize: Int = 32) -> [String] {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        guard !normalized.isEmpty else { return [] }
+        let limit = max(1, chunkSize)
+        var chunks: [String] = []
+        var currentIndex = normalized.startIndex
+        while currentIndex < normalized.endIndex {
+            let endIndex = normalized.index(currentIndex, offsetBy: limit, limitedBy: normalized.endIndex) ?? normalized.endIndex
+            chunks.append(String(normalized[currentIndex..<endIndex]))
+            currentIndex = endIndex
+        }
+        return chunks
+    }
+
+    /// Converts a string (including `\n` and `\t`) into a hardware keystroke sequence.
+    public static func keystrokeSequence(
+        for text: String,
+        appendReturn: Bool = false
+    ) -> [(key: UInt32, down: Bool)] {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        var sequence: [(key: UInt32, down: Bool)] = []
+        sequence.reserveCapacity(normalized.count * 4 + (appendReturn ? 2 : 0))
+        for char in normalized {
+            if char == "\n" {
+                sequence.append((MacKeyMap.return, true))
+                sequence.append((MacKeyMap.return, false))
+                continue
+            }
+            if char == "\t" {
+                sequence.append((MacKeyMap.tab, true))
+                sequence.append((MacKeyMap.tab, false))
+                continue
+            }
+            guard let sym = MacKeyMap.keySym(for: char) else { continue }
+            let shifted = MacKeyMap.requiresShift(for: char)
+            if shifted {
+                sequence.append((MacKeyMap.shiftLeft, true))
+            }
+            sequence.append((sym, true))
+            sequence.append((sym, false))
+            if shifted {
+                sequence.append((MacKeyMap.shiftLeft, false))
+            }
+        }
+        if appendReturn {
+            sequence.append((MacKeyMap.return, true))
+            sequence.append((MacKeyMap.return, false))
+        }
+        return sequence
     }
 }

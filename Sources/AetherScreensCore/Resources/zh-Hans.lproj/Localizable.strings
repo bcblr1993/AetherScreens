@@ -807,6 +807,15 @@
 "Active" = "连接中";
 "Completed" = "已完成";
 "Failed" = "连接失败";
+"Media & Hardware Keys" = "媒体与硬件按键";
+"Volume Up" = "音量增大";
+"Volume Down" = "音量减小";
+"Mute Audio" = "静音切换";
+"Play / Pause" = "播放 / 暂停";
+"Next Track" = "下一曲";
+"Previous Track" = "上一曲";
+"Brightness Up" = "屏幕亮度增大";
+"Brightness Down" = "屏幕亮度减小";
 
 
 
