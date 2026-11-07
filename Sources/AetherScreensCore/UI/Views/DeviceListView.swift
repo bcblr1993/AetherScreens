@@ -53,7 +53,13 @@ public struct DeviceListView: View {
     @State private var pendingDeletion: RemoteDevice?
     @State private var showingLogs = false
     @State private var pendingConnectionLinks: [ConnectionLink.Resolved] = []
+    @State private var exportingLibrary = false
+    @State private var importingLibrary = false
+    @State private var libraryArchiveDocument: DeviceLibraryDocument?
+    @AppStorage("aetherscreens.library.layoutMode") private var layoutModeRaw: String = "grid"
     @ObservedObject private var sessionRegistry = SessionRegistry.shared
+
+    private var isListLayout: Bool { layoutModeRaw == "list" }
 
     private let columns = [
         GridItem(.adaptive(minimum: 230, maximum: 320), spacing: 16)
@@ -185,6 +191,9 @@ public struct DeviceListView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 dashboardHeader
+                if !viewModel.allTags.isEmpty {
+                    tagFilterBar
+                }
                 // Error Notification Banner
                 if let err = viewModel.errorMessage {
                     HStack {
@@ -260,72 +269,30 @@ public struct DeviceListView: View {
                                 .padding(.horizontal, 20)
                         }
 
-                        LazyVGrid(columns: columns, spacing: 16) {
-                            ForEach(devices) { device in
-                                DeviceCardView(
-                                    device: device,
-                                    onConnect: { openSession(for: device) },
-                                    onWake: { viewModel.wakeDevice(device) }
-                                )
-                                .transition(.opacity)
-                                .contextMenu {
-                                    Button {
-                                        openSession(for: device)
-                                    } label: {
-                                        Label(AppLocalization.string("Connect"), systemImage: "arrow.up.right.video")
-                                    }
-
-                                    #if os(macOS)
-                                    Button {
-                                        let session = SessionViewModel(device: device, password: DeviceStore.shared.getPassword(for: device))
-                                        SessionWindowManager.shared.open(session, reuseExisting: false)
-                                    } label: {
-                                        Label(AppLocalization.string("Open in New Window"), systemImage: "macwindow.badge.plus")
-                                    }
-                                    #endif
-
-                                    Button {
-                                        viewModel.toggleFavorite(for: device)
-                                    } label: {
-                                        Label(
-                                            AppLocalization.string(device.isFavorite ? "Remove from Favorites" : "Add to Favorites"),
-                                            systemImage: device.isFavorite ? "star.slash" : "star"
+                        Group {
+                            if isListLayout {
+                                LazyVStack(spacing: 10) {
+                                    ForEach(devices) { device in
+                                        DeviceListRowView(
+                                            device: device,
+                                            onConnect: { openSession(for: device) },
+                                            onWake: (device.macAddress?.isEmpty == false) ? { viewModel.wakeDevice(device) } : nil,
+                                            onEdit: { editingDevice = device }
                                         )
+                                        .transition(.opacity)
+                                        .contextMenu { deviceContextMenu(for: device) }
                                     }
-
-                                    Button {
-                                        editingDevice = device
-                                    } label: {
-                                        Label(AppLocalization.string("Edit Computer..."), systemImage: "pencil")
-                                    }
-
-                                    Button {
-                                        let link = ConnectionLink.savedURL(for: device.id).absoluteString
-                                        #if canImport(UIKit)
-                                        UIPasteboard.general.string = link
-                                        #elseif canImport(AppKit)
-                                        NSPasteboard.general.clearContents()
-                                        NSPasteboard.general.setString(link, forType: .string)
-                                        #endif
-                                        viewModel.statusNotice = "Connection link copied"
-                                    } label: {
-                                        Label(AppLocalization.string("Copy Connection Link"), systemImage: "link")
-                                    }
-
-                                    if let mac = device.macAddress, !mac.isEmpty {
-                                        Button {
-                                            viewModel.wakeDevice(device)
-                                        } label: {
-                                            Label(AppLocalization.string("Wake Mac (WOL)"), systemImage: "bolt.fill")
-                                        }
-                                    }
-
-                                    Divider()
-
-                                    Button(role: .destructive) {
-                                        pendingDeletion = device
-                                    } label: {
-                                        Label(AppLocalization.string("Delete"), systemImage: "trash")
+                                }
+                            } else {
+                                LazyVGrid(columns: columns, spacing: 16) {
+                                    ForEach(devices) { device in
+                                        DeviceCardView(
+                                            device: device,
+                                            onConnect: { openSession(for: device) },
+                                            onWake: { viewModel.wakeDevice(device) }
+                                        )
+                                        .transition(.opacity)
+                                        .contextMenu { deviceContextMenu(for: device) }
                                     }
                                 }
                             }
@@ -357,6 +324,38 @@ public struct DeviceListView: View {
         .searchable(text: $viewModel.searchText, prompt: AppLocalization.string("Search computers or Tailscale IP"))
         .refreshable {
             await viewModel.syncTailscale()
+        }
+        .fileExporter(
+            isPresented: $exportingLibrary,
+            document: libraryArchiveDocument,
+            contentTypes: [.json],
+            defaultFilename: "AetherScreens-Computers",
+            onCompletion: { result in
+                libraryArchiveDocument = nil
+                if case .success = result {
+                    viewModel.statusNotice = "Exported computers backup"
+                } else if case .failure(let error) = result {
+                    if let cocoa = error as? CocoaError, cocoa.code == .userCancelled { return }
+                    viewModel.errorMessage = error.localizedDescription
+                }
+            },
+            onCancellation: { libraryArchiveDocument = nil }
+        )
+        .fileImporter(
+            isPresented: $importingLibrary,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            do {
+                guard let url = try result.get().first else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                let data = try Data(contentsOf: url)
+                _ = try viewModel.importLibraryArchive(data)
+            } catch {
+                if let cocoa = error as? CocoaError, cocoa.code == .userCancelled { return }
+                viewModel.errorMessage = error.localizedDescription
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -451,6 +450,45 @@ public struct DeviceListView: View {
         .disabled(viewModel.isSyncingTailscale)
         .help(AppLocalization.string("Sync Tailscale Online Nodes"))
         .accessibilityLabel(AppLocalization.string("Sync Tailscale Devices"))
+
+        Menu {
+            Button {
+                do {
+                    let data = try viewModel.exportLibraryArchive()
+                    libraryArchiveDocument = DeviceLibraryDocument(data: data)
+                    exportingLibrary = true
+                } catch {
+                    viewModel.errorMessage = error.localizedDescription
+                }
+            } label: {
+                Label(AppLocalization.string("Export Computers…"), systemImage: "square.and.arrow.up")
+            }
+            .disabled(viewModel.devices.isEmpty)
+
+            Button {
+                importingLibrary = true
+            } label: {
+                Label(AppLocalization.string("Import Computers…"), systemImage: "square.and.arrow.down")
+            }
+
+            #if os(macOS)
+            Divider()
+            Button {
+                let sshConfigURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ssh/config")
+                if let contents = try? String(contentsOf: sshConfigURL, encoding: .utf8) {
+                    _ = viewModel.importFromSSHConfig(contents: contents)
+                } else {
+                    viewModel.errorMessage = "Could not read ~/.ssh/config"
+                }
+            } label: {
+                Label(AppLocalization.string("Import from ~/.ssh/config"), systemImage: "terminal")
+            }
+            #endif
+        } label: {
+            Label(AppLocalization.string("Backup & Restore"), systemImage: "externaldrive.badge.icloud")
+        }
+        .help(AppLocalization.string("Backup & Restore"))
+        .accessibilityLabel(AppLocalization.string("Backup & Restore"))
     }
 
     // MARK: - Nearby Bonjour Macs Section
@@ -470,15 +508,142 @@ public struct DeviceListView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Text(AppLocalization.format(displayedDevices.count == 1 ? "%d computer" : "%d computers", displayedDevices.count))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7)
-                .background(.regularMaterial, in: Capsule())
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(libraryTransitionAnimation) {
+                        layoutModeRaw = isListLayout ? "grid" : "list"
+                    }
+                } label: {
+                    Image(systemName: isListLayout ? "square.grid.2x2" : "list.bullet")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(AppLocalization.string(isListLayout ? "Switch to Grid View" : "Switch to List View"))
+                .accessibilityLabel(AppLocalization.string(isListLayout ? "Switch to Grid View" : "Switch to List View"))
+
+                Text(AppLocalization.format(displayedDevices.count == 1 ? "%d computer" : "%d computers", displayedDevices.count))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+                    .background(.regularMaterial, in: Capsule())
+            }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 10)
+    }
+
+    private var tagFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(libraryTransitionAnimation) {
+                        viewModel.selectedTag = nil
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "tag")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(AppLocalization.string("All Tags"))
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .foregroundStyle(viewModel.selectedTag == nil ? Color.white : Color.primary)
+                    .background(
+                        viewModel.selectedTag == nil ? Color.accentColor : Color.secondary.opacity(0.12),
+                        in: Capsule()
+                    )
+                }
+                .buttonStyle(.plain)
+
+                ForEach(viewModel.allTags, id: \.self) { tag in
+                    let isSelected = viewModel.selectedTag?.caseInsensitiveCompare(tag) == .orderedSame
+                    Button {
+                        withAnimation(libraryTransitionAnimation) {
+                            viewModel.selectedTag = isSelected ? nil : tag
+                        }
+                    } label: {
+                        Text(tag)
+                            .font(.system(size: 12, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            .background(
+                                isSelected ? Color.accentColor : Color.secondary.opacity(0.12),
+                                in: Capsule()
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+    }
+
+    @ViewBuilder
+    private func deviceContextMenu(for device: RemoteDevice) -> some View {
+        Button {
+            openSession(for: device)
+        } label: {
+            Label(AppLocalization.string("Connect"), systemImage: "arrow.up.right.video")
+        }
+
+        #if os(macOS)
+        Button {
+            let session = SessionViewModel(device: device, password: DeviceStore.shared.getPassword(for: device))
+            SessionWindowManager.shared.open(session, reuseExisting: false)
+        } label: {
+            Label(AppLocalization.string("Open in New Window"), systemImage: "macwindow.badge.plus")
+        }
+        #endif
+
+        Button {
+            viewModel.toggleFavorite(for: device)
+        } label: {
+            Label(
+                AppLocalization.string(device.isFavorite ? "Remove from Favorites" : "Add to Favorites"),
+                systemImage: device.isFavorite ? "star.slash" : "star"
+            )
+        }
+
+        Button {
+            editingDevice = device
+        } label: {
+            Label(AppLocalization.string("Edit Computer..."), systemImage: "pencil")
+        }
+
+        Button {
+            let link = ConnectionLink.savedURL(for: device.id).absoluteString
+            #if canImport(UIKit)
+            UIPasteboard.general.string = link
+            #elseif canImport(AppKit)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(link, forType: .string)
+            #endif
+            viewModel.statusNotice = "Connection link copied"
+        } label: {
+            Label(AppLocalization.string("Copy Connection Link"), systemImage: "link")
+        }
+
+        if let mac = device.macAddress, !mac.isEmpty {
+            Button {
+                viewModel.wakeDevice(device)
+            } label: {
+                Label(AppLocalization.string("Wake Mac (WOL)"), systemImage: "bolt.fill")
+            }
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            pendingDeletion = device
+        } label: {
+            Label(AppLocalization.string("Delete"), systemImage: "trash")
+        }
     }
 
     private var nearbyBonjourSection: some View {
@@ -708,6 +873,105 @@ public struct DeviceListView: View {
         .frame(maxWidth: 420)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 48)
+    }
+}
+
+private struct DeviceListRowView: View {
+    let device: RemoteDevice
+    let onConnect: () -> Void
+    let onWake: (() -> Void)?
+    let onEdit: () -> Void
+
+    var body: some View {
+        Button(action: onConnect) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(red: 0.14, green: 0.18, blue: 0.23))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: device.deviceType.systemIcon)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.9))
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(device.name)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        if device.isFavorite {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.yellow)
+                        }
+                        Text(device.remoteProtocol.rawValue)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(device.remoteProtocol == .rdp ? .blue : .teal)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background((device.remoteProtocol == .rdp ? Color.blue : Color.teal).opacity(0.12), in: Capsule())
+                    }
+
+                    HStack(spacing: 8) {
+                        Text("\(device.host):\(device.port)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        if !device.tags.isEmpty {
+                            HStack(spacing: 4) {
+                                ForEach(device.tags.prefix(3), id: \.self) { tag in
+                                    Text(tag)
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1.5)
+                                        .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                if let onWake {
+                    Button(action: onWake) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.orange)
+                            .frame(width: 28, height: 28)
+                            .background(Color.orange.opacity(0.14), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(AppLocalization.string("Wake Mac (WOL)"))
+                }
+
+                Button(action: onEdit) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.secondary.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(AppLocalization.string("Edit Computer..."))
+
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(device.isOnline ? Color.accentColor : Color.secondary)
+                    .frame(width: 30, height: 30)
+                    .background(Color.accentColor.opacity(0.09), in: Circle())
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+        }
+        .buttonStyle(ControlPressStyle(pressedScale: 0.992))
     }
 }
 

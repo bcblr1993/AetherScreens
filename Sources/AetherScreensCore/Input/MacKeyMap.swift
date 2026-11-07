@@ -57,6 +57,39 @@ public enum MacKeyMap {
         return val >= 0x100 ? 0x01000000 | val : nil
     }
 
+    private static let shiftedUSASCII: Set<Character> = Set("!@#$%^&*()_+{}|:\"<>?~")
+
+    /// Whether typing this character on a US keyboard requires holding Shift.
+    public static func requiresShift(for char: Character) -> Bool {
+        char.isUppercase || shiftedUSASCII.contains(char)
+    }
+
+    /// Build a hardware-accurate keystroke sequence for typing a password at a remote login/lock screen.
+    public static func passwordKeystrokeSequence(
+        for password: String,
+        appendReturn: Bool = false
+    ) -> [(key: UInt32, down: Bool)] {
+        var sequence: [(key: UInt32, down: Bool)] = []
+        sequence.reserveCapacity(password.count * 4 + (appendReturn ? 2 : 0))
+        for char in password {
+            guard let sym = keySym(for: char) else { continue }
+            let shifted = requiresShift(for: char)
+            if shifted {
+                sequence.append((shiftLeft, true))
+            }
+            sequence.append((sym, true))
+            sequence.append((sym, false))
+            if shifted {
+                sequence.append((shiftLeft, false))
+            }
+        }
+        if appendReturn {
+            sequence.append((Self.return, true))
+            sequence.append((Self.return, false))
+        }
+        return sequence
+    }
+
     /// Finger direction follows the desktop's natural Space navigation.
     public enum ThreeFingerSwipe: CaseIterable, Sendable {
         case up, down, left, right

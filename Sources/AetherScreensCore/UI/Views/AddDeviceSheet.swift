@@ -15,6 +15,7 @@ public struct AddDeviceSheet: View {
     @State private var password: String = ""
     @State private var username: String = ""
     @State private var macAddress: String = ""
+    @State private var wakeBeforeConnect: Bool = false
     @State private var isFavorite = false
     @State private var tagsString = ""
     @State private var desktopResolution = "1920x1080"
@@ -55,7 +56,8 @@ public struct AddDeviceSheet: View {
                           ssh: sshDraft.settings, sshPassword: sshDraft.passwordToSave ?? "", sshPrivateKey: sshDraft.privateKeyToSave,
                           isFavorite: isFavorite, tags: tags,
                           desktopWidth: dw, desktopHeight: dh,
-                          remoteAudioEnabled: audio, autoFitResolution: autoFit)
+                          remoteAudioEnabled: audio, autoFitResolution: autoFit,
+                          wakeBeforeConnect: wakeBeforeConnect)
     }
 
     public var body: some View {
@@ -177,6 +179,9 @@ public struct AddDeviceSheet: View {
                     ) {
                         TextField(AppLocalization.string("MAC Address (Optional)"), text: $macAddress)
                             .autocorrectionDisabled()
+                        if !macAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Toggle(AppLocalization.string("Wake Automatically Before Connecting"), isOn: $wakeBeforeConnect)
+                        }
                     }
                 }
             }

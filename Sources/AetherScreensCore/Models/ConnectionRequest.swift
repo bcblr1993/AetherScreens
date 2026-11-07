@@ -16,7 +16,8 @@ public struct ConnectionRequest {
                   ssh: SSHConnectionSettings? = nil, sshPassword: String = "", sshPrivateKey: Data? = nil,
                   isFavorite: Bool = false, tags: [String] = [],
                   desktopWidth: Int? = nil, desktopHeight: Int? = nil,
-                  remoteAudioEnabled: Bool? = nil, autoFitResolution: Bool? = nil) {
+                  remoteAudioEnabled: Bool? = nil, autoFitResolution: Bool? = nil,
+                  wakeBeforeConnect: Bool? = nil) {
         var address = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if address.hasPrefix("[") && address.hasSuffix("]") {
             address = String(address.dropFirst().dropLast())
@@ -47,6 +48,7 @@ public struct ConnectionRequest {
                               macAddress: mac.isEmpty ? nil : mac, ssh: ssh,
                               isFavorite: isFavorite, tags: tags,
                               desktopWidth: desktopWidth, desktopHeight: desktopHeight,
-                              remoteAudioEnabled: remoteAudioEnabled, autoFitResolution: autoFitResolution)
+                              remoteAudioEnabled: remoteAudioEnabled, autoFitResolution: autoFitResolution,
+                              wakeBeforeConnect: mac.isEmpty ? nil : wakeBeforeConnect)
     }
 }

@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 import Combine
 import RDPKit
 
@@ -1003,6 +1005,9 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         downloadProgress = nil
         remoteDesktopSize = .zero
         multiDisplayManager.reset(width: framebuffer.width, height: framebuffer.height)
+        if device.wakeBeforeConnect == true, let mac = device.macAddress, !mac.isEmpty {
+            WakeOnLANService.wakeDevice(macAddress: mac)
+        }
         if isRDP {
             if rdpAudioPlayer == nil && isRemoteAudioEnabled {
                 rdpAudioPlayer = RDPAudioPlayer()
@@ -1078,13 +1083,16 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     public func requestDisconnect() {
         guard !isDisconnectRequested else { return }
         isDisconnectRequested = true
+        let action = !isTemporary && isForegroundSession && !isObserveOnly
+            ? DisconnectActionStore.shared.load(for: device.id, type: device.deviceType) : .none
         if isRDP {
+            if action != .none {
+                triggerSystemAction(action)
+            }
             endSession()
             rdpClient?.disconnect()
             return
         }
-        let action = !isTemporary && isForegroundSession && !isObserveOnly
-            ? DisconnectActionStore.shared.load(for: device.id, type: device.deviceType) : .none
         // Detach before local teardown so disappearance cannot prematurely
         // close the transport carrying the final complete key sequence.
         let drainingTunnel = sshTunnel
@@ -1409,7 +1417,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     }
 
     public var canSendRemoteCommands: Bool {
-        let isConnected = isRDP ? sessionState == .connected : client.state == .connected
+        let isConnected = isRDP ? sessionState == .connected : (client.state == .connected || sessionState == .connected)
         return allowsRemoteInput && isConnected
     }
 
@@ -1490,6 +1498,105 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             sendRawKeyEvent(down: item.down, keySym: item.key)
         }
         releaseActiveOnceModifiers()
+    }
+
+    /// Resolved password for the active session (in-memory or saved in Keychain).
+    public var availableSessionPassword: String? {
+        if isRDP, let pwd = rdpClient?.password, !pwd.isEmpty { return pwd }
+        if !isRDP, let pwd = client.password, !pwd.isEmpty { return pwd }
+        if let stored = deviceStore.getPassword(for: device), !stored.isEmpty { return stored }
+        return nil
+    }
+
+    /// Whether the session can type the saved password into the remote login/lock screen.
+    public var canTypeSavedPassword: Bool {
+        canSendRemoteCommands && availableSessionPassword != nil
+    }
+
+    /// Type the saved password character-by-character as hardware keystrokes (useful at FileVault / login / lock screens).
+    @discardableResult
+    public func typeSavedPassword(appendReturn: Bool = true) -> Bool {
+        guard canSendRemoteCommands, let pwd = availableSessionPassword, !pwd.isEmpty else { return false }
+        releaseAllModifiers()
+        if isRDP {
+            rdpClient?.sendText(pwd)
+            if appendReturn {
+                sendRawKeyEvent(down: true, keySym: MacKeyMap.return)
+                sendRawKeyEvent(down: false, keySym: MacKeyMap.return)
+            }
+        } else {
+            let sequence = MacKeyMap.passwordKeystrokeSequence(for: pwd, appendReturn: appendReturn)
+            for step in sequence {
+                sendRawKeyEvent(down: step.down, keySym: step.key)
+            }
+        }
+        showFileUploadNotice(AppLocalization.string("Password typed to remote computer."))
+        return true
+    }
+
+    /// Capture a lossless CGImage of the current framebuffer (or active display crop).
+    public func captureScreenshotImage() -> CGImage? {
+        guard let fullImage = framebuffer.makeCGImage() else { return nil }
+        if let crop = activeCropRect, crop.width > 0, crop.height > 0,
+           let cropped = fullImage.cropping(to: crop) {
+            return cropped
+        }
+        return fullImage
+    }
+
+    /// Save a lossless PNG screenshot of the remote session to disk.
+    @discardableResult
+    public func saveScreenshot(toDirectory directory: URL? = nil) -> URL? {
+        guard let cgImage = captureScreenshotImage() else { return nil }
+        let targetDir = directory
+            ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let safeName = device.name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let timestamp = formatter.string(from: Date())
+        let filename = "AetherScreens-\(safeName.isEmpty ? "Remote" : safeName)-\(timestamp).png"
+        let fileURL = targetDir.appendingPathComponent(filename)
+
+        guard let destination = CGImageDestinationCreateWithURL(
+            fileURL as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, cgImage, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+
+        let message = String(format: AppLocalization.string("Screenshot saved: %@"), filename)
+        showFileUploadNotice(message)
+        return fileURL
+    }
+
+    /// Copy a lossless screenshot of the remote session to the local clipboard.
+    @discardableResult
+    public func copyScreenshotToClipboard() -> Bool {
+        guard let cgImage = captureScreenshotImage() else { return false }
+        #if canImport(AppKit)
+        let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        NSPasteboard.general.clearContents()
+        let copied = NSPasteboard.general.writeObjects([nsImage])
+        if copied {
+            showFileUploadNotice(AppLocalization.string("Screenshot copied to clipboard."))
+        }
+        return copied
+        #elseif canImport(UIKit)
+        UIPasteboard.general.image = UIImage(cgImage: cgImage)
+        showFileUploadNotice(AppLocalization.string("Screenshot copied to clipboard."))
+        return true
+        #else
+        return false
+        #endif
     }
 
     /// Trigger a remote hot corner immediately during the active session.

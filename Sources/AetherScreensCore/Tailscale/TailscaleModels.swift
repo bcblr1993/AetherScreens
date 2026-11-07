@@ -52,6 +52,22 @@ public struct TailscaleDevice: Codable, Identifiable, Equatable, Sendable {
         return osLower.contains("mac") || osLower.contains("darwin")
     }
 
+    /// Whether this device is running Windows
+    public var isWindows: Bool {
+        os.lowercased().contains("windows")
+    }
+
+    /// Whether this device is running Linux
+    public var isLinux: Bool {
+        os.lowercased().contains("linux")
+    }
+
+    /// Whether this device is a mobile phone/tablet (iOS/Android) that does not host desktop sharing
+    public var isMobileClientOnly: Bool {
+        let osLower = os.lowercased()
+        return osLower == "ios" || osLower == "android" || osLower == "tvos"
+    }
+
     /// Clean display name for the device
     public var displayName: String {
         if !hostname.isEmpty {

@@ -56,6 +56,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
     public var desktopHeight: Int?
     public var remoteAudioEnabled: Bool?
     public var autoFitResolution: Bool?
+    public var wakeBeforeConnect: Bool?
 
     public init(
         id: UUID = UUID(),
@@ -76,7 +77,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         desktopWidth: Int? = nil,
         desktopHeight: Int? = nil,
         remoteAudioEnabled: Bool? = nil,
-        autoFitResolution: Bool? = nil
+        autoFitResolution: Bool? = nil,
+        wakeBeforeConnect: Bool? = nil
     ) {
         self.id = id
         self.name = name
@@ -97,10 +99,11 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.desktopHeight = desktopHeight
         self.remoteAudioEnabled = remoteAudioEnabled
         self.autoFitResolution = autoFitResolution
+        self.wakeBeforeConnect = wakeBeforeConnect
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution
+        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution, wakeBeforeConnect
     }
 
     public init(from decoder: Decoder) throws {
@@ -126,6 +129,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.desktopHeight = try container.decodeIfPresent(Int.self, forKey: .desktopHeight)
         self.remoteAudioEnabled = try container.decodeIfPresent(Bool.self, forKey: .remoteAudioEnabled)
         self.autoFitResolution = try container.decodeIfPresent(Bool.self, forKey: .autoFitResolution)
+        self.wakeBeforeConnect = try container.decodeIfPresent(Bool.self, forKey: .wakeBeforeConnect)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -149,19 +153,45 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         try container.encodeIfPresent(desktopHeight, forKey: .desktopHeight)
         try container.encodeIfPresent(remoteAudioEnabled, forKey: .remoteAudioEnabled)
         try container.encodeIfPresent(autoFitResolution, forKey: .autoFitResolution)
+        try container.encodeIfPresent(wakeBeforeConnect, forKey: .wakeBeforeConnect)
     }
 
     /// Creates a RemoteDevice from a Tailscale node
     public static func fromTailscaleDevice(_ ts: TailscaleDevice) -> RemoteDevice? {
         guard let ip = ts.tailscaleIPv4 else { return nil }
-        let type: DeviceType = ts.isMac ? .mac : .other
+        let type: DeviceType
+        let proto: RemoteProtocol
+        let port: UInt16
+        let auth: AuthMethod
+        if ts.isMac {
+            type = .mac
+            proto = .rfb
+            port = RFBConstants.defaultPort
+            auth = .vncPassword
+        } else if ts.isWindows {
+            type = .windows
+            proto = .rdp
+            port = 3389
+            auth = .windowsCredentials
+        } else if ts.isLinux {
+            type = .linux
+            proto = .rfb
+            port = RFBConstants.defaultPort
+            auth = .vncPassword
+        } else {
+            type = .other
+            proto = .rfb
+            port = RFBConstants.defaultPort
+            auth = .vncPassword
+        }
 
         return RemoteDevice(
             name: ts.displayName,
             host: ip,
-            port: RFBConstants.defaultPort,
+            port: port,
             deviceType: type,
-            authMethod: .vncPassword,
+            remoteProtocol: proto,
+            authMethod: auth,
             isOnline: ts.isOnline,
             isTailscaleNode: true
         )

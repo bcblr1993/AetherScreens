@@ -181,6 +181,56 @@ public final class DeviceStore: @unchecked Sendable {
         persist()
     }
 
+    /// Export all saved computers as a portable JSON archive (without secret credentials).
+    public func exportArchive() throws -> Data {
+        lock.lock()
+        let snapshot = devices
+        lock.unlock()
+        return try DeviceLibraryArchive.export(devices: snapshot)
+    }
+
+    /// Import computers from a portable JSON archive, preserving existing UUIDs and Keychain bindings on match.
+    @discardableResult
+    public func importArchive(_ data: Data) throws -> Int {
+        let imported = try DeviceLibraryArchive.decode(data)
+        lock.lock()
+        defer { lock.unlock() }
+
+        for item in imported {
+            if let idx = devices.firstIndex(where: { $0.id == item.id || ($0.host.caseInsensitiveCompare(item.host) == .orderedSame && $0.port == item.port) }) {
+                let existing = devices[idx]
+                var merged = item
+                merged = RemoteDevice(
+                    id: existing.id,
+                    name: item.name,
+                    host: item.host,
+                    port: item.port,
+                    deviceType: item.deviceType,
+                    remoteProtocol: item.remoteProtocol,
+                    authMethod: item.authMethod,
+                    username: item.username ?? existing.username,
+                    isOnline: existing.isOnline,
+                    lastConnected: existing.lastConnected,
+                    isTailscaleNode: item.isTailscaleNode || existing.isTailscaleNode,
+                    macAddress: item.macAddress ?? existing.macAddress,
+                    ssh: item.ssh ?? existing.ssh,
+                    isFavorite: item.isFavorite || existing.isFavorite,
+                    tags: item.tags.isEmpty ? existing.tags : item.tags,
+                    desktopWidth: item.desktopWidth ?? existing.desktopWidth,
+                    desktopHeight: item.desktopHeight ?? existing.desktopHeight,
+                    remoteAudioEnabled: item.remoteAudioEnabled ?? existing.remoteAudioEnabled,
+                    autoFitResolution: item.autoFitResolution ?? existing.autoFitResolution,
+                    wakeBeforeConnect: item.wakeBeforeConnect ?? existing.wakeBeforeConnect
+                )
+                devices[idx] = merged
+            } else {
+                devices.append(item)
+            }
+        }
+        persist()
+        return imported.count
+    }
+
     /// Retrieve the saved password for a device.
     public func getPassword(for device: RemoteDevice) -> String? {
         lock.lock()
@@ -378,6 +428,7 @@ public final class DeviceStore: @unchecked Sendable {
             let desktopHeight = metadata.desktopHeight ?? local?.desktopHeight
             let remoteAudioEnabled = metadata.remoteAudioEnabled ?? local?.remoteAudioEnabled
             let autoFitResolution = metadata.autoFitResolution ?? local?.autoFitResolution
+            let wakeBeforeConnect = metadata.wakeBeforeConnect ?? local?.wakeBeforeConnect
             let device = RemoteDevice(
                 id: metadata.id, name: metadata.name, host: metadata.host, port: metadata.port,
                 deviceType: metadata.deviceType,
@@ -392,7 +443,8 @@ public final class DeviceStore: @unchecked Sendable {
                 desktopWidth: desktopWidth,
                 desktopHeight: desktopHeight,
                 remoteAudioEnabled: remoteAudioEnabled,
-                autoFitResolution: autoFitResolution)
+                autoFitResolution: autoFitResolution,
+                wakeBeforeConnect: wakeBeforeConnect)
             if let index { candidate[index] = device }
             else { candidate.append(device) }
         }

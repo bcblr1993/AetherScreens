@@ -59,9 +59,21 @@ public struct DeviceCardView: View {
                 }
                 .frame(height: 154)
 
-                HStack(alignment: .center, spacing: 10) {
+                HStack(alignment: .center, spacing: 8) {
                     cardDetails
                     Spacer(minLength: 4)
+                    if let mac = device.macAddress, !mac.isEmpty, let onWake {
+                        Button(action: onWake) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.orange)
+                                .frame(width: 28, height: 28)
+                                .background(Color.orange.opacity(0.14), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(AppLocalization.string("Wake Mac (WOL)"))
+                        .accessibilityLabel(AppLocalization.string("Wake Mac (WOL)"))
+                    }
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(device.isOnline ? Color.accentColor : Color.secondary)

@@ -20,6 +20,7 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
     public var desktopHeight: Int?
     public var remoteAudioEnabled: Bool?
     public var autoFitResolution: Bool?
+    public var wakeBeforeConnect: Bool?
 
     public init(device: RemoteDevice) {
         id = device.id; name = device.name; host = device.host; port = device.port
@@ -32,6 +33,7 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
         desktopHeight = device.desktopHeight
         remoteAudioEnabled = device.remoteAudioEnabled
         autoFitResolution = device.autoFitResolution
+        wakeBeforeConnect = device.wakeBeforeConnect
     }
 
     fileprivate var isValid: Bool {

@@ -854,6 +854,63 @@ public struct RemoteDesktopView: View {
             Spacer()
 
             #if os(macOS)
+            Menu {
+                ForEach(displayManager.availableDisplays) { display in
+                    Button {
+                        displayManager.selectDisplay(id: display.id)
+                    } label: {
+                        HStack {
+                            Text("\(AppLocalization.message(display.name)) (\(display.resolutionDescription))")
+                            if displayManager.selectedDisplayId == display.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+                if !viewModel.isRDP {
+                    Divider()
+                    Menu(AppLocalization.string("Virtual Multi-Monitor Split")) {
+                        ForEach(MultiDisplayManager.VirtualSplitMode.allCases) { mode in
+                            Button {
+                                displayManager.setVirtualSplitMode(mode)
+                            } label: {
+                                HStack {
+                                    Text(AppLocalization.string(mode.rawValue))
+                                    if displayManager.virtualSplitMode == mode {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if displayManager.availableDisplays.count > 1 {
+                    Divider()
+                    Button {
+                        displayManager.cycleNextDisplay()
+                    } label: {
+                        Label(AppLocalization.string("Switch to Next Display"), systemImage: "arrow.left.arrow.right.square")
+                    }
+                }
+            } label: {
+                controlIcon(displayManager.selectedDisplayId == 0 ? "display.2" : "display")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .tint(.white)
+            .fixedSize()
+            .help(AppLocalization.string("Switch Remote Display"))
+            .accessibilityLabel(AppLocalization.string("Switch Remote Display"))
+
+            Button {
+                viewModel.saveScreenshot()
+            } label: {
+                controlIcon("camera.fill")
+            }
+            .disabled(viewModel.sessionState != .connected || !viewModel.hasReceivedFirstFrame)
+            .help(AppLocalization.string("Save Screenshot"))
+            .accessibilityLabel(AppLocalization.string("Save Screenshot"))
+
             Button { showingLogs = true } label: {
                 controlIcon("list.bullet.rectangle")
             }
@@ -925,6 +982,22 @@ public struct RemoteDesktopView: View {
                     Label(AppLocalization.string("Clipboard"), systemImage: "doc.on.clipboard")
                 }
                 quickActionsMenu
+                Menu {
+                    Button {
+                        viewModel.saveScreenshot()
+                    } label: {
+                        Label(AppLocalization.string("Save Screenshot"), systemImage: "camera.fill")
+                    }
+                    .disabled(viewModel.sessionState != .connected || !viewModel.hasReceivedFirstFrame)
+                    Button {
+                        viewModel.copyScreenshotToClipboard()
+                    } label: {
+                        Label(AppLocalization.string("Copy Screenshot to Clipboard"), systemImage: "doc.on.clipboard")
+                    }
+                    .disabled(viewModel.sessionState != .connected || !viewModel.hasReceivedFirstFrame)
+                } label: {
+                    Label(AppLocalization.string("Screenshot"), systemImage: "camera")
+                }
                 Button { showingKeyboardCustomization = true } label: {
                     Label(AppLocalization.string("Customize Keyboard Toolbar"), systemImage: "slider.horizontal.3")
                 }
@@ -1058,6 +1131,22 @@ public struct RemoteDesktopView: View {
     @ViewBuilder
     private var quickActionsMenu: some View {
         Menu {
+            Button {
+                viewModel.typeSavedPassword(appendReturn: true)
+            } label: {
+                Label(AppLocalization.string("Type Saved Password & Return"), systemImage: "key.fill")
+            }
+            .disabled(!viewModel.canTypeSavedPassword)
+
+            Button {
+                viewModel.typeSavedPassword(appendReturn: false)
+            } label: {
+                Label(AppLocalization.string("Type Saved Password Only"), systemImage: "ellipsis.rectangle")
+            }
+            .disabled(!viewModel.canTypeSavedPassword)
+
+            Divider()
+
             if viewModel.device.deviceType == .mac {
                 Button {
                     viewModel.executeShortcut(.missionControl)

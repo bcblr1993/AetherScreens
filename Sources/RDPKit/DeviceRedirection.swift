@@ -402,14 +402,139 @@ struct RDPDeviceRedirectionServerCapabilities: Equatable, Sendable {
     }
 }
 
+public struct RDPDeviceRedirectionAnnouncedDrive: Equatable, Sendable {
+    public static let filesystemDeviceType: UInt32 = 0x0000_0008
+    public var deviceID: UInt32
+    public var preferredDosName: String
+
+    public init(deviceID: UInt32 = 1, preferredDosName: String = "AETHER") {
+        self.deviceID = deviceID
+        self.preferredDosName = preferredDosName
+    }
+
+    public func encoded() -> Data {
+        var data = Data()
+        data.appendLittleEndianUInt32(Self.filesystemDeviceType)
+        data.appendLittleEndianUInt32(deviceID)
+        var dosBytes = Array(preferredDosName.utf8.prefix(7))
+        while dosBytes.count < 8 {
+            dosBytes.append(0)
+        }
+        data.append(contentsOf: dosBytes)
+        data.appendLittleEndianUInt32(0) // deviceDataLength = 0
+        return data
+    }
+}
+
 struct RDPDeviceRedirectionDeviceListAnnounce: Equatable, Sendable {
+    var drives: [RDPDeviceRedirectionAnnouncedDrive] = []
+
     func encoded() -> Data {
         var payload = Data()
-        payload.appendLittleEndianUInt32(0)
+        payload.appendLittleEndianUInt32(UInt32(drives.count))
+        for drive in drives {
+            payload.append(drive.encoded())
+        }
         return RDPDeviceRedirectionPDU(
             header: RDPDeviceRedirectionHeader(packetID: RDPDeviceRedirectionPacketID.deviceListAnnounce),
             payload: payload
         ).encoded()
+    }
+}
+
+/// Read-only sandboxed local directory provider for RDPDR filesystem redirection.
+public final class RDPSharedDirectoryDrive: @unchecked Sendable {
+    public struct CreateResponse: Equatable, Sendable {
+        public let completionID: UInt32
+        public let ioStatus: UInt32
+        public let fileID: UInt32
+        public let information: UInt8
+    }
+
+    public struct ReadResponse: Equatable, Sendable {
+        public let completionID: UInt32
+        public let ioStatus: UInt32
+        public let data: Data
+    }
+
+    public struct CloseResponse: Equatable, Sendable {
+        public let completionID: UInt32
+        public let ioStatus: UInt32
+    }
+
+    public let deviceID: UInt32
+    public let rootDirectory: URL
+    private let lock = NSLock()
+    private var nextFileID: UInt32 = 1
+    private var openFiles: [UInt32: URL] = [:]
+
+    public init(deviceID: UInt32 = 1, rootDirectory: URL) {
+        self.deviceID = deviceID
+        self.rootDirectory = rootDirectory.standardizedFileURL.resolvingSymlinksInPath()
+    }
+
+    private func resolveSandboxedURL(for remotePath: String) -> URL? {
+        guard !remotePath.contains("\0") else { return nil }
+        let normalized = remotePath.replacingOccurrences(of: "\\", with: "/")
+        let components = normalized.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        for comp in components {
+            if comp == "." || comp == ".." { return nil }
+        }
+        var target = rootDirectory
+        for comp in components {
+            target.appendPathComponent(comp)
+        }
+        let resolved = target.standardizedFileURL.resolvingSymlinksInPath()
+        let rootPath = rootDirectory.path.hasSuffix("/") ? rootDirectory.path : rootDirectory.path + "/"
+        guard resolved.path == rootDirectory.path || resolved.path.hasPrefix(rootPath) else {
+            return nil
+        }
+        return resolved
+    }
+
+    public func handleCreate(completionID: UInt32, path: String) -> CreateResponse {
+        guard let url = resolveSandboxedURL(for: path) else {
+            return CreateResponse(completionID: completionID, ioStatus: 0xC000_0022, fileID: 0, information: 0)
+        }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
+            return CreateResponse(completionID: completionID, ioStatus: 0xC000_000F, fileID: 0, information: 0)
+        }
+        lock.lock()
+        let allocatedID = nextFileID
+        nextFileID = nextFileID == UInt32.max ? 1 : nextFileID + 1
+        openFiles[allocatedID] = url
+        lock.unlock()
+        // FILE_OPENED = 0x01
+        return CreateResponse(completionID: completionID, ioStatus: 0x0000_0000, fileID: allocatedID, information: 0x01)
+    }
+
+    public func handleRead(completionID: UInt32, fileID: UInt32, length: UInt32, offset: UInt64) -> ReadResponse {
+        lock.lock()
+        let fileURL = openFiles[fileID]
+        lock.unlock()
+        guard let fileURL else {
+            return ReadResponse(completionID: completionID, ioStatus: 0xC000_0008, data: Data())
+        }
+        do {
+            let handle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: offset)
+            let chunk = try handle.read(upToCount: Int(min(length, 4 * 1024 * 1024))) ?? Data()
+            return ReadResponse(completionID: completionID, ioStatus: 0x0000_0000, data: chunk)
+        } catch {
+            return ReadResponse(completionID: completionID, ioStatus: 0xC000_0001, data: Data())
+        }
+    }
+
+    public func handleClose(completionID: UInt32, fileID: UInt32) -> CloseResponse {
+        lock.lock()
+        let removed = openFiles.removeValue(forKey: fileID)
+        lock.unlock()
+        guard removed != nil else {
+            return CloseResponse(completionID: completionID, ioStatus: 0xC000_0008)
+        }
+        return CloseResponse(completionID: completionID, ioStatus: 0x0000_0000)
     }
 }
 

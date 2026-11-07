@@ -9,6 +9,7 @@ public final class DeviceListViewModel: ObservableObject {
     @Published public var discoveredNearbyMacs: [DiscoveredMac] = []
     @Published public var isSearchingBonjour: Bool = false
     @Published public var searchText: String = ""
+    @Published public var selectedTag: String? = nil
     @Published public var isSyncingTailscale: Bool = false
     @Published public var tailscaleApiKey: String = ""
     @Published public var tailnetName: String = ""
@@ -81,15 +82,76 @@ public final class DeviceListViewModel: ObservableObject {
         }
     }
 
+    public var allTags: [String] {
+        var unique = Set<String>()
+        for dev in devices {
+            for tag in dev.tags {
+                let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { unique.insert(trimmed) }
+            }
+        }
+        return unique.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     public var filteredDevices: [RemoteDevice] {
         let query = normalizedSearchQuery
-        if query.isEmpty {
-            return devices
+        let activeTag = selectedTag?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return devices.filter { dev in
+            if let activeTag, !activeTag.isEmpty {
+                let matchesTag = dev.tags.contains { $0.caseInsensitiveCompare(activeTag) == .orderedSame }
+                if !matchesTag { return false }
+            }
+            if query.isEmpty { return true }
+            return dev.name.localizedCaseInsensitiveContains(query)
+                || dev.host.localizedCaseInsensitiveContains(query)
+                || (dev.username?.localizedCaseInsensitiveContains(query) ?? false)
+                || dev.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
         }
-        return devices.filter {
-            $0.name.localizedCaseInsensitiveContains(query) ||
-            $0.host.localizedCaseInsensitiveContains(query)
+    }
+
+    public func exportLibraryArchive() throws -> Data {
+        try store.exportArchive()
+    }
+
+    @discardableResult
+    public func importLibraryArchive(_ data: Data) throws -> Int {
+        let count = try store.importArchive(data)
+        reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+        statusNotice = AppLocalization.format("Imported %d computer(s)", count)
+        return count
+    }
+
+    @discardableResult
+    public func importFromSSHConfig(contents: String) -> Int {
+        let entries = SSHConfigParser.parse(contents)
+        var addedCount = 0
+        for entry in entries {
+            guard let sshSettings = entry.toSSHConnectionSettings() else { continue }
+            let existing = devices.contains { $0.name.caseInsensitiveCompare(entry.alias) == .orderedSame || $0.host.caseInsensitiveCompare(entry.hostName) == .orderedSame }
+            guard !existing else { continue }
+            let dev = RemoteDevice(
+                name: entry.alias,
+                host: entry.hostName,
+                port: RFBConstants.defaultPort,
+                deviceType: .mac,
+                remoteProtocol: .rfb,
+                authMethod: .vncPassword,
+                username: entry.user,
+                ssh: sshSettings,
+                tags: ["SSH"]
+            )
+            _ = store.addDevice(dev)
+            addedCount += 1
         }
+        if addedCount > 0 {
+            reload()
+            Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+            statusNotice = AppLocalization.format("Imported %d computer(s)", addedCount)
+        } else {
+            statusNotice = AppLocalization.string("No new SSH hosts found in ~/.ssh/config")
+        }
+        return addedCount
     }
 
     /// Reload devices from store
@@ -357,17 +419,29 @@ public final class DeviceListViewModel: ObservableObject {
         }
     }
 
-    /// Sync online devices from Tailscale API
+    /// Sync online devices from Tailscale API (or zero-config local Tailscale CLI on macOS)
     public func syncTailscale() async {
         guard !isSyncingTailscale, !Task.isCancelled else { return }
-        guard !tailscaleApiKey.isEmpty else {
-            errorMessage = "Please enter your Tailscale API Key in Settings"
-            return
-        }
 
         isSyncingTailscale = true
         defer { isSyncingTailscale = false }
         errorMessage = nil
+
+        if tailscaleApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            do {
+                let nodes = try await TailscaleClient.fetchLocalStatusDevices()
+                try Task.checkCancellation()
+                store.mergeTailscaleDevices(nodes)
+                reload()
+                statusNotice = "Synced \(nodes.count) nodes from Tailscale"
+                return
+            } catch {
+                if !Task.isCancelled {
+                    errorMessage = "Please enter your Tailscale API Key in Settings"
+                }
+                return
+            }
+        }
 
         let client = TailscaleClient(apiKey: tailscaleApiKey, tailnet: tailnetName)
         do {

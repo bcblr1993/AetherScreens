@@ -16,6 +16,7 @@ public struct EditDeviceSheet: View {
     @State private var password: String = ""
     @State private var username: String = ""
     @State private var macAddress: String = ""
+    @State private var wakeBeforeConnect: Bool = false
     @State private var isPasswordModified: Bool = false
     @State private var disconnectAction: DisconnectAction = .none
     @State private var isFavorite: Bool = false
@@ -154,6 +155,9 @@ public struct EditDeviceSheet: View {
                 ) {
                     TextField(AppLocalization.string("MAC Address"), text: $macAddress)
                         .autocorrectionDisabled()
+                    if !macAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Toggle(AppLocalization.string("Wake Automatically Before Connecting"), isOn: $wakeBeforeConnect)
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -196,6 +200,7 @@ public struct EditDeviceSheet: View {
                         }
                         updatedDev.deviceType = deviceType
                         updatedDev.macAddress = macAddress.isEmpty ? nil : macAddress
+                        updatedDev.wakeBeforeConnect = macAddress.isEmpty ? nil : wakeBeforeConnect
                         updatedDev.ssh = sshDraft.settings
                         updatedDev.isFavorite = isFavorite
                         updatedDev.tags = tagsString
@@ -246,6 +251,7 @@ public struct EditDeviceSheet: View {
                 autoFitResolution = device.autoFitResolution ?? false
                 disconnectAction = DisconnectActionStore.shared.load(for: device.id, type: device.deviceType)
                 macAddress = device.macAddress ?? ""
+                wakeBeforeConnect = device.wakeBeforeConnect ?? false
                 isFavorite = device.isFavorite
                 tagsString = device.tags.joined(separator: ", ")
                 if let savedPwd = DeviceStore.shared.getPassword(for: device) {
