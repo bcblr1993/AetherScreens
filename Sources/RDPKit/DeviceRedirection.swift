@@ -442,8 +442,17 @@ struct RDPDeviceRedirectionDeviceListAnnounce: Equatable, Sendable {
     }
 }
 
-/// Read-only sandboxed local directory provider for RDPDR filesystem redirection.
+/// Sandboxed local directory provider for RDPDR filesystem redirection (supports read-only and read-write modes).
 public final class RDPSharedDirectoryDrive: @unchecked Sendable {
+    public enum CreateDisposition: UInt32, Sendable {
+        case supersede = 0x0000_0000
+        case open = 0x0000_0001
+        case create = 0x0000_0002
+        case openIf = 0x0000_0003
+        case overwrite = 0x0000_0004
+        case overwriteIf = 0x0000_0005
+    }
+
     public struct CreateResponse: Equatable, Sendable {
         public let completionID: UInt32
         public let ioStatus: UInt32
@@ -457,7 +466,18 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         public let data: Data
     }
 
+    public struct WriteResponse: Equatable, Sendable {
+        public let completionID: UInt32
+        public let ioStatus: UInt32
+        public let bytesWritten: UInt32
+    }
+
     public struct CloseResponse: Equatable, Sendable {
+        public let completionID: UInt32
+        public let ioStatus: UInt32
+    }
+
+    public struct StatusResponse: Equatable, Sendable {
         public let completionID: UInt32
         public let ioStatus: UInt32
     }
@@ -483,13 +503,15 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
 
     public let deviceID: UInt32
     public let rootDirectory: URL
+    public let isReadOnly: Bool
     private let lock = NSLock()
     private var nextFileID: UInt32 = 1
     private var openFiles: [UInt32: URL] = [:]
 
-    public init(deviceID: UInt32 = 1, rootDirectory: URL) {
+    public init(deviceID: UInt32 = 1, rootDirectory: URL, isReadOnly: Bool = false) {
         self.deviceID = deviceID
         self.rootDirectory = rootDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        self.isReadOnly = isReadOnly
     }
 
     private func resolveSandboxedURL(for remotePath: String) -> URL? {
@@ -511,21 +533,94 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         return resolved
     }
 
-    public func handleCreate(completionID: UInt32, path: String) -> CreateResponse {
+    public func handleCreate(
+        completionID: UInt32,
+        path: String,
+        createDisposition: CreateDisposition = .open,
+        createDirectory: Bool = false
+    ) -> CreateResponse {
         guard let url = resolveSandboxedURL(for: path) else {
             return CreateResponse(completionID: completionID, ioStatus: 0xC000_0022, fileID: 0, information: 0)
         }
         var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
-            return CreateResponse(completionID: completionID, ioStatus: 0xC000_000F, fileID: 0, information: 0)
+        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+
+        let infoByte: UInt8
+        switch createDisposition {
+        case .open:
+            guard exists else {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_000F, fileID: 0, information: 0)
+            }
+            infoByte = 0x01 // FILE_OPENED
+        case .create:
+            guard !isReadOnly else {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0022, fileID: 0, information: 0)
+            }
+            guard !exists else {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0035, fileID: 0, information: 0)
+            }
+            do {
+                if createDirectory {
+                    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+                } else {
+                    try Data().write(to: url)
+                }
+            } catch {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0001, fileID: 0, information: 0)
+            }
+            infoByte = 0x02 // FILE_CREATED
+        case .openIf:
+            if exists {
+                infoByte = 0x01 // FILE_OPENED
+            } else {
+                guard !isReadOnly else {
+                    return CreateResponse(completionID: completionID, ioStatus: 0xC000_0022, fileID: 0, information: 0)
+                }
+                do {
+                    if createDirectory {
+                        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+                    } else {
+                        try Data().write(to: url)
+                    }
+                } catch {
+                    return CreateResponse(completionID: completionID, ioStatus: 0xC000_0001, fileID: 0, information: 0)
+                }
+                infoByte = 0x02 // FILE_CREATED
+            }
+        case .overwrite:
+            guard !isReadOnly else {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0022, fileID: 0, information: 0)
+            }
+            guard exists, !isDir.boolValue else {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_000F, fileID: 0, information: 0)
+            }
+            do {
+                try Data().write(to: url)
+            } catch {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0001, fileID: 0, information: 0)
+            }
+            infoByte = 0x03 // FILE_OVERWRITTEN
+        case .overwriteIf, .supersede:
+            guard !isReadOnly else {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0022, fileID: 0, information: 0)
+            }
+            guard !isDir.boolValue else {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0022, fileID: 0, information: 0)
+            }
+            do {
+                try Data().write(to: url)
+            } catch {
+                return CreateResponse(completionID: completionID, ioStatus: 0xC000_0001, fileID: 0, information: 0)
+            }
+            infoByte = exists ? (createDisposition == .supersede ? 0x00 : 0x03) : 0x02
         }
+
         lock.lock()
         let allocatedID = nextFileID
         nextFileID = nextFileID == UInt32.max ? 1 : nextFileID + 1
         openFiles[allocatedID] = url
         lock.unlock()
-        // FILE_OPENED = 0x01
-        return CreateResponse(completionID: completionID, ioStatus: 0x0000_0000, fileID: allocatedID, information: 0x01)
+        return CreateResponse(completionID: completionID, ioStatus: 0x0000_0000, fileID: allocatedID, information: infoByte)
     }
 
     public func handleRead(completionID: UInt32, fileID: UInt32, length: UInt32, offset: UInt64) -> ReadResponse {
@@ -543,6 +638,101 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
             return ReadResponse(completionID: completionID, ioStatus: 0x0000_0000, data: chunk)
         } catch {
             return ReadResponse(completionID: completionID, ioStatus: 0xC000_0001, data: Data())
+        }
+    }
+
+    public func handleWrite(completionID: UInt32, fileID: UInt32, offset: UInt64, data: Data) -> WriteResponse {
+        guard !isReadOnly else {
+            return WriteResponse(completionID: completionID, ioStatus: 0xC000_0022, bytesWritten: 0)
+        }
+        lock.lock()
+        let fileURL = openFiles[fileID]
+        lock.unlock()
+        guard let fileURL else {
+            return WriteResponse(completionID: completionID, ioStatus: 0xC000_0008, bytesWritten: 0)
+        }
+        do {
+            let handle = try FileHandle(forWritingTo: fileURL)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: offset)
+            try handle.write(contentsOf: data)
+            return WriteResponse(completionID: completionID, ioStatus: 0x0000_0000, bytesWritten: UInt32(data.count))
+        } catch {
+            return WriteResponse(completionID: completionID, ioStatus: 0xC000_0001, bytesWritten: 0)
+        }
+    }
+
+    public func handleSetEndOfFile(completionID: UInt32, fileID: UInt32, size: UInt64) -> StatusResponse {
+        guard !isReadOnly else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0022)
+        }
+        lock.lock()
+        let fileURL = openFiles[fileID]
+        lock.unlock()
+        guard let fileURL else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0008)
+        }
+        do {
+            let handle = try FileHandle(forWritingTo: fileURL)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: size)
+            return StatusResponse(completionID: completionID, ioStatus: 0x0000_0000)
+        } catch {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0001)
+        }
+    }
+
+    public func handleRename(
+        completionID: UInt32,
+        fileID: UInt32,
+        newPath: String,
+        replaceIfExists: Bool = false
+    ) -> StatusResponse {
+        guard !isReadOnly else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0022)
+        }
+        guard let destinationURL = resolveSandboxedURL(for: newPath),
+              destinationURL.path != rootDirectory.path else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0022)
+        }
+        lock.lock()
+        let sourceURL = openFiles[fileID]
+        lock.unlock()
+        guard let sourceURL, sourceURL.path != rootDirectory.path else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0008)
+        }
+        do {
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                guard replaceIfExists else {
+                    return StatusResponse(completionID: completionID, ioStatus: 0xC000_0035)
+                }
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.moveItem(at: sourceURL, to: destinationURL)
+            lock.lock()
+            openFiles[fileID] = destinationURL
+            lock.unlock()
+            return StatusResponse(completionID: completionID, ioStatus: 0x0000_0000)
+        } catch {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0001)
+        }
+    }
+
+    public func handleDelete(completionID: UInt32, fileID: UInt32) -> StatusResponse {
+        guard !isReadOnly else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0022)
+        }
+        lock.lock()
+        let fileURL = openFiles[fileID]
+        lock.unlock()
+        guard let fileURL, fileURL.path != rootDirectory.path else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0022)
+        }
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+            return StatusResponse(completionID: completionID, ioStatus: 0x0000_0000)
+        } catch {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0001)
         }
     }
 

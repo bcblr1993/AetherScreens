@@ -23,6 +23,7 @@ public struct AddDeviceSheet: View {
     @State private var remoteAudioEnabled = true
     @State private var autoFitResolution = false
     @State private var sharedDirectoryPath = ""
+    @State private var sharedDirectoryReadOnly = false
     @State private var saveComputer = false
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
@@ -61,6 +62,7 @@ public struct AddDeviceSheet: View {
                           desktopWidth: dw, desktopHeight: dh,
                           remoteAudioEnabled: audio, autoFitResolution: autoFit,
                           wakeBeforeConnect: wakeBeforeConnect, sharedDirectoryPath: sharedDir,
+                          sharedDirectoryReadOnly: remoteProtocol == .rdp ? sharedDirectoryReadOnly : nil,
                           notes: includesSavedDetails ? notes : nil)
     }
 
@@ -138,6 +140,9 @@ public struct AddDeviceSheet: View {
                         Toggle(AppLocalization.string("Remote Audio Playback"), isOn: $remoteAudioEnabled)
                         TextField(AppLocalization.string("Shared Folder Path (Optional)"), text: $sharedDirectoryPath)
                             .autocorrectionDisabled()
+                        if !sharedDirectoryPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Toggle(AppLocalization.string("Share as Read-Only"), isOn: $sharedDirectoryReadOnly)
+                        }
                     }
                 }
 

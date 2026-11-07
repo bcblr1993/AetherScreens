@@ -18,6 +18,7 @@ public struct ConnectionRequest {
                   desktopWidth: Int? = nil, desktopHeight: Int? = nil,
                   remoteAudioEnabled: Bool? = nil, autoFitResolution: Bool? = nil,
                   wakeBeforeConnect: Bool? = nil, sharedDirectoryPath: String? = nil,
+                  sharedDirectoryReadOnly: Bool? = nil,
                   notes: String? = nil) {
         var address = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if address.hasPrefix("[") && address.hasSuffix("]") {
@@ -54,6 +55,7 @@ public struct ConnectionRequest {
                               remoteAudioEnabled: remoteAudioEnabled, autoFitResolution: autoFitResolution,
                               wakeBeforeConnect: mac.isEmpty ? nil : wakeBeforeConnect,
                               sharedDirectoryPath: (sharedDir?.isEmpty == false) ? sharedDir : nil,
+                              sharedDirectoryReadOnly: (sharedDir?.isEmpty == false) ? sharedDirectoryReadOnly : nil,
                               notes: (trimmedNotes?.isEmpty == false) ? trimmedNotes : nil)
     }
 }

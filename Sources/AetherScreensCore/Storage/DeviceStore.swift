@@ -143,6 +143,7 @@ public final class DeviceStore: @unchecked Sendable {
             autoFitResolution: device.autoFitResolution,
             wakeBeforeConnect: device.wakeBeforeConnect,
             sharedDirectoryPath: device.sharedDirectoryPath,
+            sharedDirectoryReadOnly: device.sharedDirectoryReadOnly,
             notes: device.notes
         )
         devices.append(cloned)
@@ -466,6 +467,7 @@ public final class DeviceStore: @unchecked Sendable {
             let autoFitResolution = metadata.autoFitResolution ?? local?.autoFitResolution
             let wakeBeforeConnect = metadata.wakeBeforeConnect ?? local?.wakeBeforeConnect
             let sharedDirectoryPath = metadata.sharedDirectoryPath ?? local?.sharedDirectoryPath
+            let sharedDirectoryReadOnly = metadata.sharedDirectoryReadOnly ?? local?.sharedDirectoryReadOnly
             let notes = metadata.notes ?? local?.notes
             let device = RemoteDevice(
                 id: metadata.id, name: metadata.name, host: metadata.host, port: metadata.port,
@@ -484,6 +486,7 @@ public final class DeviceStore: @unchecked Sendable {
                 autoFitResolution: autoFitResolution,
                 wakeBeforeConnect: wakeBeforeConnect,
                 sharedDirectoryPath: sharedDirectoryPath,
+                sharedDirectoryReadOnly: sharedDirectoryReadOnly,
                 notes: notes)
             if let index { candidate[index] = device }
             else { candidate.append(device) }

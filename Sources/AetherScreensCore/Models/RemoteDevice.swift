@@ -58,6 +58,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
     public var autoFitResolution: Bool?
     public var wakeBeforeConnect: Bool?
     public var sharedDirectoryPath: String?
+    public var sharedDirectoryReadOnly: Bool?
     public var notes: String?
 
     public init(
@@ -82,6 +83,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         autoFitResolution: Bool? = nil,
         wakeBeforeConnect: Bool? = nil,
         sharedDirectoryPath: String? = nil,
+        sharedDirectoryReadOnly: Bool? = nil,
         notes: String? = nil
     ) {
         self.id = id
@@ -105,11 +107,12 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.autoFitResolution = autoFitResolution
         self.wakeBeforeConnect = wakeBeforeConnect
         self.sharedDirectoryPath = sharedDirectoryPath
+        self.sharedDirectoryReadOnly = sharedDirectoryReadOnly
         self.notes = notes
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution, wakeBeforeConnect, sharedDirectoryPath, notes
+        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution, wakeBeforeConnect, sharedDirectoryPath, sharedDirectoryReadOnly, notes
     }
 
     public init(from decoder: Decoder) throws {
@@ -137,6 +140,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.autoFitResolution = try container.decodeIfPresent(Bool.self, forKey: .autoFitResolution)
         self.wakeBeforeConnect = try container.decodeIfPresent(Bool.self, forKey: .wakeBeforeConnect)
         self.sharedDirectoryPath = try container.decodeIfPresent(String.self, forKey: .sharedDirectoryPath)
+        self.sharedDirectoryReadOnly = try container.decodeIfPresent(Bool.self, forKey: .sharedDirectoryReadOnly)
         self.notes = try container.decodeIfPresent(String.self, forKey: .notes)
     }
 
@@ -163,6 +167,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         try container.encodeIfPresent(autoFitResolution, forKey: .autoFitResolution)
         try container.encodeIfPresent(wakeBeforeConnect, forKey: .wakeBeforeConnect)
         try container.encodeIfPresent(sharedDirectoryPath, forKey: .sharedDirectoryPath)
+        try container.encodeIfPresent(sharedDirectoryReadOnly, forKey: .sharedDirectoryReadOnly)
         try container.encodeIfPresent(notes, forKey: .notes)
     }
 

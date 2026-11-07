@@ -26,6 +26,7 @@ public struct EditDeviceSheet: View {
     @State private var remoteAudioEnabled: Bool = true
     @State private var autoFitResolution: Bool = false
     @State private var sharedDirectoryPath: String = ""
+    @State private var sharedDirectoryReadOnly: Bool = false
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
 
@@ -117,6 +118,9 @@ public struct EditDeviceSheet: View {
                         Toggle(AppLocalization.string("Remote Audio Playback"), isOn: $remoteAudioEnabled)
                         TextField(AppLocalization.string("Shared Folder Path (Optional)"), text: $sharedDirectoryPath)
                             .autocorrectionDisabled()
+                        if !sharedDirectoryPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Toggle(AppLocalization.string("Share as Read-Only"), isOn: $sharedDirectoryReadOnly)
+                        }
                     }
                 }
 
@@ -199,6 +203,7 @@ public struct EditDeviceSheet: View {
                             updatedDev.autoFitResolution = autoFitResolution
                             let trimmedShared = sharedDirectoryPath.trimmingCharacters(in: .whitespacesAndNewlines)
                             updatedDev.sharedDirectoryPath = trimmedShared.isEmpty ? nil : trimmedShared
+                            updatedDev.sharedDirectoryReadOnly = trimmedShared.isEmpty ? nil : sharedDirectoryReadOnly
                         } else {
                             updatedDev.authMethod = updatedDev.username == nil ? .vncPassword : .macAccount
                             updatedDev.desktopWidth = nil
@@ -206,6 +211,7 @@ public struct EditDeviceSheet: View {
                             updatedDev.remoteAudioEnabled = nil
                             updatedDev.autoFitResolution = nil
                             updatedDev.sharedDirectoryPath = nil
+                            updatedDev.sharedDirectoryReadOnly = nil
                         }
                         updatedDev.deviceType = deviceType
                         updatedDev.macAddress = macAddress.isEmpty ? nil : macAddress
@@ -261,6 +267,7 @@ public struct EditDeviceSheet: View {
                 remoteAudioEnabled = device.remoteAudioEnabled ?? true
                 autoFitResolution = device.autoFitResolution ?? false
                 sharedDirectoryPath = device.sharedDirectoryPath ?? ""
+                sharedDirectoryReadOnly = device.sharedDirectoryReadOnly ?? false
                 disconnectAction = DisconnectActionStore.shared.load(for: device.id, type: device.deviceType)
                 macAddress = device.macAddress ?? ""
                 wakeBeforeConnect = device.wakeBeforeConnect ?? false

@@ -22,6 +22,7 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
     public var autoFitResolution: Bool?
     public var wakeBeforeConnect: Bool?
     public var sharedDirectoryPath: String?
+    public var sharedDirectoryReadOnly: Bool?
     public var notes: String?
 
     public init(device: RemoteDevice) {
@@ -37,6 +38,7 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
         autoFitResolution = device.autoFitResolution
         wakeBeforeConnect = device.wakeBeforeConnect
         sharedDirectoryPath = device.sharedDirectoryPath
+        sharedDirectoryReadOnly = device.sharedDirectoryReadOnly
         notes = device.notes
     }
 
