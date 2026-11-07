@@ -13,8 +13,8 @@ public struct QuickSnippetsSheet: View {
     @State private var editingSnippet: QuickSnippet?
 
     @MainActor
-    public init(store: QuickSnippetStore = .shared, onSendSnippet: ((QuickSnippet) -> Void)? = nil) {
-        self.store = store
+    public init(store: QuickSnippetStore? = nil, onSendSnippet: ((QuickSnippet) -> Void)? = nil) {
+        self.store = store ?? .shared
         self.onSendSnippet = onSendSnippet
     }
 

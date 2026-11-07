@@ -7,8 +7,8 @@ public struct ConnectionHistorySheet: View {
     public let filterDevice: RemoteDevice?
 
     @MainActor
-    public init(store: ConnectionHistoryStore = .shared, filterDevice: RemoteDevice? = nil) {
-        self.store = store
+    public init(store: ConnectionHistoryStore? = nil, filterDevice: RemoteDevice? = nil) {
+        self.store = store ?? .shared
         self.filterDevice = filterDevice
     }
 

@@ -102,7 +102,8 @@ public final class PerformanceMetrics: ObservableObject, @unchecked Sendable {
     public func recordLatency(ms: Double) {
         guard ms.isFinite, ms >= 0 else { return }
         lock.lock()
-        smoothedLatency = hasLatencySample ? smoothedLatency * 0.7 + ms * 0.3 : ms
+        let rawSmoothed = hasLatencySample ? smoothedLatency * 0.7 + ms * 0.3 : ms
+        smoothedLatency = (rawSmoothed * 10).rounded() / 10
         hasLatencySample = true
         let latency = smoothedLatency
         let currentGeneration = generation
@@ -119,6 +120,13 @@ public final class PerformanceMetrics: ObservableObject, @unchecked Sendable {
             guard self.ratesMatch(latency: revision) else { return }
             if !self.hasLatencyMeasurements { self.hasLatencyMeasurements = true }
         }
+    }
+
+    /// Returns whether the integer HUD display values have changed compared to a previous snapshot.
+    public func hasMeaningfulHUDChange(previousFPS: Int, previousLatencyMs: Int, previousBandwidthKbps: Int) -> Bool {
+        Int(currentFPS.rounded()) != previousFPS
+            || Int(latencyMs.rounded()) != previousLatencyMs
+            || Int(bandwidthKbps.rounded()) != previousBandwidthKbps
     }
 
     public func recordBytesReceived(_ count: Int) {

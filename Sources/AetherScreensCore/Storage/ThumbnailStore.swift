@@ -163,8 +163,16 @@ public final class ThumbnailStore: @unchecked Sendable {
         changes.send(deviceId)
     }
 
-    private func scaledPreview(_ image: CGImage) -> CGImage {
-        let maximumDimension = 480
+    /// Evicts all in-memory thumbnail bitmaps while preserving on-disk JPEG caches.
+    public func clearMemoryCache() {
+        lock.lock()
+        memoryCache.removeAllObjects()
+        lock.unlock()
+    }
+
+    /// Downsamples a high-resolution (e.g. 4K/5K) `CGImage` so its longest edge is at most `maxPixelDimension`, preserving aspect ratio.
+    public static func downsampleImage(_ image: CGImage, maxPixelDimension: Int = 480) -> CGImage {
+        let maximumDimension = max(1, maxPixelDimension)
         let longest = max(image.width, image.height)
         guard longest > maximumDimension else { return image }
         let scale = Double(maximumDimension) / Double(longest)
@@ -182,5 +190,9 @@ public final class ThumbnailStore: @unchecked Sendable {
         context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return context.makeImage() ?? image
+    }
+
+    private func scaledPreview(_ image: CGImage) -> CGImage {
+        Self.downsampleImage(image, maxPixelDimension: 480)
     }
 }
