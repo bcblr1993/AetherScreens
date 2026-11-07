@@ -22,11 +22,19 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
     }
 
     public struct LogEntry: Identifiable, Sendable {
+        private static let formatterLock = NSLock()
+        private static let timeFormatter: DateFormatter = {
+            let df = DateFormatter()
+            df.dateFormat = "HH:mm:ss.SSS"
+            return df
+        }()
+
         public let id: UUID
         public let timestamp: Date
         public let level: LogLevel
         public let category: String
         public let message: String
+        public let formattedTime: String
 
         public init(
             id: UUID = UUID(),
@@ -40,12 +48,9 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
             self.level = level
             self.category = category
             self.message = message
-        }
-
-        public var formattedTime: String {
-            let df = DateFormatter()
-            df.dateFormat = "HH:mm:ss.SSS"
-            return df.string(from: timestamp)
+            Self.formatterLock.lock()
+            self.formattedTime = Self.timeFormatter.string(from: timestamp)
+            Self.formatterLock.unlock()
         }
 
         public var fullLine: String {

@@ -42,14 +42,11 @@ enum TightPixels {
         var output = Data(count: byteCount)
         color.withUnsafeBytes { source in
             output.withUnsafeMutableBytes { destination in
-                let bytes = destination.bindMemory(to: UInt8.self)
-                let rgba = source.bindMemory(to: UInt8.self)
-                for offset in stride(from: 0, to: byteCount, by: 4) {
-                    bytes[offset] = rgba[0]
-                    bytes[offset + 1] = rgba[1]
-                    bytes[offset + 2] = rgba[2]
-                    bytes[offset + 3] = 255
-                }
+                guard source.count >= 4, let dstBase = destination.baseAddress else { return }
+                let packed = source.loadUnaligned(as: UInt32.self)
+                let count = byteCount / 4
+                let dstU32 = dstBase.assumingMemoryBound(to: UInt32.self)
+                dstU32.update(repeating: packed, count: count)
             }
         }
         return output

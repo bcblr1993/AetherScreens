@@ -18,6 +18,8 @@ extension SessionViewModel {
         fileUploadPreparationID = UUID()
         fileUploadPreparationTask?.cancel()
         fileUploadPreparationTask = nil
+        fileUploadNoticeDismissTask?.cancel()
+        fileUploadNoticeDismissTask = nil
         isPreparingFileUpload = false
         activeUploadAttempts.removeAll()
         activeDownloadAttempts.removeAll()
@@ -172,19 +174,14 @@ extension SessionViewModel {
             guard !didPaste else { return }
             didPaste = true
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.isRDP, self.sessionState == .connected, let rdp = self.rdpClient else { return }
+                guard let self, self.isRDP, self.allowsRemoteInput, self.sessionState == .connected, let rdp = self.rdpClient else { return }
                 // Send Ctrl+V directly to Windows without invoking command shortcut text sync
                 rdp.sendKeyEvent(down: true, keySym: MacKeyMap.controlLeft)
                 rdp.sendKeyEvent(down: true, keySym: MacKeyMap.v)
                 rdp.sendKeyEvent(down: false, keySym: MacKeyMap.v)
                 rdp.sendKeyEvent(down: false, keySym: MacKeyMap.controlLeft)
 
-                self.fileUploadNotice = String(format: AppLocalization.string("Transferred \"%@\" to Windows."), namesString)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        self?.fileUploadNotice = nil
-                    }
-                }
+                self.showFileUploadNotice(String(format: AppLocalization.string("Transferred \"%@\" to Windows."), namesString))
             }
         }
 

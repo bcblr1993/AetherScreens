@@ -104,8 +104,11 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
         releaseRemoteInput()
         windowFocusSubscription = nil
         if let window {
-            windowFocusSubscription = NotificationCenter.default.publisher(
+            let resignKey = NotificationCenter.default.publisher(
                 for: NSWindow.didResignKeyNotification, object: window)
+            let resignActive = NotificationCenter.default.publisher(
+                for: NSApplication.didResignActiveNotification)
+            windowFocusSubscription = resignKey.merge(with: resignActive)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.releaseRemoteInput() }
         }
@@ -134,8 +137,13 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
         let scaleX = remoteSize.width / bounds.width
         let scaleY = remoteSize.height / bounds.height
 
-        let x = UInt16(min(max(0, viewPoint.x * scaleX), max(0, remoteSize.width - 1)))
-        let y = UInt16(min(max(0, flippedY * scaleY), max(0, remoteSize.height - 1)))
+        let rawX = viewPoint.x * scaleX
+        let rawY = flippedY * scaleY
+        guard rawX.isFinite, rawY.isFinite else { return (0, 0) }
+        let maxX = min(CGFloat(UInt16.max), max(0, remoteSize.width - 1))
+        let maxY = min(CGFloat(UInt16.max), max(0, remoteSize.height - 1))
+        let x = UInt16(min(max(0, rawX), maxX).rounded(.towardZero))
+        let y = UInt16(min(max(0, rawY), maxY).rounded(.towardZero))
         return (x, y)
     }
 
@@ -321,11 +329,12 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
                 return true
             }
         }
-        flagsChanged(with: event)
-        if let key = mapMacKeyCode(event.keyCode, characters: event.charactersIgnoringModifiers) {
-            onKeyEvent?(true, key)
-            onKeyEvent?(false, key)
+        guard let key = mapMacKeyCode(event.keyCode, characters: event.charactersIgnoringModifiers) else {
+            return super.performKeyEquivalent(with: event)
         }
+        flagsChanged(with: event)
+        onKeyEvent?(true, key)
+        onKeyEvent?(false, key)
         return true
     }
 
@@ -389,18 +398,19 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
         switch keyCode {
         case 53: return MacKeyMap.escape
         case 48: return MacKeyMap.tab
-        case 36: return MacKeyMap.return
+        case 36, 76: return MacKeyMap.return
         case 49: return MacKeyMap.space
         case 51: return MacKeyMap.backspace
+        case 115: return MacKeyMap.home
+        case 116: return MacKeyMap.pageUp
         case 117: return MacKeyMap.delete
+        case 119: return MacKeyMap.end
+        case 121: return MacKeyMap.pageDown
         case 123: return MacKeyMap.arrowLeft
         case 124: return MacKeyMap.arrowRight
         case 125: return MacKeyMap.arrowDown
         case 126: return MacKeyMap.arrowUp
-        case 55, 54: return MacKeyMap.commandLeft
-        case 58, 61: return MacKeyMap.optionLeft
-        case 59, 62: return MacKeyMap.controlLeft
-        case 56, 60: return MacKeyMap.shiftLeft
+        case 54, 55, 56, 57, 58, 59, 60, 61, 62: return nil // Modifiers handled in flagsChanged
         // Function keys
         case 122: return MacKeyMap.f1
         case 120: return MacKeyMap.f2

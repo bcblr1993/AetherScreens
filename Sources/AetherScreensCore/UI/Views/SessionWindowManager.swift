@@ -63,6 +63,12 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
         registry.activate(id)
     }
 
+    public func windowDidResignKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let id = controllers.first(where: { $0.value.window === window })?.key else { return }
+        registry.session(for: id)?.setForegroundSession(false)
+    }
+
     public func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
               let id = controllers.first(where: { $0.value.window === window })?.key else { return }

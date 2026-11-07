@@ -724,6 +724,12 @@
 "Full Color (32-bit)" = "Full Color (32-bit)";
 "Reduced Colors (16-bit)" = "Reduced Colors (16-bit)";
 "Reduced colors use less network data but may show subtle color banding. Changing this setting will reconnect." = "Reduced colors use less network data but may show subtle color banding. Changing this setting will reconnect.";
-"Done" = "Done";
 "File transfer cancelled or failed." = "File transfer cancelled or failed.";
+"OK" = "OK";
+"Server" = "Server";
+"Username" = "Username";
+"Cmd" = "Cmd";
+"Ctrl" = "Ctrl";
+"Opt" = "Opt";
+"Shift" = "Shift";
 

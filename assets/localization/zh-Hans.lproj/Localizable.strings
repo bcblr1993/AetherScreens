@@ -724,6 +724,12 @@
 "Full Color (32-bit)" = "全彩 (32 位高画质)";
 "Reduced Colors (16-bit)" = "减少色彩 (16 位节省流量)";
 "Reduced colors use less network data but may show subtle color banding. Changing this setting will reconnect." = "减少色彩可大幅降低网络带宽占用，但渐变区域可能出现细微色带。更改此设置将重新连接。";
-"Done" = "完成";
 "File transfer cancelled or failed." = "文件传输已取消或失败。";
+"OK" = "确定";
+"Server" = "服务器";
+"Username" = "用户名";
+"Cmd" = "Cmd";
+"Ctrl" = "Ctrl";
+"Opt" = "Opt";
+"Shift" = "Shift";
 

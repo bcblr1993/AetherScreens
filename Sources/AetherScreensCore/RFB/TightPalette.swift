@@ -16,8 +16,8 @@ enum TightPalette {
             expanded.withUnsafeBytes { table in
                 output.withUnsafeMutableBytes { destination -> Bool in
                     let input = source.bindMemory(to: UInt8.self)
-                    let entries = table.bindMemory(to: UInt8.self)
-                    let pixels = destination.bindMemory(to: UInt8.self)
+                    let entries = table.bindMemory(to: UInt32.self)
+                    let pixels = destination.bindMemory(to: UInt32.self)
                     for y in 0..<height {
                         for x in 0..<width {
                             let index: Int
@@ -27,10 +27,7 @@ enum TightPalette {
                                 index = Int(input[y * rowBytes + x])
                             }
                             guard index < colors else { return false }
-                            let target = (y * width + x) * 4
-                            for component in 0..<4 {
-                                pixels[target + component] = entries[index * 4 + component]
-                            }
+                            pixels[y * width + x] = entries[index]
                         }
                     }
                     return true

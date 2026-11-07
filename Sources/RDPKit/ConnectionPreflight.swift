@@ -2071,6 +2071,16 @@ private func configureTimeout(fd: Int32, timeoutSeconds: Int) throws {
     guard setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, size) == 0 else {
         throw RDPPreflightError.send(String(cString: strerror(errno)))
     }
+    var one: Int32 = 1
+    let intSize = socklen_t(MemoryLayout<Int32>.size)
+    _ = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, intSize)
+    _ = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &one, intSize)
+    var keepIdle: Int32 = 15
+    var keepInterval: Int32 = 5
+    var keepCount: Int32 = 3
+    _ = setsockopt(fd, IPPROTO_TCP, TCP_KEEPALIVE, &keepIdle, intSize)
+    _ = setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, intSize)
+    _ = setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, intSize)
 }
 
 private func sendAll(fd: Int32, packet: Data) throws {

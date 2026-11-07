@@ -764,13 +764,19 @@ final class RDPDecodedVideoSurfaceCompositor {
         }
         let bytesPerRow = width * 4
         var data = Data(repeating: 0, count: bytesPerRow * height)
-        for targetY in 0 ..< height {
-            let sourceY = min(surface.height - 1, targetY * surface.height / height)
-            for targetX in 0 ..< width {
-                let sourceX = min(surface.width - 1, targetX * surface.width / width)
-                let sourceOffset = sourceY * surface.bytesPerRow + sourceX * 4
-                let targetOffset = targetY * bytesPerRow + targetX * 4
-                data[targetOffset ..< targetOffset + 4] = surface.data[sourceOffset ..< sourceOffset + 4]
+        surface.data.withUnsafeBytes { srcRaw in
+            data.withUnsafeMutableBytes { dstRaw in
+                guard let srcBase = srcRaw.baseAddress, let dstBase = dstRaw.baseAddress else { return }
+                for targetY in 0 ..< height {
+                    let sourceY = min(surface.height - 1, targetY * surface.height / height)
+                    let srcRow = srcBase.advanced(by: sourceY * surface.bytesPerRow)
+                    let dstRow = dstBase.advanced(by: targetY * bytesPerRow).assumingMemoryBound(to: UInt32.self)
+                    for targetX in 0 ..< width {
+                        let sourceX = min(surface.width - 1, targetX * surface.width / width)
+                        let pixel = srcRow.loadUnaligned(fromByteOffset: sourceX * 4, as: UInt32.self)
+                        dstRow[targetX] = pixel
+                    }
+                }
             }
         }
         return Surface(width: width, height: height, bytesPerRow: bytesPerRow, data: data)

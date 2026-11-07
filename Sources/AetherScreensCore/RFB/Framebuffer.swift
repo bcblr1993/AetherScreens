@@ -1,5 +1,7 @@
 import Foundation
 import CoreGraphics
+import CoreImage
+import CoreVideo
 import Darwin
 
 #if canImport(UIKit)
@@ -61,13 +63,106 @@ public final class Framebuffer: @unchecked Sendable {
         rawData.withUnsafeBytes { source in
             pixels.withUnsafeMutableBytes { destination in
                 guard let src = source.baseAddress, let dst = destination.baseAddress else { return }
-                for row in 0..<clippedHeight {
-                    memcpy(dst.advanced(by: ((y + row) * self.width + x) * 4),
-                           src.advanced(by: row * width * 4), clippedWidth * 4)
+                if x == 0 && width == self.width && clippedWidth == self.width {
+                    memcpy(dst.advanced(by: y * self.width * 4), src, clippedWidth * clippedHeight * 4)
+                } else {
+                    for row in 0..<clippedHeight {
+                        memcpy(dst.advanced(by: ((y + row) * self.width + x) * 4),
+                               src.advanced(by: row * width * 4), clippedWidth * 4)
+                    }
                 }
             }
         }
         recordChange(CGRect(x: x, y: y, width: clippedWidth, height: clippedHeight))
+    }
+
+    /// Update dirty regions directly from a decoded `CVPixelBuffer` without allocating intermediate full-screen `Data`.
+    public func updateFromPixelBuffer(
+        _ pixelBuffer: CVPixelBuffer,
+        dirtyRects: [(x: Int, y: Int, width: Int, height: Int)],
+        fallbackContext: CIContext
+    ) {
+        let pbWidth = CVPixelBufferGetWidth(pixelBuffer)
+        let pbHeight = CVPixelBufferGetHeight(pixelBuffer)
+        guard pbWidth > 0, pbHeight > 0 else { return }
+
+        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        let effectiveRects = dirtyRects.isEmpty
+            ? [(x: 0, y: 0, width: pbWidth, height: pbHeight)]
+            : dirtyRects
+
+        if format == kCVPixelFormatType_32BGRA {
+            CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+            defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+            guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return }
+            let srcBytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+
+            lock.lock()
+            defer { lock.unlock() }
+            if width != pbWidth || height != pbHeight {
+                width = pbWidth
+                height = pbHeight
+                pixels = [UInt8](repeating: 0, count: pbWidth * pbHeight * 4)
+                recordChange(CGRect(x: 0, y: 0, width: pbWidth, height: pbHeight))
+            }
+            let dstBytesPerRow = width * 4
+            pixels.withUnsafeMutableBytes { dstRaw in
+                guard let dstBase = dstRaw.baseAddress else { return }
+                for rect in effectiveRects {
+                    let x0 = max(0, min(width, rect.x))
+                    let y0 = max(0, min(height, rect.y))
+                    let x1 = max(x0, min(width, rect.x + rect.width))
+                    let y1 = max(y0, min(height, rect.y + rect.height))
+                    let copyW = x1 - x0
+                    let copyH = y1 - y0
+                    guard copyW > 0, copyH > 0 else { continue }
+                    if x0 == 0 && copyW == width && srcBytesPerRow == dstBytesPerRow {
+                        let offset = y0 * dstBytesPerRow
+                        memcpy(dstBase.advanced(by: offset), baseAddress.advanced(by: offset), copyH * dstBytesPerRow)
+                    } else {
+                        for row in y0..<y1 {
+                            let srcPtr = baseAddress.advanced(by: row * srcBytesPerRow + x0 * 4)
+                            let dstPtr = dstBase.advanced(by: row * dstBytesPerRow + x0 * 4)
+                            memcpy(dstPtr, srcPtr, copyW * 4)
+                        }
+                    }
+                    recordChange(CGRect(x: x0, y: y0, width: copyW, height: copyH))
+                }
+            }
+            return
+        }
+
+        let ciImage = CIImage(cvImageBuffer: pixelBuffer)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        lock.lock()
+        defer { lock.unlock() }
+        if width != pbWidth || height != pbHeight {
+            width = pbWidth
+            height = pbHeight
+            pixels = [UInt8](repeating: 0, count: pbWidth * pbHeight * 4)
+            recordChange(CGRect(x: 0, y: 0, width: pbWidth, height: pbHeight))
+        }
+        let dstBytesPerRow = width * 4
+        pixels.withUnsafeMutableBytes { dstRaw in
+            guard let dstBase = dstRaw.baseAddress else { return }
+            fallbackContext.render(
+                ciImage,
+                toBitmap: dstBase,
+                rowBytes: dstBytesPerRow,
+                bounds: CGRect(x: 0, y: 0, width: width, height: height),
+                format: .BGRA8,
+                colorSpace: colorSpace
+            )
+            for rect in effectiveRects {
+                let x0 = max(0, min(width, rect.x))
+                let y0 = max(0, min(height, rect.y))
+                let x1 = max(x0, min(width, rect.x + rect.width))
+                let y1 = max(y0, min(height, rect.y + rect.height))
+                if x1 > x0 && y1 > y0 {
+                    recordChange(CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0))
+                }
+            }
+        }
     }
 
     /// Copy with overlap-safe row order and no temporary allocation per row.

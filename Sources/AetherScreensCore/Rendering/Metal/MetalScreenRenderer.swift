@@ -63,7 +63,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
             address::clamp_to_edge,
             filter::linear
         );
-        return screenTexture.sample(textureSampler, in.texCoord);
+        return float4(screenTexture.sample(textureSampler, in.texCoord).rgb, 1.0);
     }
     """
 
@@ -257,15 +257,23 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
             guard recreate || shouldUpload else { return }
             let regions = recreate ? [CGRect(x: 0, y: 0, width: width, height: height)] : changes
             for region in regions {
-                let rowBytes = Int(region.width) * 4
+                let regionWidth = Int(region.width)
+                let regionHeight = Int(region.height)
+                let rowBytes = regionWidth * 4
                 // Conservative alignment supports both Apple and discrete Mac GPUs.
                 let stride = (rowBytes + 255) & ~255
-                guard let buffer = uploadBuffers.take(length: stride * Int(region.height)) else {
+                guard let buffer = uploadBuffers.take(length: stride * regionHeight) else {
                     failed = true; return
                 }
-                for row in 0..<Int(region.height) {
-                    memcpy(buffer.contents().advanced(by: row * stride),
-                           base.advanced(by: ((Int(region.minY) + row) * width + Int(region.minX)) * 4), rowBytes)
+                if Int(region.minX) == 0 && regionWidth == width && stride == rowBytes {
+                    memcpy(buffer.contents(),
+                           base.advanced(by: Int(region.minY) * width * 4),
+                           stride * regionHeight)
+                } else {
+                    for row in 0..<regionHeight {
+                        memcpy(buffer.contents().advanced(by: row * stride),
+                               base.advanced(by: ((Int(region.minY) + row) * width + Int(region.minX)) * 4), rowBytes)
+                    }
                 }
                 pending.append((buffer, region, stride))
             }

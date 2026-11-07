@@ -52,7 +52,7 @@ public final class RDPClient: @unchecked Sendable {
     public var onRemoteFilesAdvertised: (@Sendable ([RDPClipboardFileDescriptorW]) -> Void)?
     public var onFileUploadProgress: (@Sendable (String, UInt64, UInt64) -> Void)?
     public var onFileDownloadProgress: (@Sendable (String, UInt64, UInt64) -> Void)?
-    public var onCursorReceived: (@Sendable (RFBRemoteCursor) -> Void)?
+    public var onCursorReceived: (@Sendable (RFBRemoteCursor?) -> Void)?
     public var onTransportRTT: (@Sendable (Double) -> Void)?
     public var onAudioSampleReceived: (@Sendable (RDPAudioSample) -> Void)?
     public var audioEnabled: Bool = true
@@ -62,6 +62,7 @@ public final class RDPClient: @unchecked Sendable {
     private var inputSession: RDPInputSession?
     private var clipboardSession: RDPClipboardSession?
     private var displayControlSession: RDPDisplayControlSession?
+    private var pendingDisplayResolution: (width: Int, height: Int)?
     private let fileDownloader = RDPClipboardFileDownloader()
     private var pendingFormatListAck: (@Sendable () -> Void)?
     public private(set) var lastPointerPosition: (UInt16, UInt16)?
@@ -164,7 +165,7 @@ public final class RDPClient: @unchecked Sendable {
                 shouldCancel: { cancellation.isCancelled },
                 onDecoded: { [weak self] presentation, _, _, _ in
                     guard let self else { return }
-                    self.processDecodedFrame(presentation.imageBuffer)
+                    self.processDecodedFrame(presentation)
                 },
                 onDecodeFailed: { _, err in
                     AppLogger.shared.error("RDP decode error: \(err)", category: "RDP")
@@ -185,7 +186,9 @@ public final class RDPClient: @unchecked Sendable {
                         try outcome.requireDecoded()
                     }
                 },
-                onRemotePointer: nil,
+                onRemotePointer: { [weak self] update in
+                    self?.handleRemotePointerUpdate(update)
+                },
                 onInputReady: { [weak self] session in
                     guard let self else { return }
                     self.inputLock.lock()
@@ -197,7 +200,12 @@ public final class RDPClient: @unchecked Sendable {
                     guard let self else { return }
                     self.inputLock.lock()
                     self.displayControlSession = session
+                    let pending = self.pendingDisplayResolution
+                    self.pendingDisplayResolution = nil
                     self.inputLock.unlock()
+                    if let pending {
+                        self.sendClampedMonitorLayout(width: pending.width, height: pending.height, via: session)
+                    }
                 },
                 onClipboardReady: { [weak self] session in
                     guard let self else { return }
@@ -264,6 +272,7 @@ public final class RDPClient: @unchecked Sendable {
         clipboardSession = nil
         pendingFormatListAck = nil
         displayControlSession = nil
+        pendingDisplayResolution = nil
         keyTranslator = RDPKeyTranslator()
         connectionTask?.cancel()
         connectionTask = nil
@@ -284,8 +293,35 @@ public final class RDPClient: @unchecked Sendable {
         let size = Self.displayControlSize(width: width, height: height)
         inputLock.lock()
         let dc = displayControlSession
+        if dc == nil {
+            pendingDisplayResolution = size
+        } else {
+            pendingDisplayResolution = nil
+        }
         inputLock.unlock()
-        dc?.sendSingleMonitorLayout(width: UInt32(size.width), height: UInt32(size.height))
+        if let dc {
+            sendClampedMonitorLayout(width: size.width, height: size.height, via: dc)
+        }
+    }
+
+    private func sendClampedMonitorLayout(width: Int, height: Int, via session: RDPDisplayControlSession) {
+        var finalWidth = width
+        var finalHeight = height
+        let caps = session.capabilities
+        let maxArea = UInt64(caps.maxNumMonitors)
+            .multipliedReportingOverflow(by: UInt64(caps.maxMonitorAreaFactorA)).partialValue
+            .multipliedReportingOverflow(by: UInt64(caps.maxMonitorAreaFactorB)).partialValue
+        let requestedArea = UInt64(finalWidth) * UInt64(finalHeight)
+        if maxArea >= 40_000, requestedArea > maxArea {
+            let scale = sqrt(Double(maxArea) / Double(requestedArea))
+            let clamped = Self.displayControlSize(
+                width: Int((Double(finalWidth) * scale).rounded(.down)),
+                height: Int((Double(finalHeight) * scale).rounded(.down))
+            )
+            finalWidth = clamped.width
+            finalHeight = clamped.height
+        }
+        session.sendSingleMonitorLayout(width: UInt32(finalWidth), height: UInt32(finalHeight))
     }
 
     /// MS-RDPEDISP requires 200...8192 pixels per side and an even width; other layouts are dropped silently.
@@ -306,31 +342,143 @@ public final class RDPClient: @unchecked Sendable {
         }
     }
 
-    private func processDecodedFrame(_ imageBuffer: CVPixelBuffer) {
+    private func processDecodedFrame(_ presentation: RDPDecodedFramePresentation) {
+        let imageBuffer = presentation.imageBuffer
         let width = CVPixelBufferGetWidth(imageBuffer)
         let height = CVPixelBufferGetHeight(imageBuffer)
         guard width > 0, height > 0 else { return }
 
-        if framebuffer.width != width || framebuffer.height != height {
-            framebuffer.resize(newWidth: width, newHeight: height)
+        let sourceRects = presentation.frame.regionRects.isEmpty
+            ? [presentation.frame.destinationRect]
+            : presentation.frame.regionRects
+        let dirtyRects: [(x: Int, y: Int, width: Int, height: Int)] = sourceRects.compactMap { rect in
+            let w = Int(rect.width)
+            let h = Int(rect.height)
+            guard w > 0, h > 0 else { return nil }
+            return (x: Int(rect.left), y: Int(rect.top), width: w, height: h)
         }
 
-        let ciImage = CIImage(cvImageBuffer: imageBuffer)
-        var bgraData = Data(count: width * height * 4)
-        bgraData.withUnsafeMutableBytes { ptr in
-            guard let base = ptr.baseAddress else { return }
-            imageContext.render(
-                ciImage,
-                toBitmap: base,
-                rowBytes: width * 4,
-                bounds: CGRect(x: 0, y: 0, width: width, height: height),
-                format: .BGRA8,
-                colorSpace: CGColorSpaceCreateDeviceRGB()
-            )
-        }
-
-        framebuffer.updateRect(x: 0, y: 0, width: width, height: height, rawData: bgraData)
+        framebuffer.updateFromPixelBuffer(imageBuffer, dirtyRects: dirtyRects, fallbackContext: imageContext)
         onFrameUpdated?()
+    }
+
+    private func handleRemotePointerUpdate(_ update: RDPRemotePointerUpdate) {
+        switch update {
+        case .hidden:
+            onCursorReceived?(RFBRemoteCursor(width: 0, height: 0, hotspotX: 0, hotspotY: 0, pixels: Data()))
+        case .systemDefault:
+            onCursorReceived?(nil)
+        case let .image(image), let .cachedImage(image):
+            if let cursor = Self.decodeRemotePointerImage(image) {
+                onCursorReceived?(cursor)
+            }
+        case .position, .unresolvedCachedImage:
+            break
+        }
+    }
+
+    static func decodeRemotePointerImage(_ image: RDPRemotePointerImage?) -> RFBRemoteCursor? {
+        guard let image else { return nil }
+        let width = Int(image.width)
+        let height = Int(image.height)
+        guard width > 0, height > 0,
+              width <= RFBRemoteCursor.maximumDimension,
+              height <= RFBRemoteCursor.maximumDimension else { return nil }
+        let hotspotX = min(max(0, Int(image.hotSpot.x)), width - 1)
+        let hotspotY = min(max(0, Int(image.hotSpot.y)), height - 1)
+        let bpp = Int(image.xorBitsPerPixel)
+        guard bpp == 24 || bpp == 32 else { return nil }
+        let xorStride = (((width * bpp + 7) / 8) + 1) & ~1
+        let andStride = (((width + 7) / 8) + 1) & ~1
+        guard image.xorMaskData.count >= xorStride * height,
+              image.andMaskData.count >= andStride * height else { return nil }
+
+        var pixels = Data(count: width * height * 4)
+        image.xorMaskData.withUnsafeBytes { xorRaw in
+            image.andMaskData.withUnsafeBytes { andRaw in
+                pixels.withUnsafeMutableBytes { dstRaw in
+                    guard let xorBase = xorRaw.bindMemory(to: UInt8.self).baseAddress,
+                          let andBase = andRaw.bindMemory(to: UInt8.self).baseAddress,
+                          let dstBase = dstRaw.bindMemory(to: UInt8.self).baseAddress else { return }
+
+                    var hasAlphaChannel = false
+                    if bpp == 32 {
+                        for row in 0..<height where !hasAlphaChannel {
+                            let rowPtr = xorBase.advanced(by: row * xorStride)
+                            for x in 0..<width {
+                                if rowPtr[x * 4 + 3] != 0 {
+                                    hasAlphaChannel = true
+                                    break
+                                }
+                            }
+                        }
+                    }
+
+                    for y in 0..<height {
+                        // MS-RDPBCGR 2.2.9.1.1.4.4 pointer bitmaps are stored bottom-up.
+                        let srcRow = height - 1 - y
+                        let xorRow = xorBase.advanced(by: srcRow * xorStride)
+                        let andRow = andBase.advanced(by: srcRow * andStride)
+                        let dstRow = dstBase.advanced(by: y * width * 4)
+                        for x in 0..<width {
+                            let andBit = (andRow[x / 8] & UInt8(0x80 >> (x % 8))) != 0
+                            let dstOffset = x * 4
+                            if bpp == 32 {
+                                let b = xorRow[x * 4]
+                                let g = xorRow[x * 4 + 1]
+                                let r = xorRow[x * 4 + 2]
+                                let a = xorRow[x * 4 + 3]
+                                if hasAlphaChannel {
+                                    // Premultiply BGRA for CoreGraphics (.premultipliedFirst + .byteOrder32Little)
+                                    let alpha = UInt16(a)
+                                    dstRow[dstOffset] = UInt8((UInt16(b) * alpha + 127) / 255)
+                                    dstRow[dstOffset + 1] = UInt8((UInt16(g) * alpha + 127) / 255)
+                                    dstRow[dstOffset + 2] = UInt8((UInt16(r) * alpha + 127) / 255)
+                                    dstRow[dstOffset + 3] = a
+                                } else if !andBit {
+                                    dstRow[dstOffset] = b
+                                    dstRow[dstOffset + 1] = g
+                                    dstRow[dstOffset + 2] = r
+                                    dstRow[dstOffset + 3] = 255
+                                } else if b != 0 || g != 0 || r != 0 {
+                                    // Inverted XOR pixel (e.g. I-beam cursor): render with high-contrast dark fill
+                                    dstRow[dstOffset] = 255 - b
+                                    dstRow[dstOffset + 1] = 255 - g
+                                    dstRow[dstOffset + 2] = 255 - r
+                                    dstRow[dstOffset + 3] = 255
+                                } else {
+                                    dstRow[dstOffset] = 0
+                                    dstRow[dstOffset + 1] = 0
+                                    dstRow[dstOffset + 2] = 0
+                                    dstRow[dstOffset + 3] = 0
+                                }
+                            } else {
+                                let b = xorRow[x * 3]
+                                let g = xorRow[x * 3 + 1]
+                                let r = xorRow[x * 3 + 2]
+                                if !andBit {
+                                    dstRow[dstOffset] = b
+                                    dstRow[dstOffset + 1] = g
+                                    dstRow[dstOffset + 2] = r
+                                    dstRow[dstOffset + 3] = 255
+                                } else if b != 0 || g != 0 || r != 0 {
+                                    dstRow[dstOffset] = 255 - b
+                                    dstRow[dstOffset + 1] = 255 - g
+                                    dstRow[dstOffset + 2] = 255 - r
+                                    dstRow[dstOffset + 3] = 255
+                                } else {
+                                    dstRow[dstOffset] = 0
+                                    dstRow[dstOffset + 1] = 0
+                                    dstRow[dstOffset + 2] = 0
+                                    dstRow[dstOffset + 3] = 0
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return RFBRemoteCursor(width: width, height: height, hotspotX: hotspotX, hotspotY: hotspotY, pixels: pixels)
     }
 
     // MARK: - Input

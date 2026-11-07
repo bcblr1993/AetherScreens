@@ -379,14 +379,10 @@ public struct RemoteDesktopView: View {
                 onTextEvent: { text in viewModel.sendTextString(text) },
                 onDragOutsideDetected: {
                     if viewModel.isRDP && viewModel.downloadedRemoteFiles.isEmpty {
-                        viewModel.fileUploadNotice = AppLocalization.string("Tip: To transfer files from Windows to Mac, press Ctrl+C or Cmd+C in Windows to copy.")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                if viewModel.fileUploadNotice?.contains("Ctrl+C") == true {
-                                    viewModel.fileUploadNotice = nil
-                                }
-                            }
-                        }
+                        viewModel.showFileUploadNotice(
+                            AppLocalization.string("Tip: To transfer files from Windows to Mac, press Ctrl+C or Cmd+C in Windows to copy."),
+                            durationNanoseconds: 3_500_000_000
+                        )
                     }
                 },
                 onPointerEvent: { mask, x, y in

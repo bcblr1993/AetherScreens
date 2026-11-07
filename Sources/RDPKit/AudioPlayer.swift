@@ -13,11 +13,32 @@ public final class RDPAudioPlayer {
     private var configuration: Configuration?
     private var format: AVAudioFormat?
     private var queuedFrameCount: AVAudioFramePosition = 0
+    private var generation: UInt64 = 0
+    private var routeChangeObserver: NSObjectProtocol?
     private let maximumQueuedSeconds: Double
 
-    public init(maximumQueuedSeconds: Double = 0.75) {
+    public init(maximumQueuedSeconds: Double = 0.35) {
         self.maximumQueuedSeconds = max(0, maximumQueuedSeconds)
         engine.attach(player)
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.generation &+= 1
+                self.configuration = nil
+                self.format = nil
+                self.queuedFrameCount = 0
+            }
+        }
+    }
+
+    deinit {
+        if let routeChangeObserver {
+            NotificationCenter.default.removeObserver(routeChangeObserver)
+        }
     }
 
     public var statusMessage: String {
@@ -36,6 +57,7 @@ public final class RDPAudioPlayer {
     }
 
     public func reset() {
+        generation &+= 1
         player.stop()
         engine.stop()
         engine.reset()
@@ -67,8 +89,10 @@ public final class RDPAudioPlayer {
         let maximumQueuedFrames = AVAudioFramePosition(
             Double(sample.format.samplesPerSecond) * maximumQueuedSeconds
         )
-        guard queuedFrameCount <= maximumQueuedFrames else {
-            return false
+        if queuedFrameCount > maximumQueuedFrames {
+            generation &+= 1
+            player.stop()
+            queuedFrameCount = 0
         }
 
         guard let format,
@@ -100,10 +124,11 @@ public final class RDPAudioPlayer {
         audioBufferList.pointee.mBuffers.mDataByteSize = UInt32(audioByteCount)
 
         let scheduledFrameCount = AVAudioFramePosition(frameCount)
+        let scheduledGeneration = generation
         queuedFrameCount += scheduledFrameCount
         player.scheduleBuffer(buffer) { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self else {
+                guard let self, self.generation == scheduledGeneration else {
                     return
                 }
                 self.queuedFrameCount = max(0, self.queuedFrameCount - scheduledFrameCount)
@@ -120,6 +145,7 @@ public final class RDPAudioPlayer {
     }
 
     private func configure(_ nextConfiguration: Configuration) throws {
+        generation &+= 1
         player.stop()
         engine.stop()
         engine.reset()

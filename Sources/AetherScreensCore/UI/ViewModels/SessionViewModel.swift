@@ -25,6 +25,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     var activeUploadAttempts: [String: FileTransferTaskStore.Attempt] = [:]
     var activeDownloadAttempts: [String: FileTransferTaskStore.Attempt] = [:]
     var fileUploadPreparationTask: Task<Void, Never>?
+    var fileUploadNoticeDismissTask: Task<Void, Never>?
     var fileUploadPreparationID = UUID()
     public let client: RFBClient
     public let rdpClient: RDPClient?
@@ -675,6 +676,16 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             }
         }
 
+        rdp.onCursorReceived = { [weak self] cursor in
+            guard let self else { return }
+            let generation = self.callbackGeneration.capture()
+            Task { @MainActor [weak self] in
+                guard let self, self.callbackGeneration.matches(generation),
+                      self.sessionState == .connected else { return }
+                self.cursorUpdates.send(cursor)
+            }
+        }
+
         rdp.onClipboardReceived = { [weak self] text in
             guard let self else { return }
             let generation = self.callbackGeneration.capture()
@@ -770,16 +781,13 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                     }
                 }
                 let count = urls.count
+                let message: String
                 if count == 1, let name = urls.first?.lastPathComponent {
-                    self.fileUploadNotice = String(format: AppLocalization.string("File \"%@\" received from Windows."), name)
+                    message = String(format: AppLocalization.string("File \"%@\" received from Windows."), name)
                 } else {
-                    self.fileUploadNotice = String(format: AppLocalization.string("%d files received from Windows."), count)
+                    message = String(format: AppLocalization.string("%d files received from Windows."), count)
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        self?.fileUploadNotice = nil
-                    }
-                }
+                self.showFileUploadNotice(message)
             }
         }
 
@@ -800,6 +808,18 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             Task { @MainActor [weak self] in
                 guard let self, self.isRemoteAudioEnabled, !self.isRemoteAudioMuted, !self.isSuspendedByAppLock else { return }
                 _ = try? self.rdpAudioPlayer?.enqueue(sample)
+            }
+        }
+    }
+
+    public func showFileUploadNotice(_ message: String, durationNanoseconds: UInt64 = 2_500_000_000) {
+        fileUploadNoticeDismissTask?.cancel()
+        fileUploadNotice = message
+        fileUploadNoticeDismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: durationNanoseconds)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                self?.fileUploadNotice = nil
             }
         }
     }

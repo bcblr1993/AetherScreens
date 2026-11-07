@@ -18,6 +18,7 @@ public struct MetalScreenView: UIViewRepresentable {
         let mtkView = MTKView(frame: .zero, device: renderer.device)
         mtkView.delegate = renderer
         mtkView.colorPixelFormat = .bgra8Unorm
+        mtkView.framebufferOnly = true
         mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         mtkView.isPaused = true
         mtkView.enableSetNeedsDisplay = true
@@ -51,6 +52,7 @@ public struct MetalScreenView: NSViewRepresentable {
         let mtkView = MTKView(frame: .zero, device: renderer.device)
         mtkView.delegate = renderer
         mtkView.colorPixelFormat = .bgra8Unorm
+        mtkView.framebufferOnly = true
         mtkView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         mtkView.isPaused = true
         mtkView.enableSetNeedsDisplay = true

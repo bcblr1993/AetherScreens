@@ -555,11 +555,17 @@ final class RDPGFXSurfaceCompositor {
             throw RDPDecodeError.invalidRDPGFXPDU
         }
 
-        for row in 0 ..< height {
-            for column in 0 ..< width {
-                let sourceOffset = row * width + column
-                let destinationOffset = (y + row) * surface.bytesPerRow + (x + column) * 4 + 3
-                surface.data[destinationOffset] = alphaValues[sourceOffset]
+        alphaValues.withUnsafeBytes { srcRaw in
+            surface.data.withUnsafeMutableBytes { dstRaw in
+                guard let srcBase = srcRaw.bindMemory(to: UInt8.self).baseAddress,
+                      let dstBase = dstRaw.bindMemory(to: UInt8.self).baseAddress else { return }
+                for row in 0 ..< height {
+                    let srcRow = srcBase.advanced(by: row * width)
+                    let dstRow = dstBase.advanced(by: (y + row) * surface.bytesPerRow + x * 4 + 3)
+                    for column in 0 ..< width {
+                        dstRow[column * 4] = srcRow[column]
+                    }
+                }
             }
         }
         surfaces[surfaceID] = surface
@@ -775,16 +781,19 @@ final class RDPGFXSurfaceCompositor {
         }
 
         var destination = Data(repeating: 0, count: targetWidth * targetHeight * 4)
-        for targetY in 0 ..< targetHeight {
-            let sourceY = min(sourceHeight - 1, targetY * sourceHeight / targetHeight)
-            for targetX in 0 ..< targetWidth {
-                let sourceX = min(sourceWidth - 1, targetX * sourceWidth / targetWidth)
-                let sourceOffset = sourceY * sourceBytesPerRow + sourceX * 4
-                let destinationOffset = (targetY * targetWidth + targetX) * 4
-                destination[destinationOffset] = source[sourceOffset]
-                destination[destinationOffset + 1] = source[sourceOffset + 1]
-                destination[destinationOffset + 2] = source[sourceOffset + 2]
-                destination[destinationOffset + 3] = source[sourceOffset + 3]
+        source.withUnsafeBytes { srcRaw in
+            destination.withUnsafeMutableBytes { dstRaw in
+                guard let srcBase = srcRaw.baseAddress, let dstBase = dstRaw.baseAddress else { return }
+                let dstU32 = dstBase.assumingMemoryBound(to: UInt32.self)
+                for targetY in 0 ..< targetHeight {
+                    let sourceY = min(sourceHeight - 1, targetY * sourceHeight / targetHeight)
+                    let srcRow = srcBase.advanced(by: sourceY * sourceBytesPerRow)
+                    let dstRowOffset = targetY * targetWidth
+                    for targetX in 0 ..< targetWidth {
+                        let sourceX = min(sourceWidth - 1, targetX * sourceWidth / targetWidth)
+                        dstU32[dstRowOffset + targetX] = srcRow.loadUnaligned(fromByteOffset: sourceX * 4, as: UInt32.self)
+                    }
+                }
             }
         }
         return destination
@@ -797,14 +806,20 @@ final class RDPGFXSurfaceCompositor {
             return
         }
         let alpha = surface.pixelFormat == RDPGFXPixelFormat.argb8888 ? color.alpha : 0xFF
-
-        for row in Int(rect.top) ..< Int(rect.bottom) {
-            for column in Int(rect.left) ..< Int(rect.right) {
-                let offset = row * surface.bytesPerRow + column * 4
-                surface.data[offset] = color.blue
-                surface.data[offset + 1] = color.green
-                surface.data[offset + 2] = color.red
-                surface.data[offset + 3] = alpha
+        let packed = UInt32(color.blue)
+            | (UInt32(color.green) << 8)
+            | (UInt32(color.red) << 16)
+            | (UInt32(alpha) << 24)
+        let pixelLE = packed.littleEndian
+        let left = Int(rect.left)
+        let width = Int(rect.right) - left
+        guard width > 0 else { return }
+        surface.data.withUnsafeMutableBytes { dstRaw in
+            guard let dstBase = dstRaw.baseAddress else { return }
+            for row in Int(rect.top) ..< Int(rect.bottom) {
+                let rowPtr = dstBase.advanced(by: row * surface.bytesPerRow + left * 4)
+                    .assumingMemoryBound(to: UInt32.self)
+                rowPtr.update(repeating: pixelLE, count: width)
             }
         }
         surfaces[surfaceID] = surface

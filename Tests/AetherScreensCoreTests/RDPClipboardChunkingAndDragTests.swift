@@ -1,4 +1,6 @@
 import XCTest
+import CoreImage
+import CoreVideo
 import RDPKit
 @testable import RDPKit
 @testable import AetherScreensCore
@@ -395,5 +397,97 @@ final class RDPClipboardChunkingAndDragTests: XCTestCase {
         XCTAssertEqual(metadata.desktopHeight, 1440)
         XCTAssertEqual(metadata.remoteAudioEnabled, false)
         XCTAssertEqual(metadata.autoFitResolution, false)
+    }
+
+    func testUpdateFromPixelBufferCopiesOnlyDirtyRegions() throws {
+        let fb = Framebuffer(width: 4, height: 4)
+        var pb: CVPixelBuffer?
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            4,
+            4,
+            kCVPixelFormatType_32BGRA,
+            nil,
+            &pb
+        )
+        XCTAssertEqual(status, kCVReturnSuccess)
+        let pixelBuffer = try XCTUnwrap(pb)
+
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        if let base = CVPixelBufferGetBaseAddress(pixelBuffer) {
+            let stride = CVPixelBufferGetBytesPerRow(pixelBuffer)
+            for row in 0..<4 {
+                let rowPtr = base.advanced(by: row * stride).assumingMemoryBound(to: UInt8.self)
+                for col in 0..<4 {
+                    rowPtr[col * 4] = 0x11
+                    rowPtr[col * 4 + 1] = 0x22
+                    rowPtr[col * 4 + 2] = 0x33
+                    rowPtr[col * 4 + 3] = 0xFF
+                }
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+
+        let ciContext = CIContext(options: [.useSoftwareRenderer: true])
+        fb.updateFromPixelBuffer(
+            pixelBuffer,
+            dirtyRects: [(x: 1, y: 1, width: 2, height: 2)],
+            fallbackContext: ciContext
+        )
+
+        // (0,0) should remain 0, while (1,1) should have [0x11, 0x22, 0x33, 0xFF]
+        XCTAssertEqual(fb.pixels[0], 0)
+        let insideIndex = (1 * 4 + 1) * 4
+        XCTAssertEqual(Array(fb.pixels[insideIndex..<(insideIndex + 4)]), [0x11, 0x22, 0x33, 0xFF])
+    }
+
+    func testDecodeRemotePointerImage32BitAnd24Bit() throws {
+        // 2x2 32-bit bottom-up pointer with explicit alpha
+        var xor32 = Data(repeating: 0, count: 2 * 8)
+        // Row 0 in bottom-up storage corresponds to top row y=1; Row 1 corresponds to top row y=0
+        xor32[8] = 100 // B at (0,0)
+        xor32[9] = 150 // G at (0,0)
+        xor32[10] = 200 // R at (0,0)
+        xor32[11] = 255 // A at (0,0)
+        let andMask = Data(repeating: 0, count: 2 * 2)
+        let image32 = RDPRemotePointerImage(
+            cacheIndex: 0,
+            hotSpot: RDPRemotePoint(x: 1, y: 1),
+            width: 2,
+            height: 2,
+            xorBitsPerPixel: 32,
+            xorMaskData: xor32,
+            andMaskData: andMask
+        )
+        let cursor32 = try XCTUnwrap(RDPClient.decodeRemotePointerImage(image32))
+        XCTAssertEqual(cursor32.width, 2)
+        XCTAssertEqual(cursor32.height, 2)
+        XCTAssertEqual(cursor32.hotspotX, 1)
+        XCTAssertEqual(cursor32.hotspotY, 1)
+        XCTAssertEqual(Array(cursor32.pixels.prefix(4)), [100, 150, 200, 255])
+        XCTAssertNotNil(cursor32.makeCGImage())
+    }
+
+    @MainActor
+    func testShowFileUploadNoticeCancelsPreviousDismissTimer() async throws {
+        let device = RemoteDevice(
+            name: "Win11 Workstation",
+            host: "192.0.2.50",
+            port: 3389,
+            deviceType: .windows,
+            remoteProtocol: .rdp,
+            authMethod: .windowsCredentials,
+            username: "rdpuser"
+        )
+        let session = SessionViewModel(device: device, password: "123", isTemporary: true)
+        defer { session.endSession() }
+
+        session.showFileUploadNotice("First notice", durationNanoseconds: 80_000_000)
+        try await Task.sleep(nanoseconds: 30_000_000)
+        session.showFileUploadNotice("Second notice", durationNanoseconds: 300_000_000)
+        try await Task.sleep(nanoseconds: 90_000_000)
+
+        // First timer would have fired at 80ms; verify "Second notice" was not prematurely cleared
+        XCTAssertEqual(session.fileUploadNotice, "Second notice")
     }
 }
