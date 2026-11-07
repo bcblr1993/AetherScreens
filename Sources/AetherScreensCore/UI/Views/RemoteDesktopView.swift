@@ -522,7 +522,7 @@ public struct RemoteDesktopView: View {
             Image(systemName: "eye.slash.fill")
                 .font(.system(size: 18))
                 .accessibilityHidden(true)
-            Text(AppLocalization.string("Lock Screen shortcut sent"))
+            Text(lockNotice.effectiveNoticeTitle)
                 .font(.caption.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
         }

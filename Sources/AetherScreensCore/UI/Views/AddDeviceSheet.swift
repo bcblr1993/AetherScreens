@@ -19,6 +19,8 @@ public struct AddDeviceSheet: View {
     @State private var isFavorite = false
     @State private var tagsString = ""
     @State private var notes = ""
+    @State private var curtainOnConnect = false
+    @State private var curtainMessage = ""
     @State private var desktopResolution = "1920x1080"
     @State private var remoteAudioEnabled = true
     @State private var autoFitResolution = false
@@ -63,7 +65,9 @@ public struct AddDeviceSheet: View {
                           remoteAudioEnabled: audio, autoFitResolution: autoFit,
                           wakeBeforeConnect: wakeBeforeConnect, sharedDirectoryPath: sharedDir,
                           sharedDirectoryReadOnly: remoteProtocol == .rdp ? sharedDirectoryReadOnly : nil,
-                          notes: includesSavedDetails ? notes : nil)
+                          notes: includesSavedDetails ? notes : nil,
+                          curtainOnConnect: includesSavedDetails && curtainOnConnect ? true : nil,
+                          curtainMessage: includesSavedDetails && curtainOnConnect ? curtainMessage : nil)
     }
 
     public var body: some View {
@@ -184,6 +188,10 @@ public struct AddDeviceSheet: View {
                             #endif
                         TextField(AppLocalization.string("Notes (Optional)"), text: $notes)
                             .accessibilityIdentifier("add-notes-input")
+                        Toggle(AppLocalization.string("Enable Curtain Mode on Connect"), isOn: $curtainOnConnect)
+                        if curtainOnConnect {
+                            TextField(AppLocalization.string("Curtain Message (Optional)"), text: $curtainMessage)
+                        }
                     }
 
                     Section(

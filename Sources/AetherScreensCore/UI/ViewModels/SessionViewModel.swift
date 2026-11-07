@@ -435,8 +435,13 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                     self.inputGeneration = UUID()
                     self.scheduleAutomaticReconnect()
                 }
-                if state == .connected, !self.isTemporary {
-                    self.deviceStore.recordConnection(for: self.device)
+                if state == .connected {
+                    if !self.isTemporary {
+                        self.deviceStore.recordConnection(for: self.device)
+                    }
+                    if !self.isObserveOnly {
+                        _ = self.curtainManager.activateForDeviceConnectIfConfigured(self.device)
+                    }
                 }
             }
         }

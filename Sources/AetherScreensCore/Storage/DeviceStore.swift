@@ -144,7 +144,9 @@ public final class DeviceStore: @unchecked Sendable {
             wakeBeforeConnect: device.wakeBeforeConnect,
             sharedDirectoryPath: device.sharedDirectoryPath,
             sharedDirectoryReadOnly: device.sharedDirectoryReadOnly,
-            notes: device.notes
+            notes: device.notes,
+            curtainOnConnect: device.curtainOnConnect,
+            curtainMessage: device.curtainMessage
         )
         devices.append(cloned)
         persist()
@@ -469,6 +471,8 @@ public final class DeviceStore: @unchecked Sendable {
             let sharedDirectoryPath = metadata.sharedDirectoryPath ?? local?.sharedDirectoryPath
             let sharedDirectoryReadOnly = metadata.sharedDirectoryReadOnly ?? local?.sharedDirectoryReadOnly
             let notes = metadata.notes ?? local?.notes
+            let curtainOnConnect = metadata.curtainOnConnect ?? local?.curtainOnConnect
+            let curtainMessage = metadata.curtainMessage ?? local?.curtainMessage
             let device = RemoteDevice(
                 id: metadata.id, name: metadata.name, host: metadata.host, port: metadata.port,
                 deviceType: metadata.deviceType,
@@ -487,7 +491,9 @@ public final class DeviceStore: @unchecked Sendable {
                 wakeBeforeConnect: wakeBeforeConnect,
                 sharedDirectoryPath: sharedDirectoryPath,
                 sharedDirectoryReadOnly: sharedDirectoryReadOnly,
-                notes: notes)
+                notes: notes,
+                curtainOnConnect: curtainOnConnect,
+                curtainMessage: curtainMessage)
             if let index { candidate[index] = device }
             else { candidate.append(device) }
         }

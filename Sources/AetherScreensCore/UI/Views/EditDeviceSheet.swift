@@ -22,6 +22,8 @@ public struct EditDeviceSheet: View {
     @State private var isFavorite: Bool = false
     @State private var tagsString: String = ""
     @State private var notes: String = ""
+    @State private var curtainOnConnect: Bool = false
+    @State private var curtainMessage: String = ""
     @State private var desktopResolution: String = "1920x1080"
     @State private var remoteAudioEnabled: Bool = true
     @State private var autoFitResolution: Bool = false
@@ -77,6 +79,10 @@ public struct EditDeviceSheet: View {
                         #endif
                     TextField(AppLocalization.string("Notes (Optional)"), text: $notes)
                         .accessibilityIdentifier("edit-notes-input")
+                    Toggle(AppLocalization.string("Enable Curtain Mode on Connect"), isOn: $curtainOnConnect)
+                    if curtainOnConnect {
+                        TextField(AppLocalization.string("Curtain Message (Optional)"), text: $curtainMessage)
+                    }
                 }
 
                 Section(header: Text(AppLocalization.string("Protocol & System"))) {
@@ -224,6 +230,9 @@ public struct EditDeviceSheet: View {
                             .filter { !$0.isEmpty }
                         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
                         updatedDev.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
+                        updatedDev.curtainOnConnect = curtainOnConnect ? true : nil
+                        let trimmedCurtain = curtainMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+                        updatedDev.curtainMessage = (curtainOnConnect && !trimmedCurtain.isEmpty) ? trimmedCurtain : nil
                         
                         let newPassword = isPasswordModified ? (password.isEmpty ? nil : password) : DeviceStore.shared.getPassword(for: device)
                         if isPasswordModified && password.isEmpty {
@@ -274,6 +283,8 @@ public struct EditDeviceSheet: View {
                 isFavorite = device.isFavorite
                 tagsString = device.tags.joined(separator: ", ")
                 notes = device.notes ?? ""
+                curtainOnConnect = device.curtainOnConnect ?? false
+                curtainMessage = device.curtainMessage ?? ""
                 if let savedPwd = DeviceStore.shared.getPassword(for: device) {
                     password = savedPwd
                 }

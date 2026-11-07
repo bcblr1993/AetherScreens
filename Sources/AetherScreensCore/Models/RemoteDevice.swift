@@ -60,6 +60,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
     public var sharedDirectoryPath: String?
     public var sharedDirectoryReadOnly: Bool?
     public var notes: String?
+    public var curtainOnConnect: Bool?
+    public var curtainMessage: String?
 
     public init(
         id: UUID = UUID(),
@@ -84,7 +86,9 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         wakeBeforeConnect: Bool? = nil,
         sharedDirectoryPath: String? = nil,
         sharedDirectoryReadOnly: Bool? = nil,
-        notes: String? = nil
+        notes: String? = nil,
+        curtainOnConnect: Bool? = nil,
+        curtainMessage: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -109,10 +113,12 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.sharedDirectoryPath = sharedDirectoryPath
         self.sharedDirectoryReadOnly = sharedDirectoryReadOnly
         self.notes = notes
+        self.curtainOnConnect = curtainOnConnect
+        self.curtainMessage = curtainMessage
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution, wakeBeforeConnect, sharedDirectoryPath, sharedDirectoryReadOnly, notes
+        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution, wakeBeforeConnect, sharedDirectoryPath, sharedDirectoryReadOnly, notes, curtainOnConnect, curtainMessage
     }
 
     public init(from decoder: Decoder) throws {
@@ -142,6 +148,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.sharedDirectoryPath = try container.decodeIfPresent(String.self, forKey: .sharedDirectoryPath)
         self.sharedDirectoryReadOnly = try container.decodeIfPresent(Bool.self, forKey: .sharedDirectoryReadOnly)
         self.notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        self.curtainOnConnect = try container.decodeIfPresent(Bool.self, forKey: .curtainOnConnect)
+        self.curtainMessage = try container.decodeIfPresent(String.self, forKey: .curtainMessage)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -169,6 +177,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         try container.encodeIfPresent(sharedDirectoryPath, forKey: .sharedDirectoryPath)
         try container.encodeIfPresent(sharedDirectoryReadOnly, forKey: .sharedDirectoryReadOnly)
         try container.encodeIfPresent(notes, forKey: .notes)
+        try container.encodeIfPresent(curtainOnConnect, forKey: .curtainOnConnect)
+        try container.encodeIfPresent(curtainMessage, forKey: .curtainMessage)
     }
 
     /// Creates a RemoteDevice from a Tailscale node

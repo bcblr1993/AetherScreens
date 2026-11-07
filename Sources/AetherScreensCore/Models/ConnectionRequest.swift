@@ -19,7 +19,9 @@ public struct ConnectionRequest {
                   remoteAudioEnabled: Bool? = nil, autoFitResolution: Bool? = nil,
                   wakeBeforeConnect: Bool? = nil, sharedDirectoryPath: String? = nil,
                   sharedDirectoryReadOnly: Bool? = nil,
-                  notes: String? = nil) {
+                  notes: String? = nil,
+                  curtainOnConnect: Bool? = nil,
+                  curtainMessage: String? = nil) {
         var address = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if address.hasPrefix("[") && address.hasSuffix("]") {
             address = String(address.dropFirst().dropLast())
@@ -33,6 +35,7 @@ public struct ConnectionRequest {
         let mac = macAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         let sharedDir = sharedDirectoryPath?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNotes = notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCurtainMsg = curtainMessage?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.password = password.isEmpty ? nil : password
         self.sshPassword = ssh == nil || sshPassword.isEmpty ? nil : sshPassword
         if case .privateKey = ssh?.authentication { self.sshPrivateKey = sshPrivateKey }
@@ -56,6 +59,8 @@ public struct ConnectionRequest {
                               wakeBeforeConnect: mac.isEmpty ? nil : wakeBeforeConnect,
                               sharedDirectoryPath: (sharedDir?.isEmpty == false) ? sharedDir : nil,
                               sharedDirectoryReadOnly: (sharedDir?.isEmpty == false) ? sharedDirectoryReadOnly : nil,
-                              notes: (trimmedNotes?.isEmpty == false) ? trimmedNotes : nil)
+                              notes: (trimmedNotes?.isEmpty == false) ? trimmedNotes : nil,
+                              curtainOnConnect: curtainOnConnect == true ? true : nil,
+                              curtainMessage: (trimmedCurtainMsg?.isEmpty == false) ? trimmedCurtainMsg : nil)
     }
 }

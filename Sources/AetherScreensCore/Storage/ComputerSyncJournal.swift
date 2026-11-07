@@ -24,6 +24,8 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
     public var sharedDirectoryPath: String?
     public var sharedDirectoryReadOnly: Bool?
     public var notes: String?
+    public var curtainOnConnect: Bool?
+    public var curtainMessage: String?
 
     public init(device: RemoteDevice) {
         id = device.id; name = device.name; host = device.host; port = device.port
@@ -40,12 +42,15 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
         sharedDirectoryPath = device.sharedDirectoryPath
         sharedDirectoryReadOnly = device.sharedDirectoryReadOnly
         notes = device.notes
+        curtainOnConnect = device.curtainOnConnect
+        curtainMessage = device.curtainMessage
     }
 
     fileprivate var isValid: Bool {
         name.utf8.count <= 4096 && host.utf8.count <= 1024
             && (username?.utf8.count ?? 0) <= 1024 && (macAddress?.utf8.count ?? 0) <= 128
             && (notes?.utf8.count ?? 0) <= 4096
+            && (curtainMessage?.utf8.count ?? 0) <= 1024
             && (tags?.count ?? 0) <= 64
             && ConnectionRequest(host: host, port: String(port)) != nil
     }

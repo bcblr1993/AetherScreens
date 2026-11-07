@@ -816,6 +816,8 @@
 "Previous Track" = "上一曲";
 "Brightness Up" = "屏幕亮度增大";
 "Brightness Down" = "屏幕亮度减小";
+"Enable Curtain Mode on Connect" = "连接时自动启用隐私幕布";
+"Curtain Message (Optional)" = "自定义隐私幕布提示语（可选）";
 
 
 
