@@ -283,9 +283,9 @@ public struct RDPAudioFormat: Encodable, Equatable, Sendable {
     public var isPCM16Bit: Bool {
         formatTag == RDPAudioFormatTag.pcm
             && bitsPerSample == 16
-            && channelCount > 0
-            && samplesPerSecond > 0
-            && blockAlign == channelCount * 2
+            && (1 ... 8).contains(channelCount)
+            && (8_000 ... 192_000).contains(samplesPerSecond)
+            && UInt32(blockAlign) == UInt32(channelCount) * 2
     }
 
     static func parse(from cursor: inout ByteCursor) throws -> RDPAudioFormat {
@@ -906,6 +906,33 @@ public final class RDPAudioSession: @unchecked Sendable {
     private var negotiatedFormats: [RDPAudioFormat] = []
     private var serverVersion: UInt16 = 0
     private var pendingWaveInfo: RDPAudioWaveInfoPDU?
+    private var reassembler = RDPStaticVirtualChannelReassembler()
+
+    func receivePacket(
+        _ packet: Data,
+        maximumChunkByteCount: Int = RDPStaticVirtualChannelPDU.maximumPayloadByteCount
+    ) throws -> (isForChannel: Bool, payload: Data?) {
+        guard let staticPDU = try RDPStaticVirtualChannelPDU.parseIfPresent(
+            fromTPKT: packet,
+            channelID: staticChannelID,
+            maximumChunkByteCount: maximumChunkByteCount
+        ) else {
+            return (false, nil)
+        }
+        lock.lock()
+        let completePDU: RDPStaticVirtualChannelPDU?
+        do {
+            completePDU = try reassembler.append(
+                staticPDU,
+                maximumChunkByteCount: maximumChunkByteCount
+            )
+            lock.unlock()
+        } catch {
+            lock.unlock()
+            throw error
+        }
+        return (true, completePDU?.payload)
+    }
 
     init(userChannelID: UInt16, staticChannelID: UInt16, channel: Channel) {
         self.userChannelID = userChannelID

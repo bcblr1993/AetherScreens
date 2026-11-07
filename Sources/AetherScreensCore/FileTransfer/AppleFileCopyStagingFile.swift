@@ -243,7 +243,10 @@ final class AppleFileCopyStagingFile {
     func copyPreparedTree(to parentDirectory: URL, isCancelled: @escaping @Sendable () -> Bool = { false }) throws -> AppleFileCopyStagingFile {
         guard prepared, ownsDirectory, !permissionsRestored else { throw Failure.unavailable }
         guard !isCancelled() else { throw AppleFileCopyCancellableTreeCopy.Failure.cancelled }
-        let sourceRoot = open(dataForkURL.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        let sourceRoot = dataForkURL.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        }
         guard sourceRoot >= 0 else { throw Failure.invalidDestination }
         defer { close(sourceRoot) }
         var payloadBytes: UInt64 = 0
@@ -269,7 +272,10 @@ final class AppleFileCopyStagingFile {
             try copy.resourceHandle?.close(); copy.resourceHandle = nil
             try FileManager.default.removeItem(at: copy.dataForkURL)
             try AppleFileCopyCancellableTreeCopy.copy(from: dataForkURL, to: copy.dataForkURL, isCancelled: isCancelled)
-            let root = open(copy.dataForkURL.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+            let root = copy.dataForkURL.withUnsafeFileSystemRepresentation { path -> Int32 in
+                guard let path else { return -1 }
+                return open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+            }
             guard root >= 0 else { throw Failure.invalidDestination }
             defer { close(root) }
             copy.catalogRecords = try catalogRecords.map { record in

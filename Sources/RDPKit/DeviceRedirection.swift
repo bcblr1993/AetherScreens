@@ -501,6 +501,8 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         public let entries: [DirectoryEntry]
     }
 
+    public static let maximumOpenHandles = 4096
+
     public let deviceID: UInt32
     public let rootDirectory: URL
     public let isReadOnly: Bool
@@ -514,6 +516,18 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         self.isReadOnly = isReadOnly
     }
 
+    public var openHandleCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return openFiles.count
+    }
+
+    public func closeAllHandles() {
+        lock.lock()
+        openFiles.removeAll(keepingCapacity: false)
+        lock.unlock()
+    }
+
     private func resolveSandboxedURL(for remotePath: String) -> URL? {
         guard !remotePath.contains("\0") else { return nil }
         let normalized = remotePath.replacingOccurrences(of: "\\", with: "/")
@@ -524,6 +538,10 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         var target = rootDirectory
         for comp in components {
             target.appendPathComponent(comp)
+            var st = stat()
+            if lstat(target.path, &st) == 0, (st.st_mode & S_IFMT) == S_IFLNK {
+                return nil
+            }
         }
         let resolved = target.standardizedFileURL.resolvingSymlinksInPath()
         let rootPath = rootDirectory.path.hasSuffix("/") ? rootDirectory.path : rootDirectory.path + "/"
@@ -616,8 +634,15 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         }
 
         lock.lock()
-        let allocatedID = nextFileID
-        nextFileID = nextFileID == UInt32.max ? 1 : nextFileID + 1
+        guard openFiles.count < Self.maximumOpenHandles else {
+            lock.unlock()
+            return CreateResponse(completionID: completionID, ioStatus: 0xC000_009A, fileID: 0, information: 0)
+        }
+        var allocatedID = nextFileID
+        while openFiles[allocatedID] != nil {
+            allocatedID = allocatedID == UInt32.max ? 1 : allocatedID + 1
+        }
+        nextFileID = allocatedID == UInt32.max ? 1 : allocatedID + 1
         openFiles[allocatedID] = url
         lock.unlock()
         return CreateResponse(completionID: completionID, ioStatus: 0x0000_0000, fileID: allocatedID, information: infoByte)
@@ -728,8 +753,27 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         guard let fileURL, fileURL.path != rootDirectory.path else {
             return StatusResponse(completionID: completionID, ioStatus: 0xC000_0022)
         }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDir) else {
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_000F)
+        }
+        if isDir.boolValue {
+            if rmdir(fileURL.path) == 0 {
+                lock.lock()
+                openFiles.removeValue(forKey: fileID)
+                lock.unlock()
+                return StatusResponse(completionID: completionID, ioStatus: 0x0000_0000)
+            }
+            if errno == ENOTEMPTY || errno == EEXIST {
+                return StatusResponse(completionID: completionID, ioStatus: 0xC000_0101)
+            }
+            return StatusResponse(completionID: completionID, ioStatus: 0xC000_0001)
+        }
         do {
             try FileManager.default.removeItem(at: fileURL)
+            lock.lock()
+            openFiles.removeValue(forKey: fileID)
+            lock.unlock()
             return StatusResponse(completionID: completionID, ioStatus: 0x0000_0000)
         } catch {
             return StatusResponse(completionID: completionID, ioStatus: 0xC000_0001)
@@ -822,6 +866,7 @@ final class RDPDeviceRedirectionSession: @unchecked Sendable {
     private let lock = NSLock()
     private var minorVersion = RDPDeviceRedirectionVersion.minorRDP6
     private var announcedClientID: UInt32?
+    private var reassembler = RDPStaticVirtualChannelReassembler()
 
     init(
         userChannelID: UInt16,
@@ -833,6 +878,36 @@ final class RDPDeviceRedirectionSession: @unchecked Sendable {
         self.staticChannelID = staticChannelID
         self.channel = channel
         self.computerName = computerName
+    }
+
+    func receivePacket(
+        _ packet: Data,
+        maximumChunkByteCount: Int = RDPStaticVirtualChannelPDU.maximumPayloadByteCount
+    ) throws -> (isForChannel: Bool, pdu: RDPDeviceRedirectionPDU?) {
+        guard let staticPDU = try RDPStaticVirtualChannelPDU.parseIfPresent(
+            fromTPKT: packet,
+            channelID: staticChannelID,
+            maximumChunkByteCount: maximumChunkByteCount
+        ) else {
+            return (false, nil)
+        }
+        lock.lock()
+        let completePDU: RDPStaticVirtualChannelPDU?
+        do {
+            completePDU = try reassembler.append(
+                staticPDU,
+                maximumChunkByteCount: maximumChunkByteCount
+            )
+            lock.unlock()
+        } catch {
+            lock.unlock()
+            throw error
+        }
+        guard let completePDU else {
+            return (true, nil)
+        }
+        let pdu = try RDPDeviceRedirectionPDU.parse(from: completePDU.payload)
+        return (true, pdu)
     }
 
     func receive(_ pdu: RDPDeviceRedirectionPDU) throws {

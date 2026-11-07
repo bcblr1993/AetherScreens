@@ -28,8 +28,8 @@ struct MCSDisconnectProviderUltimatumPDU: Equatable, Sendable {
             return nil
         }
 
-        let choiceAndReasonHighBit = packet[7]
-        let reasonLowBitAndPadding = packet[8]
+        let choiceAndReasonHighBit = packet[packet.index(packet.startIndex, offsetBy: 7)]
+        let reasonLowBitAndPadding = packet[packet.index(packet.startIndex, offsetBy: 8)]
         guard choiceAndReasonHighBit & 0xFE == 0x20,
               reasonLowBitAndPadding & 0x7F == 0
         else {

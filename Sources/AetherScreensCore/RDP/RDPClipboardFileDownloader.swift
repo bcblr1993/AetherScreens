@@ -39,6 +39,7 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
 
     private let lock = NSLock()
     private var streamContinuations: [UInt32: CheckedContinuation<Data, Error>] = [:]
+    private var streamTimeouts: [UInt32: DispatchWorkItem] = [:]
     private var currentStreamID: UInt32 = 1000
     private var currentDownloadTask: Task<Void, Never>?
     private let chunkTimeout: TimeInterval
@@ -69,9 +70,14 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
         currentDownloadTask?.cancel()
         currentDownloadTask = nil
         let pending = Array(streamContinuations.values)
+        let timeouts = Array(streamTimeouts.values)
         streamContinuations.removeAll()
+        streamTimeouts.removeAll()
         lock.unlock()
 
+        for workItem in timeouts {
+            workItem.cancel()
+        }
         for continuation in pending {
             continuation.resume(throwing: CancelledError())
         }
@@ -149,6 +155,7 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
         }
 
         var topLevelNames: [String] = []
+        var anyFileFailed = false
         for (index, descriptor) in descriptors.enumerated() {
             guard !Task.isCancelled else { break }
             guard let components = Self.sanitizedRelativeComponents(descriptor.fileName) else {
@@ -179,11 +186,13 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
                 onProgress: onProgress
             )
             if !completed {
+                anyFileFailed = true
                 try? fileManager.removeItem(at: targetURL)
+                break
             }
         }
 
-        guard !Task.isCancelled else {
+        guard !Task.isCancelled && !anyFileFailed else {
             try? fileManager.removeItem(at: tempDir)
             return []
         }
@@ -253,14 +262,16 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
                 continuation.resume(throwing: CancelledError())
                 return
             }
+            let timeoutItem = DispatchWorkItem { [weak self] in
+                self?.takeContinuation(for: streamID)?.resume(throwing: TimeoutError())
+            }
             lock.lock()
             streamContinuations[streamID] = continuation
+            streamTimeouts[streamID] = timeoutItem
             lock.unlock()
 
             // Whichever of response, timeout or cancel takes the continuation first resumes it exactly once.
-            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
-                self?.takeContinuation(for: streamID)?.resume(throwing: TimeoutError())
-            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutItem)
 
             do {
                 try session.requestRemoteFileRange(
@@ -277,8 +288,11 @@ public final class RDPClipboardFileDownloader: @unchecked Sendable {
 
     private func takeContinuation(for streamID: UInt32) -> CheckedContinuation<Data, Error>? {
         lock.lock()
-        defer { lock.unlock() }
-        return streamContinuations.removeValue(forKey: streamID)
+        let timeoutItem = streamTimeouts.removeValue(forKey: streamID)
+        let continuation = streamContinuations.removeValue(forKey: streamID)
+        lock.unlock()
+        timeoutItem?.cancel()
+        return continuation
     }
 
     private func nextStreamID() -> UInt32 {

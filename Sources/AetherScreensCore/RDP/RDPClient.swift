@@ -58,6 +58,7 @@ public final class RDPClient: @unchecked Sendable {
     public var audioEnabled: Bool = true
 
     private var connectionTask: Task<Void, Never>?
+    private var connectionGeneration: UInt64 = 0
     private var activeCancellation: RDPConnectionCancellation?
     private var inputSession: RDPInputSession?
     private var clipboardSession: RDPClipboardSession?
@@ -125,10 +126,14 @@ public final class RDPClient: @unchecked Sendable {
         AppLogger.shared.info("Initiating RDP connection to \(host):\(port) as \(user)", category: "RDP")
 
         let cancellation = RDPConnectionCancellation()
+        inputLock.lock()
+        connectionGeneration &+= 1
+        let generation = connectionGeneration
         self.activeCancellation = cancellation
+        inputLock.unlock()
         let isAudioEnabled = self.audioEnabled
 
-        connectionTask = Task.detached { [weak self, host, port, user, pass, isAudioEnabled] in
+        connectionTask = Task.detached { [weak self, host, port, user, pass, isAudioEnabled, generation] in
             guard let self else { return }
 
             let credentials: RDPCredentials?
@@ -139,7 +144,7 @@ public final class RDPClient: @unchecked Sendable {
                     password: pass
                 )
             } catch {
-                self.transition(to: .failed("Invalid RDP credentials: \(error.localizedDescription)"))
+                self.transition(to: .failed("Invalid RDP credentials: \(error.localizedDescription)"), generation: generation)
                 return
             }
 
@@ -194,7 +199,7 @@ public final class RDPClient: @unchecked Sendable {
                     self.inputLock.lock()
                     self.inputSession = session
                     self.inputLock.unlock()
-                    self.transition(to: .connected)
+                    self.transition(to: .connected, generation: generation)
                 },
                 onDisplayControlReady: { [weak self] session in
                     guard let self else { return }
@@ -253,19 +258,40 @@ public final class RDPClient: @unchecked Sendable {
                 cancellation: cancellation
             )
 
+            self.cleanupSessionResourcesIfCurrent(generation: generation)
             if cancellation.isCancelled {
-                self.transition(to: .disconnected)
+                self.transition(to: .disconnected, generation: generation)
             } else if report.status == "failure" {
                 let errDesc = report.error ?? "Connection failed"
-                self.transition(to: .failed(errDesc))
+                self.transition(to: .failed(errDesc), generation: generation)
             } else {
-                self.transition(to: .disconnected)
+                self.transition(to: .disconnected, generation: generation)
             }
         }
     }
 
+    private func cleanupSessionResourcesIfCurrent(generation: UInt64) {
+        inputLock.lock()
+        guard connectionGeneration == generation else {
+            inputLock.unlock()
+            return
+        }
+        activeCancellation = nil
+        inputSession = nil
+        clipboardSession = nil
+        pendingFormatListAck = nil
+        displayControlSession = nil
+        pendingDisplayResolution = nil
+        lastPublishedFiles.removeAll(keepingCapacity: false)
+        keyTranslator = RDPKeyTranslator()
+        inputLock.unlock()
+        fileDownloader.cancel()
+    }
+
     public func disconnect() {
         inputLock.lock()
+        connectionGeneration &+= 1
+        let generation = connectionGeneration
         activeCancellation?.cancel()
         activeCancellation = nil
         inputSession = nil
@@ -273,6 +299,7 @@ public final class RDPClient: @unchecked Sendable {
         pendingFormatListAck = nil
         displayControlSession = nil
         pendingDisplayResolution = nil
+        lastPublishedFiles.removeAll(keepingCapacity: false)
         keyTranslator = RDPKeyTranslator()
         connectionTask?.cancel()
         connectionTask = nil
@@ -280,7 +307,7 @@ public final class RDPClient: @unchecked Sendable {
 
         fileDownloader.cancel()
 
-        transition(to: .disconnected)
+        transition(to: .disconnected, generation: generation)
         AppLogger.shared.info("Disconnected RDP session with \(host)", category: "RDP")
     }
 
@@ -331,12 +358,20 @@ public final class RDPClient: @unchecked Sendable {
         return (clampedWidth - clampedWidth % 2, clampedHeight)
     }
 
-    private func transition(to newState: State) {
+    private func isCurrentGeneration(_ generation: UInt64) -> Bool {
+        inputLock.lock()
+        defer { inputLock.unlock() }
+        return connectionGeneration == generation
+    }
+
+    private func transition(to newState: State, generation: UInt64) {
         if Thread.isMainThread {
-            self.state = newState
+            if isCurrentGeneration(generation) {
+                self.state = newState
+            }
         } else {
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.isCurrentGeneration(generation) else { return }
                 self.state = newState
             }
         }

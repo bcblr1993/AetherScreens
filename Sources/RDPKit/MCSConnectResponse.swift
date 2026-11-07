@@ -405,12 +405,14 @@ private func parseRSAPublicKey(_ data: Data) throws -> RDPRSAPublicKey {
     }
 
     let modulus = try cursor.readData(count: keyByteCount)
+    let activeModulus = Data(modulus.prefix(Int(modulusByteCount)))
     guard cursor.remaining == 0,
-          modulus.suffix(8).allSatisfy({ $0 == 0 }) else {
+          modulus.suffix(8).allSatisfy({ $0 == 0 }),
+          activeModulus.last != 0 else {
         throw RDPDecodeError.invalidMCSConnectResponseHeader
     }
     return RDPRSAPublicKey(
-        modulus: Data(modulus.prefix(Int(modulusByteCount))),
+        modulus: activeModulus,
         publicExponent: publicExponent,
         keyByteCount: keyByteCount
     )
@@ -554,11 +556,29 @@ private func addModLittleEndian(_ lhs: Data, _ rhs: Data, _ modulus: Data) -> Da
 }
 
 private func remainderLittleEndian(_ value: Data, _ modulus: Data) -> Data {
-    var result = trimLittleEndian(value)
-    while compareLittleEndian(result, modulus) >= 0 {
-        result = subtractLittleEndian(result, modulus)
+    let trimmedValue = trimLittleEndian(value)
+    let trimmedModulus = trimLittleEndian(modulus)
+    guard !trimmedModulus.isEmpty else { return Data() }
+    guard compareLittleEndian(trimmedValue, trimmedModulus) >= 0 else {
+        return trimmedValue
     }
-    return result
+
+    // Bitwise long division from MSB to LSB in O(bits) steps, preventing repeated-subtraction hangs.
+    var remainder = Data()
+    for byteOffset in stride(from: trimmedValue.count - 1, through: 0, by: -1) {
+        let byte = trimmedValue[trimmedValue.index(trimmedValue.startIndex, offsetBy: byteOffset)]
+        for bit in stride(from: 7, through: 0, by: -1) {
+            let bitValue = (byte >> bit) & 1
+            remainder = addLittleEndian(remainder, remainder)
+            if bitValue == 1 {
+                remainder = addLittleEndian(remainder, Data([1]))
+            }
+            if compareLittleEndian(remainder, trimmedModulus) >= 0 {
+                remainder = subtractLittleEndian(remainder, trimmedModulus)
+            }
+        }
+    }
+    return trimLittleEndian(remainder)
 }
 
 private func addLittleEndian(_ lhs: Data, _ rhs: Data) -> Data {

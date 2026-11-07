@@ -28,6 +28,7 @@ public final class RDPAudioPlayer {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.generation &+= 1
+                self.player.stop()
                 self.configuration = nil
                 self.format = nil
                 self.queuedFrameCount = 0
@@ -123,6 +124,10 @@ public final class RDPAudioPlayer {
         }
         audioBufferList.pointee.mBuffers.mDataByteSize = UInt32(audioByteCount)
 
+        if !engine.isRunning {
+            try engine.start()
+        }
+
         let scheduledFrameCount = AVAudioFramePosition(frameCount)
         let scheduledGeneration = generation
         queuedFrameCount += scheduledFrameCount
@@ -135,9 +140,6 @@ public final class RDPAudioPlayer {
             }
         }
 
-        if !engine.isRunning {
-            try engine.start()
-        }
         if !player.isPlaying {
             player.play()
         }

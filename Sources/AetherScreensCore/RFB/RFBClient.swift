@@ -287,7 +287,7 @@ public final class RFBClient: @unchecked Sendable {
         appleRecordCodec?.close()
         appleRecordCodec = nil
         appleWrapKey = nil
-        decryptedReadBuffer.removeAll()
+        decryptedReadBuffer.removeAll(keepingCapacity: false)
         firstFrameDeadline = nil
         inputLock.unlock()
         AppLogger.shared.info("Disconnecting session with \(host)", category: "Network")
@@ -295,7 +295,7 @@ public final class RFBClient: @unchecked Sendable {
         let previous = connection
         connection = nil
         closingConnection = nil
-        readBuffer.removeAll()
+        readBuffer.removeAll(keepingCapacity: false)
         appleClipboardReadID = nil
         // Invalidate callbacks before cancellation can deliver a terminal receive.
         previous?.cancel()
@@ -887,7 +887,7 @@ public final class RFBClient: @unchecked Sendable {
             self.updateHasDisplayLayout = false
             self.updateHasPixels = false
             self.updateHasCursorShape = false
-            let numRects = headerData.subdata(in: 1..<3).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+            let numRects = headerData.subdata(in: 1..<3).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
             self.readRectangles(count: Int(numRects))
         }
     }
@@ -1073,8 +1073,8 @@ public final class RFBClient: @unchecked Sendable {
                 // 4 bytes: srcX (2), srcY (2)
                 self.readExact(4) { srcData in
                     guard let srcData = srcData else { return }
-                    let srcX = srcData.subdata(in: 0..<2).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
-                    let srcY = srcData.subdata(in: 2..<4).withUnsafeBytes { $0.load(as: UInt16.self).bigEndian }
+                    let srcX = srcData.subdata(in: 0..<2).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
+                    let srcY = srcData.subdata(in: 2..<4).withUnsafeBytes { $0.loadUnaligned(as: UInt16.self).bigEndian }
                     self.updateHasPixels = (header.width > 0 && header.height > 0) || self.updateHasPixels
                     self.framebuffer.copyRect(
                         srcX: Int(srcX),
@@ -1802,8 +1802,10 @@ public final class RFBClient: @unchecked Sendable {
             let sampleBytes = payloadBytes + (pixelPayload ? bytes : 0)
             readExact(bytes, trackPixelPayload: pixelPayload) { [weak self] chunk in
                 guard let self, let chunk, self.connection === source else { return }
+                var nextPrefix = prefix
+                nextPrefix.append(chunk)
                 self.readTightRectangle(x: x, y: y, width: width, height: height, remaining: remaining,
-                                        prefix: prefix + chunk, source: source,
+                                        prefix: nextPrefix, source: source,
                                         payloadStarted: started, payloadBytes: sampleBytes)
             }
         case .complete:
@@ -2043,19 +2045,24 @@ public final class RFBClient: @unchecked Sendable {
         appleFileCopyReceiver = nil
         appleFileCopySender?.cancel()
         appleFileCopySender = nil
+        heldKeys.removeAll()
+        heldPointerButtons = []
+        inputGeneration = UUID()
         frameDecoders.cancel()
         appleClipboardSendPending = nil
         appleClipboardSendGeneration = UUID()
         appleRecordCodec?.close()
         appleRecordCodec = nil
         appleWrapKey = nil
-        decryptedReadBuffer.removeAll()
+        decryptedReadBuffer.removeAll(keepingCapacity: false)
         firstFrameDeadline = nil
         inputLock.unlock()
         AppLogger.shared.error("Session failed: \(message)", category: "RFB")
         stopTransportReports()
         let previous = connection
         connection = nil
+        closingConnection = nil
+        readBuffer.removeAll(keepingCapacity: false)
         appleClipboardReadID = nil
         previous?.cancel()
         // A failure observer may reconnect synchronously. Teardown must finish

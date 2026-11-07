@@ -5459,21 +5459,16 @@ private func handleAudioPacket(
     messageData: inout [Data],
     messages: inout [RDPAudioMessageSummary]
 ) throws -> Bool {
-    guard let staticPDU = try RDPStaticVirtualChannelPDU.parseIfPresent(
-        fromTPKT: packet,
-        channelID: session.staticChannelID
-    ) else {
+    let (isForChannel, payload) = try session.receivePacket(packet)
+    guard isForChannel else {
         return false
     }
-    guard staticPDU.canDispatchPayload else {
-        if staticPDU.isFlowControl {
-            return true
-        }
-        throw RDPDecodeError.invalidStaticVirtualChannelPDU
+    guard let payload else {
+        return true
     }
 
     try handleAudioPayload(
-        staticPDU.payload,
+        payload,
         packet: packet,
         session: session,
         onAudioSample: onAudioSample,
@@ -5551,20 +5546,13 @@ private func handleDeviceRedirectionPacket(
     _ packet: Data,
     session: RDPDeviceRedirectionSession
 ) throws -> Bool {
-    guard let staticPDU = try RDPStaticVirtualChannelPDU.parseIfPresent(
-        fromTPKT: packet,
-        channelID: session.staticChannelID
-    ) else {
+    let (isForChannel, deviceRedirectionPDU) = try session.receivePacket(packet)
+    guard isForChannel else {
         return false
     }
-    guard staticPDU.canDispatchPayload else {
-        if staticPDU.isFlowControl {
-            return true
-        }
-        throw RDPDecodeError.invalidStaticVirtualChannelPDU
+    guard let deviceRedirectionPDU else {
+        return true
     }
-
-    let deviceRedirectionPDU = try RDPDeviceRedirectionPDU.parse(from: staticPDU.payload)
     try session.receive(deviceRedirectionPDU)
     return true
 }
@@ -5678,10 +5666,13 @@ private func receiveRDPGraphicsUpdateBatch(
         if let dynamicAudioSession,
            dynamicAudioSession.handlesDynamicChannel(dataFirst.channelID)
         {
-            guard dataFirst.payload.count <= Int(dataFirst.totalLength) else {
+            guard dataFirst.payload.count <= Int(dataFirst.totalLength),
+                  Int(dataFirst.totalLength) <= RDPStaticVirtualChannelReassembler.maximumReassemblyByteCount else {
                 throw RDPDecodeError.invalidDynamicVirtualChannelPDU
             }
-            result.dynamicChannelRequestTypes.append("\(typeName):audio")
+            if result.dynamicChannelRequestTypes.count < 32 {
+                result.dynamicChannelRequestTypes.append("\(typeName):audio")
+            }
             if dataFirst.payload.count == Int(dataFirst.totalLength) {
                 try handleDynamicAudioPayload(
                     dataFirst.payload,
@@ -5703,7 +5694,8 @@ private func receiveRDPGraphicsUpdateBatch(
         guard dataFirst.channelID == dynamicChannelID else {
             return false
         }
-        guard dataFirst.payload.count <= Int(dataFirst.totalLength) else {
+        guard dataFirst.payload.count <= Int(dataFirst.totalLength),
+              Int(dataFirst.totalLength) <= RDPStaticVirtualChannelReassembler.maximumReassemblyByteCount else {
             throw RDPDecodeError.invalidDynamicVirtualChannelPDU
         }
 
@@ -5727,7 +5719,9 @@ private func receiveRDPGraphicsUpdateBatch(
         if let dynamicAudioSession,
            dynamicAudioSession.handlesDynamicChannel(dataPDU.channelID)
         {
-            result.dynamicChannelRequestTypes.append("\(typeName):audio")
+            if result.dynamicChannelRequestTypes.count < 32 {
+                result.dynamicChannelRequestTypes.append("\(typeName):audio")
+            }
             if var activeAudioFragment = audioFragment {
                 activeAudioFragment.payload.append(dataPDU.payload)
                 guard activeAudioFragment.payload.count <= Int(activeAudioFragment.totalLength) else {
@@ -5768,7 +5762,9 @@ private func receiveRDPGraphicsUpdateBatch(
             onDisplayControlReady: onDisplayControlReady,
             result: &result
         ) {
-            result.dynamicChannelRequestTypes.append("\(typeName):display-control")
+            if result.dynamicChannelRequestTypes.count < 32 {
+                result.dynamicChannelRequestTypes.append("\(typeName):display-control")
+            }
             return false
         }
         if try handleAuxiliaryDynamicChannelDataPDU(
@@ -6066,7 +6062,9 @@ private func receiveRDPGraphicsUpdateBatch(
         }
 
         if let softSyncPDU = try RDPDynamicVirtualChannelSoftSyncPDU.parseIfPresent(from: staticPDU.payload) {
-            result.dynamicChannelRequestTypes.append(softSyncPDU.typeName)
+            if result.dynamicChannelRequestTypes.count < 32 {
+                result.dynamicChannelRequestTypes.append(softSyncPDU.typeName)
+            }
             continue
         }
 

@@ -237,12 +237,18 @@ struct RDPStaticVirtualChannelReassembler: Sendable {
     private var totalLength: UInt32?
     private var payload = Data()
 
+    mutating func reset() {
+        totalLength = nil
+        payload.removeAll(keepingCapacity: false)
+    }
+
     mutating func append(
         _ pdu: RDPStaticVirtualChannelPDU,
         maximumChunkByteCount: Int = RDPStaticVirtualChannelPDU.maximumPayloadByteCount
     ) throws -> RDPStaticVirtualChannelPDU? {
         guard pdu.payload.count <= maximumChunkByteCount,
               Int(pdu.totalLength) <= Self.maximumReassemblyByteCount else {
+            reset()
             throw RDPDecodeError.invalidStaticVirtualChannelPDU
         }
         if pdu.isFlowControl {
@@ -250,12 +256,14 @@ struct RDPStaticVirtualChannelReassembler: Sendable {
         }
         if pdu.isComplete {
             guard totalLength == nil else {
+                reset()
                 throw RDPDecodeError.invalidStaticVirtualChannelPDU
             }
             return pdu
         }
         if pdu.isStandalone {
             guard totalLength == nil else {
+                reset()
                 throw RDPDecodeError.invalidStaticVirtualChannelPDU
             }
             return pdu
@@ -264,11 +272,13 @@ struct RDPStaticVirtualChannelReassembler: Sendable {
         let hasFirst = pdu.flags & RDPStaticVirtualChannelFlags.first != 0
         let hasLast = pdu.flags & RDPStaticVirtualChannelFlags.last != 0
         guard pdu.flags & RDPStaticVirtualChannelFlags.showProtocol != 0 else {
+            reset()
             throw RDPDecodeError.invalidStaticVirtualChannelPDU
         }
 
         if hasFirst {
             guard totalLength == nil, pdu.totalLength >= UInt32(pdu.payload.count) else {
+                reset()
                 throw RDPDecodeError.invalidStaticVirtualChannelPDU
             }
             totalLength = pdu.totalLength
@@ -276,6 +286,7 @@ struct RDPStaticVirtualChannelReassembler: Sendable {
         } else {
             guard let expectedTotalLength = totalLength,
                   pdu.totalLength == expectedTotalLength else {
+                reset()
                 throw RDPDecodeError.invalidStaticVirtualChannelPDU
             }
             payload.append(pdu.payload)
@@ -283,11 +294,13 @@ struct RDPStaticVirtualChannelReassembler: Sendable {
 
         guard let expectedTotalLength = totalLength,
               payload.count <= Int(expectedTotalLength) else {
+            reset()
             throw RDPDecodeError.invalidStaticVirtualChannelPDU
         }
 
         if hasLast {
             guard payload.count == Int(expectedTotalLength) else {
+                reset()
                 throw RDPDecodeError.invalidStaticVirtualChannelPDU
             }
             let completePDU = RDPStaticVirtualChannelPDU(
@@ -295,8 +308,7 @@ struct RDPStaticVirtualChannelReassembler: Sendable {
                 flags: RDPStaticVirtualChannelFlags.completeWithShowProtocol,
                 payload: payload
             )
-            totalLength = nil
-            payload = Data()
+            reset()
             return completePDU
         }
 
