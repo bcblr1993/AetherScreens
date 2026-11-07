@@ -56,7 +56,26 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
         registry.activate(id)
     }
 
-    public func close(_ id: UUID) { controllers[id]?.window?.close() }
+    public func close(_ id: UUID) {
+        if let window = controllers[id]?.window {
+            window.close()
+        }
+    }
+
+    public func auxiliaryWindowCount(for deviceID: UUID) -> Int {
+        let prefix = "\(deviceID.uuidString)_display_"
+        return auxiliaryControllers.keys.filter { $0.hasPrefix(prefix) }.count
+    }
+
+    public func closeAuxiliaryDisplayWindows(for deviceID: UUID) {
+        let prefix = "\(deviceID.uuidString)_display_"
+        let matchingKeys = auxiliaryControllers.keys.filter { $0.hasPrefix(prefix) }
+        for key in matchingKeys {
+            let controller = auxiliaryControllers.removeValue(forKey: key)
+            controller?.window?.delegate = nil
+            controller?.window?.close()
+        }
+    }
 
     public func openAuxiliaryDisplayWindow(for session: SessionViewModel, display: DisplayInfo) {
         let key = "\(session.device.id.uuidString)_display_\(display.id)"
@@ -174,6 +193,7 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
         }
         guard let id = controllers.first(where: { $0.value.window === window })?.key else { return }
         if let session = registry.remove(id) {
+            closeAuxiliaryDisplayWindows(for: session.device.id)
             session.endSession()
             session.client.disconnect()
             session.rdpClient?.disconnect()
@@ -185,6 +205,7 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
 private struct AuxiliaryDisplayWindowView: View {
     @ObservedObject var session: SessionViewModel
     let display: DisplayInfo
+    @State private var frameTick: UInt64 = 0
 
     var body: some View {
         GeometryReader { geometry in
@@ -194,10 +215,14 @@ private struct AuxiliaryDisplayWindowView: View {
                     Image(decorative: cgImage, scale: 1.0)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
+                        .id(frameTick)
                 } else {
                     ProgressView()
                         .tint(.white)
                 }
+            }
+            .onReceive(session.frameUpdates) { _ in
+                frameTick &+= 1
             }
             .contentShape(Rectangle())
             .gesture(

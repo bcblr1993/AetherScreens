@@ -826,6 +826,10 @@
 "Connected in Last 7 Days" = "最近 7 天连接过";
 "Wake All Wakeable Computers" = "一键唤醒所有支持 WOL 的电脑";
 "Sent Wake-on-LAN to %d computer(s)" = "已向 %d 台电脑发送远程唤醒包";
+"Category" = "日志模块";
+"All Categories" = "全部模块";
+"Clear filter" = "清除筛选";
+
 
 
 

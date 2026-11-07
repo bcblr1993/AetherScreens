@@ -8,6 +8,7 @@ public struct DiagnosticLogView: View {
 
     @State private var filterText: String = ""
     @State private var selectedLevel: AppLogger.LogLevel? = nil
+    @State private var selectedCategory: String? = nil
     @State private var copiedNotice: Bool = false
 
     public init() {}
@@ -15,14 +16,17 @@ public struct DiagnosticLogView: View {
     public var filteredEntries: [AppLogger.LogEntry] {
         logger.entries.filter { entry in
             let matchesLevel = selectedLevel == nil || entry.level == selectedLevel
+            let matchesCategory = selectedCategory == nil || entry.category == selectedCategory
             let matchesText = filterText.isEmpty ||
                 entry.message.localizedCaseInsensitiveContains(filterText) ||
                 entry.category.localizedCaseInsensitiveContains(filterText)
-            return matchesLevel && matchesText
+            return matchesLevel && matchesCategory && matchesText
         }
     }
 
     public var body: some View {
+        let entries = filteredEntries
+        let categories = logger.availableCategories
         NavigationStack {
             VStack(spacing: 0) {
                 // Filter and Search Bar
@@ -38,13 +42,26 @@ public struct DiagnosticLogView: View {
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.secondary)
+                                    .frame(minWidth: 28, minHeight: 28)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(AppLocalization.string("Clear filter"))
                         }
                     }
                     .padding(6)
                     .background(Color.primary.opacity(0.06))
                     .cornerRadius(8)
+
+                    if !categories.isEmpty {
+                        Picker(AppLocalization.string("Category"), selection: $selectedCategory) {
+                            Text(AppLocalization.string("All Categories")).tag(String?.none)
+                            ForEach(categories, id: \.self) { category in
+                                Text(category).tag(String?.some(category))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 140)
+                    }
 
                     Picker(AppLocalization.string("Level"), selection: $selectedLevel) {
                         Text(AppLocalization.string("All Levels")).tag(AppLogger.LogLevel?.none)
@@ -65,13 +82,13 @@ public struct DiagnosticLogView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 4) {
-                            if filteredEntries.isEmpty {
+                            if entries.isEmpty {
                                 Text(AppLocalization.string("No log entries match the current filter."))
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundColor(.white.opacity(0.65))
                                     .padding(20)
                             } else {
-                                ForEach(filteredEntries) { entry in
+                                ForEach(entries) { entry in
                                     HStack(alignment: .top, spacing: 8) {
                                         Text(entry.formattedTime)
                                             .font(.system(size: 11, design: .monospaced))
@@ -96,7 +113,7 @@ public struct DiagnosticLogView: View {
                     }
                     .background(Color(red: 0.08, green: 0.08, blue: 0.1))
                     .onChange(of: logger.entries.count) { _, _ in
-                        if let lastId = filteredEntries.last?.id {
+                        if let lastId = entries.last?.id {
                             proxy.scrollTo(lastId, anchor: .bottom)
                         }
                     }
@@ -106,7 +123,7 @@ public struct DiagnosticLogView: View {
 
                 // Bottom Action Toolbar
                 HStack {
-                    Text(AppLocalization.format("%d events", filteredEntries.count))
+                    Text(AppLocalization.format("%d events", entries.count))
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
 
@@ -147,8 +164,9 @@ public struct DiagnosticLogView: View {
                 }
             }
         }
+        .environment(\.locale, languageSettings.locale)
         #if os(macOS)
-        .frame(minWidth: 600, minHeight: 450)
+        .frame(minWidth: 640, minHeight: 460)
         #endif
     }
 
@@ -162,7 +180,7 @@ public struct DiagnosticLogView: View {
     }
 
     private func copyLogsToClipboard() {
-        let text = logger.exportLogs()
+        let text = logger.exportLogs(level: selectedLevel, category: selectedCategory, filterText: filterText)
         #if canImport(AppKit)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)

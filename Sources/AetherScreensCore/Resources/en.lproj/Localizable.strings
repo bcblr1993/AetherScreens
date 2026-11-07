@@ -826,6 +826,10 @@
 "Connected in Last 7 Days" = "Connected in Last 7 Days";
 "Wake All Wakeable Computers" = "Wake All Wakeable Computers";
 "Sent Wake-on-LAN to %d computer(s)" = "Sent Wake-on-LAN to %d computer(s)";
+"Category" = "Category";
+"All Categories" = "All Categories";
+"Clear filter" = "Clear filter";
+
 
 
 

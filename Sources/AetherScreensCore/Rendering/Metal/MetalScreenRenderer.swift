@@ -85,6 +85,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
             let library = try device.makeLibrary(source: Self.shaderSource, options: nil)
             guard let vertexFunction = library.makeFunction(name: "screenVertex"),
                   let fragmentFunction = library.makeFunction(name: "screenFragment") else {
+                AppLogger.shared.error("Metal shader entrypoints missing", category: "Metal")
                 return
             }
 
@@ -95,7 +96,7 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
 
             self.pipelineState = try device.makeRenderPipelineState(descriptor: descriptor)
         } catch {
-            print("[MetalScreenRenderer] Pipeline setup failed: \(error)")
+            AppLogger.shared.error("Metal pipeline setup failed: \(error.localizedDescription)", category: "Metal")
         }
     }
 
@@ -141,6 +142,17 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     // Disconnected sessions must not retain idle staging memory, including late completions.
     func setUploadBufferCachingEnabled(_ enabled: Bool) { uploadBuffers.setCachingEnabled(enabled) }
     var cachedUploadBufferBytes: Int { uploadBuffers.cachedBytes }
+
+    /// Releases both CPU staging buffers and the private GPU texture when a session ends.
+    public func releaseSessionResources() {
+        uploadBuffers.setCachingEnabled(false)
+        lock.lock()
+        texture = nil
+        textureFramebuffer = nil
+        uploadedRevision = nil
+        isDirty = true
+        lock.unlock()
+    }
 
     // MARK: - MTKViewDelegate
 
@@ -203,7 +215,9 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
             if completed.status == .error {
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
+                    self.lock.lock()
                     self.uploadedRevision = nil
+                    self.lock.unlock()
                     self.notifyFrameUpdated()
                 }
             } else if retry { self.notifyFrameUpdated() }
@@ -234,7 +248,11 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
     /// Staging buffers live until command completion; the private texture is written only by ordered GPU commands.
     @discardableResult
     func encodeFramebufferUpload(framebuffer: Framebuffer, commandBuffer: MTLCommandBuffer, shouldUpload: Bool = true) -> Int? {
+        lock.lock()
         var target = texture
+        let previousRevision = uploadedRevision
+        let previousFramebuffer = textureFramebuffer
+        lock.unlock()
         var pending: [(buffer: MTLBuffer, region: CGRect, stride: Int)] = []
         var submitted = false
         defer {
@@ -243,10 +261,10 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
         }
         var nextRevision: UInt64?
         var failed = false
-        framebuffer.withPixelChanges(since: uploadedRevision) { pixels, width, height, changes, revision in
+        framebuffer.withPixelChanges(since: previousRevision) { pixels, width, height, changes, revision in
             guard width > 0, height > 0, let base = pixels.baseAddress,
                   pixels.count >= width * height * 4 else { failed = true; return }
-            let recreate = target == nil || target?.width != width || target?.height != height || textureFramebuffer !== framebuffer
+            let recreate = target == nil || target?.width != width || target?.height != height || previousFramebuffer !== framebuffer
             if recreate {
                 let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
                 descriptor.usage = [.shaderRead]
@@ -298,9 +316,11 @@ public final class MetalScreenRenderer: NSObject, MTKViewDelegate, @unchecked Se
             for buffer in completedBuffers { pool.recycle(buffer) }
         }
         submitted = true
+        lock.lock()
         texture = target
         textureFramebuffer = framebuffer
         uploadedRevision = nextRevision
+        lock.unlock()
         return pixelBytes
     }
 }

@@ -1161,8 +1161,13 @@ public final class SessionViewModel: ObservableObject, Identifiable {
                 if let image = framebuffer.makeCGImage() {
                     ThumbnailStore.shared.saveThumbnail(image, for: deviceId)
                 }
+                framebuffer.reclaimStorage()
             }
+        } else {
+            framebuffer.reclaimStorage()
         }
+        metalRenderer?.releaseSessionResources()
+        currentImage = nil
         hasReceivedFirstFrame = false
         downloadProgress = nil
         if isDisconnectRequested { clearPasswordPrompt() }

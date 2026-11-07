@@ -38,6 +38,25 @@ public final class Framebuffer: @unchecked Sendable {
         self.pixels = [UInt8](repeating: 0, count: totalBytes)
     }
 
+    /// Returns the number of bytes currently allocated for pixel storage.
+    public var allocatedByteCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return pixels.count
+    }
+
+    /// Shrinks the backing pixel buffer to a minimal 1×1 placeholder when a session ends,
+    /// reclaiming multi-megabyte 4K/5K desktop buffers immediately while keeping invariants valid.
+    public func reclaimStorage() {
+        lock.lock()
+        defer { lock.unlock() }
+        width = 1
+        height = 1
+        pixels = [UInt8](repeating: 0, count: 4)
+        changes.removeAll(keepingCapacity: false)
+        recordChange(CGRect(x: 0, y: 0, width: 1, height: 1))
+    }
+
     /// Resize the framebuffer (e.g. on DesktopSize pseudo-encoding).
     public func resize(newWidth: Int, newHeight: Int) {
         lock.lock()

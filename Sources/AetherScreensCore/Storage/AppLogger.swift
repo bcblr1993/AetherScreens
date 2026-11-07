@@ -60,11 +60,13 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
 
     @Published public private(set) var entries: [LogEntry] = []
     private var buffer: [LogEntry] = []
+    private var isMainFlushScheduled = false
     private let lock = NSLock()
     private let maxEntries = 600
 
     private let osLogGeneral = os.Logger(subsystem: "com.aethernative.aetherscreens", category: "General")
     private let osLogRFB = os.Logger(subsystem: "com.aethernative.aetherscreens", category: "RFB")
+    private let osLogRDP = os.Logger(subsystem: "com.aethernative.aetherscreens", category: "RDP")
     private let osLogNet = os.Logger(subsystem: "com.aethernative.aetherscreens", category: "Network")
     private let osLogAuth = os.Logger(subsystem: "com.aethernative.aetherscreens", category: "Auth")
     private let osLogUI = os.Logger(subsystem: "com.aethernative.aetherscreens", category: "UI")
@@ -74,9 +76,10 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
     private func logger(for category: String) -> os.Logger {
         switch category.lowercased() {
         case "rfb": return osLogRFB
-        case "network", "net", "tailscale": return osLogNet
+        case "rdp": return osLogRDP
+        case "network", "net", "tailscale", "ssh": return osLogNet
         case "auth", "crypto": return osLogAuth
-        case "ui", "view": return osLogUI
+        case "ui", "view", "metal": return osLogUI
         default: return osLogGeneral
         }
     }
@@ -88,31 +91,57 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
         let osLog = logger(for: category)
         switch level {
         case .debug:
-            osLog.debug("[\(category)] \(message, privacy: .public)")
+            osLog.debug("[\(category, privacy: .public)] \(message, privacy: .private)")
         case .info:
-            osLog.info("[\(category)] \(message, privacy: .public)")
+            osLog.info("[\(category, privacy: .public)] \(message, privacy: .private)")
         case .warning:
-            osLog.warning("[\(category)] \(message, privacy: .public)")
+            osLog.warning("[\(category, privacy: .public)] \(message, privacy: .private)")
         case .error:
-            osLog.error("[\(category)] \(message, privacy: .public)")
+            osLog.error("[\(category, privacy: .public)] \(message, privacy: .private)")
         }
 
-        // 2. Append to in-memory buffer for in-app UI display
-        lock.lock()
-        if buffer.count >= maxEntries {
-            buffer.removeFirst(buffer.count - maxEntries + 1)
-        }
-        buffer.append(entry)
-        let snapshot = buffer
-        lock.unlock()
-
+        // 2. Append to in-memory buffer and coalesce @MainActor publication
         if Thread.isMainThread {
-            self.entries = snapshot
+            lock.lock()
+            if buffer.count >= maxEntries {
+                buffer.removeFirst(buffer.count - maxEntries + 1)
+            }
+            buffer.append(entry)
+            isMainFlushScheduled = false
+            let latest = buffer
+            lock.unlock()
+            self.entries = latest
         } else {
-            Task { @MainActor in
-                self.entries = snapshot
+            lock.lock()
+            if buffer.count >= maxEntries {
+                buffer.removeFirst(buffer.count - maxEntries + 1)
+            }
+            buffer.append(entry)
+            let shouldSchedule = !isMainFlushScheduled
+            isMainFlushScheduled = true
+            lock.unlock()
+
+            if shouldSchedule {
+                Task { @MainActor [weak self] in
+                    self?.flushLatestBufferToEntries()
+                }
             }
         }
+    }
+
+    @MainActor
+    private func flushLatestBufferToEntries() {
+        lock.lock()
+        isMainFlushScheduled = false
+        let latest = buffer
+        lock.unlock()
+        self.entries = latest
+    }
+
+    public var availableCategories: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return Set(buffer.map(\.category)).sorted()
     }
 
     public func info(_ message: String, category: String = "General") {
@@ -133,20 +162,30 @@ public final class AppLogger: ObservableObject, @unchecked Sendable {
 
     public func clear() {
         lock.lock()
-        buffer.removeAll()
+        buffer.removeAll(keepingCapacity: false)
+        isMainFlushScheduled = false
         lock.unlock()
         if Thread.isMainThread {
             self.entries = []
         } else {
-            Task { @MainActor in
-                self.entries = []
+            Task { @MainActor [weak self] in
+                self?.flushLatestBufferToEntries()
             }
         }
     }
 
-    public func exportLogs() -> String {
+    public func exportLogs(level: LogLevel? = nil, category: String? = nil, filterText: String = "") -> String {
         lock.lock()
-        defer { lock.unlock() }
-        return buffer.map(\.fullLine).joined(separator: "\n")
+        let current = buffer
+        lock.unlock()
+        let filtered = current.filter { entry in
+            let matchesLevel = level == nil || entry.level == level
+            let matchesCategory = category == nil || entry.category == category
+            let matchesText = filterText.isEmpty ||
+                entry.message.localizedCaseInsensitiveContains(filterText) ||
+                entry.category.localizedCaseInsensitiveContains(filterText)
+            return matchesLevel && matchesCategory && matchesText
+        }
+        return filtered.map(\.fullLine).joined(separator: "\n")
     }
 }
