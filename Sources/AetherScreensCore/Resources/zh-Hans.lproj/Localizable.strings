@@ -801,6 +801,13 @@
 "Sort by Favorites First" = "按收藏优先排序";
 "Sort by Protocol" = "按连接协议排序";
 "Share as Read-Only" = "以只读模式共享文件夹";
+"Connection History" = "连接历史记录";
+"No connection history yet." = "暂无连接历史记录。";
+"Clear History" = "清空历史";
+"Active" = "连接中";
+"Completed" = "已完成";
+"Failed" = "连接失败";
+
 
 
 

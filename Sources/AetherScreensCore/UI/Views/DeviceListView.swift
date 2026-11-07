@@ -52,6 +52,8 @@ public struct DeviceListView: View {
     @State private var editingDevice: RemoteDevice?
     @State private var pendingDeletion: RemoteDevice?
     @State private var showingLogs = false
+    @State private var showingConnectionHistory = false
+    @State private var historyFilterDevice: RemoteDevice?
     @State private var pendingConnectionLinks: [ConnectionLink.Resolved] = []
     @State private var exportingLibrary = false
     @State private var importingLibrary = false
@@ -93,6 +95,9 @@ public struct DeviceListView: View {
         .sheet(isPresented: $showingSettingsSheet, onDismiss: openPendingConnectionLink) {
             TailscaleSettingsSheet(viewModel: viewModel)
         }
+        .sheet(isPresented: $showingConnectionHistory, onDismiss: { historyFilterDevice = nil }) {
+            ConnectionHistorySheet(filterDevice: historyFilterDevice)
+        }
         #else
         NavigationStack {
             mainGridView
@@ -129,6 +134,9 @@ public struct DeviceListView: View {
                 }
                 .sheet(isPresented: $showingSettingsSheet, onDismiss: openPendingConnectionLink) {
                     TailscaleSettingsSheet(viewModel: viewModel)
+                }
+                .sheet(isPresented: $showingConnectionHistory, onDismiss: { historyFilterDevice = nil }) {
+                    ConnectionHistorySheet(filterDevice: historyFilterDevice)
                 }
         }
         #endif
@@ -471,6 +479,15 @@ public struct DeviceListView: View {
         .accessibilityLabel(AppLocalization.string("Diagnostic Logs"))
 
         Button {
+            historyFilterDevice = nil
+            showingConnectionHistory = true
+        } label: {
+            Label(AppLocalization.string("Connection History"), systemImage: "clock.arrow.circlepath")
+        }
+        .help(AppLocalization.string("Connection History"))
+        .accessibilityLabel(AppLocalization.string("Connection History"))
+
+        Button {
             Task { await viewModel.syncTailscale() }
         } label: {
             Label(AppLocalization.string(viewModel.isSyncingTailscale ? "Syncing…" : "Sync Tailscale Devices"), systemImage: "arrow.triangle.2.circlepath")
@@ -676,6 +693,13 @@ public struct DeviceListView: View {
             _ = viewModel.duplicateDevice(device)
         } label: {
             Label(AppLocalization.string("Duplicate Computer"), systemImage: "plus.square.on.square")
+        }
+
+        Button {
+            historyFilterDevice = device
+            showingConnectionHistory = true
+        } label: {
+            Label(AppLocalization.string("Connection History"), systemImage: "clock.arrow.circlepath")
         }
 
         Button {

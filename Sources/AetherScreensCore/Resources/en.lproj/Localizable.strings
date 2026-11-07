@@ -801,6 +801,13 @@
 "Sort by Favorites First" = "Sort by Favorites First";
 "Sort by Protocol" = "Sort by Protocol";
 "Share as Read-Only" = "Share as Read-Only";
+"Connection History" = "Connection History";
+"No connection history yet." = "No connection history yet.";
+"Clear History" = "Clear History";
+"Active" = "Active";
+"Completed" = "Completed";
+"Failed" = "Failed";
+
 
 
 

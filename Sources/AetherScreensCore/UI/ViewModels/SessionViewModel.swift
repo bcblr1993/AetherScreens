@@ -1009,6 +1009,15 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         downloadProgress = nil
         remoteDesktopSize = .zero
         multiDisplayManager.reset(width: framebuffer.width, height: framebuffer.height)
+        if !isTemporary, activeHistoryEntryID == nil {
+            activeHistoryEntryID = ConnectionHistoryStore.shared.recordSessionStart(
+                deviceID: device.id,
+                deviceName: device.name,
+                host: device.host,
+                port: device.port,
+                remoteProtocol: device.remoteProtocol
+            )
+        }
         if device.wakeBeforeConnect == true, let mac = device.macAddress, !mac.isEmpty {
             WakeOnLANService.wakeDevice(macAddress: mac)
         }
@@ -1084,6 +1093,7 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Explicit user close; lifecycle cleanup alone must never trigger remote actions.
     private var isDisconnectRequested = false
+    private var activeHistoryEntryID: UUID?
     public func requestDisconnect() {
         guard !isDisconnectRequested else { return }
         isDisconnectRequested = true
@@ -1111,6 +1121,16 @@ public final class SessionViewModel: ObservableObject, Identifiable {
 
     /// Clean up local session state without triggering configured remote actions.
     public func endSession() {
+        if let entryID = activeHistoryEntryID {
+            activeHistoryEntryID = nil
+            let outcome: ConnectionHistoryEntry.Outcome
+            if case .failed = sessionState {
+                outcome = .failed
+            } else {
+                outcome = .completed
+            }
+            ConnectionHistoryStore.shared.recordSessionEnd(id: entryID, outcome: outcome)
+        }
         sessionLifecycleActive = false
         clipboardPollingTask?.cancel()
         clipboardPollingTask = nil
