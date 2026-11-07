@@ -794,5 +794,12 @@
 "Duplicate Computer" = "Duplicate Computer";
 "Duplicated '%@'" = "Duplicated '%@'";
 "Notes (Optional)" = "Notes (Optional)";
+"Sort Order" = "Sort Order";
+"Default Order" = "Default Order";
+"Sort by Name" = "Sort by Name";
+"Sort by Recently Connected" = "Sort by Recently Connected";
+"Sort by Favorites First" = "Sort by Favorites First";
+"Sort by Protocol" = "Sort by Protocol";
+
 
 

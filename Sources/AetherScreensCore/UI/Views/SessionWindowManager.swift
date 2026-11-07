@@ -187,16 +187,39 @@ private struct AuxiliaryDisplayWindowView: View {
     let display: DisplayInfo
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            if let cgImage = croppedDisplayImage {
-                Image(decorative: cgImage, scale: 1.0)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else {
-                ProgressView()
-                    .tint(.white)
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                if let cgImage = croppedDisplayImage {
+                    Image(decorative: cgImage, scale: 1.0)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    ProgressView()
+                        .tint(.white)
+                }
             }
+            .contentShape(Rectangle())
+            .gesture(
+                SpatialTapGesture()
+                    .onEnded { event in
+                        guard !session.isObserveOnly,
+                              let remotePoint = AuxiliaryDisplayCoordinateMapper.mapToRemoteDesktop(
+                                  pointInView: event.location,
+                                  viewSize: geometry.size,
+                                  displayBounds: display.bounds
+                              ) else { return }
+                        let rx = UInt16(min(CGFloat(UInt16.max), max(0, remotePoint.x)))
+                        let ry = UInt16(min(CGFloat(UInt16.max), max(0, remotePoint.y)))
+                        if session.isRDP {
+                            session.rdpClient?.sendPointerEvent(buttonMask: .left, x: rx, y: ry)
+                            session.rdpClient?.sendPointerEvent(buttonMask: [], x: rx, y: ry)
+                        } else {
+                            session.client.sendPointerEvent(buttonMask: .left, x: rx, y: ry)
+                            session.client.sendPointerEvent(buttonMask: [], x: rx, y: ry)
+                        }
+                    }
+            )
         }
     }
 

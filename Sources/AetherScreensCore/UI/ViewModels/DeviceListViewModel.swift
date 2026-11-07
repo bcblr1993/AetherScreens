@@ -5,11 +5,28 @@ import Combine
 /// ViewModel managing the device library, Bonjour nearby discovery, Tailnet discovery, and active sessions.
 @MainActor
 public final class DeviceListViewModel: ObservableObject {
+    public enum SortOrder: String, CaseIterable, Identifiable, Sendable {
+        case custom = "Default Order"
+        case name = "Sort by Name"
+        case lastConnected = "Sort by Recently Connected"
+        case favoritesFirst = "Sort by Favorites First"
+        case protocolType = "Sort by Protocol"
+
+        public var id: String { rawValue }
+    }
+
+    public static let sortOrderKey = "com.aethernative.aetherscreens.library.sortOrder"
+
     @Published public var devices: [RemoteDevice] = []
     @Published public var discoveredNearbyMacs: [DiscoveredMac] = []
     @Published public var isSearchingBonjour: Bool = false
     @Published public var searchText: String = ""
     @Published public var selectedTag: String? = nil
+    @Published public var sortOrder: SortOrder = .custom {
+        didSet {
+            userDefaults.set(sortOrder.rawValue, forKey: Self.sortOrderKey)
+        }
+    }
     @Published public var isSyncingTailscale: Bool = false
     @Published public var tailscaleApiKey: String = ""
     @Published public var tailnetName: String = ""
@@ -21,19 +38,26 @@ public final class DeviceListViewModel: ObservableObject {
     @Published public private(set) var isProbingReachability: Bool = false
 
     private let store: DeviceStore
+    private let userDefaults: UserDefaults
     private let sshCredentials: SSHCredentialStore
     private let sshTrust: SSHHostTrustStore
     private let bonjourService: BonjourDiscoveryService
     private var cancellables = Set<AnyCancellable>()
 
     public init(store: DeviceStore = .shared, bonjourService: BonjourDiscoveryService = .shared,
-                sshTrust: SSHHostTrustStore = .shared, syncService: ComputerSyncService? = nil) {
+                sshTrust: SSHHostTrustStore = .shared, syncService: ComputerSyncService? = nil,
+                userDefaults: UserDefaults = .standard) {
         self.store = store
+        self.userDefaults = userDefaults
         self.sshCredentials = store.sshCredentials
         self.sshTrust = sshTrust
         self.bonjourService = bonjourService
         self.syncService = syncService ?? ComputerSyncService(store: store)
         self.devices = store.devices
+        if let raw = userDefaults.string(forKey: Self.sortOrderKey),
+           let savedOrder = SortOrder(rawValue: raw) {
+            self.sortOrder = savedOrder
+        }
 
         setupBonjourBindings()
         setupSyncBindings()
@@ -112,7 +136,7 @@ public final class DeviceListViewModel: ObservableObject {
     public var filteredDevices: [RemoteDevice] {
         let query = normalizedSearchQuery
         let activeTag = selectedTag?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return devices.filter { dev in
+        let matching = devices.filter { dev in
             if let activeTag, !activeTag.isEmpty {
                 let matchesTag = dev.tags.contains { $0.caseInsensitiveCompare(activeTag) == .orderedSame }
                 if !matchesTag { return false }
@@ -123,6 +147,42 @@ public final class DeviceListViewModel: ObservableObject {
                 || (dev.username?.localizedCaseInsensitiveContains(query) ?? false)
                 || (dev.notes?.localizedCaseInsensitiveContains(query) ?? false)
                 || dev.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
+        }
+        return sortDevices(matching)
+    }
+
+    private func sortDevices(_ list: [RemoteDevice]) -> [RemoteDevice] {
+        switch sortOrder {
+        case .custom:
+            return list
+        case .name:
+            return list.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        case .lastConnected:
+            return list.sorted { lhs, rhs in
+                switch (lhs.lastConnected, rhs.lastConnected) {
+                case let (l?, r?):
+                    if l != r { return l > r }
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+            }
+        case .favoritesFirst:
+            return list.sorted { lhs, rhs in
+                if lhs.isFavorite != rhs.isFavorite { return lhs.isFavorite && !rhs.isFavorite }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+        case .protocolType:
+            return list.sorted { lhs, rhs in
+                if lhs.remoteProtocol != rhs.remoteProtocol {
+                    return lhs.remoteProtocol.rawValue < rhs.remoteProtocol.rawValue
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
         }
     }
 

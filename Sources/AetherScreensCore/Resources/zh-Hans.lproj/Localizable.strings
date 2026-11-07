@@ -794,5 +794,12 @@
 "Duplicate Computer" = "创建电脑配置副本";
 "Duplicated '%@'" = "已复制“%@”";
 "Notes (Optional)" = "备注说明（可选）";
+"Sort Order" = "排序方式";
+"Default Order" = "默认顺序";
+"Sort by Name" = "按名称排序";
+"Sort by Recently Connected" = "按最近连接排序";
+"Sort by Favorites First" = "按收藏优先排序";
+"Sort by Protocol" = "按连接协议排序";
+
 
 

@@ -301,6 +301,7 @@ public struct DeviceListView: View {
                                     ForEach(devices) { device in
                                         DeviceListRowView(
                                             device: device,
+                                            latencyMs: viewModel.lastProbeLatencyMs[device.id],
                                             onConnect: { openSession(for: device) },
                                             onWake: (device.macAddress?.isEmpty == false) ? { viewModel.wakeDevice(device) } : nil,
                                             onEdit: { editingDevice = device }
@@ -314,6 +315,7 @@ public struct DeviceListView: View {
                                     ForEach(devices) { device in
                                         DeviceCardView(
                                             device: device,
+                                            latencyMs: viewModel.lastProbeLatencyMs[device.id],
                                             onConnect: { openSession(for: device) },
                                             onWake: { viewModel.wakeDevice(device) }
                                         )
@@ -544,6 +546,25 @@ public struct DeviceListView: View {
             }
             Spacer(minLength: 0)
             HStack(spacing: 8) {
+                Menu {
+                    Picker(AppLocalization.string("Sort Order"), selection: $viewModel.sortOrder) {
+                        ForEach(DeviceListViewModel.SortOrder.allCases) { order in
+                            Text(AppLocalization.string(order.rawValue)).tag(order)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(AppLocalization.string("Sort Order"))
+                .accessibilityLabel(AppLocalization.string("Sort Order"))
+
                 Button {
                     withAnimation(libraryTransitionAnimation) {
                         layoutModeRaw = isListLayout ? "grid" : "list"
@@ -932,6 +953,7 @@ public struct DeviceListView: View {
 
 private struct DeviceListRowView: View {
     let device: RemoteDevice
+    var latencyMs: Int? = nil
     let onConnect: () -> Void
     let onWake: (() -> Void)?
     let onEdit: () -> Void
@@ -965,6 +987,14 @@ private struct DeviceListRowView: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background((device.remoteProtocol == .rdp ? Color.blue : Color.teal).opacity(0.12), in: Capsule())
+                        if let latencyMs {
+                            Text("\(latencyMs) ms")
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.green)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.green.opacity(0.12), in: Capsule())
+                        }
                     }
 
                     HStack(spacing: 8) {
@@ -972,6 +1002,12 @@ private struct DeviceListRowView: View {
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                        if let notes = device.notes, !notes.isEmpty {
+                            Text("· \(notes)")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary.opacity(0.85))
+                                .lineLimit(1)
+                        }
                         if !device.tags.isEmpty {
                             HStack(spacing: 4) {
                                 ForEach(device.tags.prefix(3), id: \.self) { tag in

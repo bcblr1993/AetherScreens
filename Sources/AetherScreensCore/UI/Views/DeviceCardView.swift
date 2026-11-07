@@ -13,11 +13,13 @@ public struct DeviceCardView: View {
         let lastConnected: Date?
     }
     public let device: RemoteDevice
+    public var latencyMs: Int? = nil
     public let onConnect: () -> Void
     public var onWake: (() -> Void)? = nil
 
-    public init(device: RemoteDevice, onConnect: @escaping () -> Void, onWake: (() -> Void)? = nil) {
+    public init(device: RemoteDevice, latencyMs: Int? = nil, onConnect: @escaping () -> Void, onWake: (() -> Void)? = nil) {
         self.device = device
+        self.latencyMs = latencyMs
         self.onConnect = onConnect
         self.onWake = onWake
         _thumbnail = State(initialValue: ThumbnailStore.shared.cachedThumbnail(for: device.id))
@@ -138,10 +140,15 @@ public struct DeviceCardView: View {
             Spacer()
             HStack(spacing: 6) {
                 Circle()
-                    .fill(device.isTailscaleNode && device.isOnline ? Color(red: 0.30, green: 0.77, blue: 0.53) : .gray)
+                    .fill((device.isTailscaleNode || latencyMs != nil) && device.isOnline ? Color(red: 0.30, green: 0.77, blue: 0.53) : .gray)
                     .frame(width: 6, height: 6)
-                Text(AppLocalization.string(device.isTailscaleNode ? (device.isOnline ? "Tailnet Online" : "Tailnet Offline") : "Saved"))
-                    .font(.system(size: 11, weight: .semibold))
+                if let latencyMs {
+                    Text("\(latencyMs) ms")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                } else {
+                    Text(AppLocalization.string(device.isTailscaleNode ? (device.isOnline ? "Tailnet Online" : "Tailnet Offline") : "Saved"))
+                        .font(.system(size: 11, weight: .semibold))
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
@@ -166,6 +173,12 @@ public struct DeviceCardView: View {
             .font(.system(size: 11, design: .monospaced))
             .foregroundStyle(.secondary)
             .lineLimit(1)
+            if let notes = device.notes, !notes.isEmpty {
+                Text(notes)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary.opacity(0.85))
+                    .lineLimit(1)
+            }
             if !device.tags.isEmpty {
                 HStack(spacing: 4) {
                     ForEach(device.tags.prefix(3), id: \.self) { tag in

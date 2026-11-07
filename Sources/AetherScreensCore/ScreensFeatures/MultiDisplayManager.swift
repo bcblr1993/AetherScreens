@@ -200,3 +200,28 @@ public final class MultiDisplayManager: ObservableObject, @unchecked Sendable {
                 coordinate(y, origin: bounds.minY, extent: bounds.height, total: remoteTotalHeight))
     }
 }
+
+/// Maps local points inside a letterboxed/pillarboxed auxiliary display window back to global remote desktop coordinates.
+public enum AuxiliaryDisplayCoordinateMapper: Sendable {
+    public static func mapToRemoteDesktop(
+        pointInView: CGPoint,
+        viewSize: CGSize,
+        displayBounds: CGRect
+    ) -> CGPoint? {
+        guard viewSize.width > 0, viewSize.height > 0,
+              displayBounds.width > 0, displayBounds.height > 0 else { return nil }
+        let scale = min(viewSize.width / displayBounds.width, viewSize.height / displayBounds.height)
+        let fittedWidth = displayBounds.width * scale
+        let fittedHeight = displayBounds.height * scale
+        let offsetX = (viewSize.width - fittedWidth) / 2.0
+        let offsetY = (viewSize.height - fittedHeight) / 2.0
+        let fittedRect = CGRect(x: offsetX, y: offsetY, width: fittedWidth, height: fittedHeight)
+        guard fittedRect.contains(pointInView) else { return nil }
+
+        let normX = (pointInView.x - offsetX) / fittedWidth
+        let normY = (pointInView.y - offsetY) / fittedHeight
+        let remoteX = displayBounds.minX + min(max(0, normX), 1) * displayBounds.width
+        let remoteY = displayBounds.minY + min(max(0, normY), 1) * displayBounds.height
+        return CGPoint(x: remoteX, y: remoteY)
+    }
+}
