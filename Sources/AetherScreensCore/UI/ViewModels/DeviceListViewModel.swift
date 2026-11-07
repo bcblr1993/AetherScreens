@@ -27,15 +27,27 @@ public final class DeviceListViewModel: ObservableObject {
 
     public static let sortOrderKey = "com.aethernative.aetherscreens.library.sortOrder"
 
-    @Published public var devices: [RemoteDevice] = []
+    @Published public var devices: [RemoteDevice] = [] {
+        didSet {
+            rebuildTagCache()
+            cachedFilteredDevices = nil
+        }
+    }
     @Published public var discoveredNearbyMacs: [DiscoveredMac] = []
     @Published public var isSearchingBonjour: Bool = false
-    @Published public var searchText: String = ""
-    @Published public var selectedTag: String? = nil
-    @Published public var smartFilter: SmartFilter = .all
+    @Published public var searchText: String = "" {
+        didSet { cachedFilteredDevices = nil }
+    }
+    @Published public var selectedTag: String? = nil {
+        didSet { cachedFilteredDevices = nil }
+    }
+    @Published public var smartFilter: SmartFilter = .all {
+        didSet { cachedFilteredDevices = nil }
+    }
     @Published public var sortOrder: SortOrder = .custom {
         didSet {
             userDefaults.set(sortOrder.rawValue, forKey: Self.sortOrderKey)
+            cachedFilteredDevices = nil
         }
     }
     @Published public var isSyncingTailscale: Bool = false
@@ -54,6 +66,9 @@ public final class DeviceListViewModel: ObservableObject {
     private let sshTrust: SSHHostTrustStore
     private let bonjourService: BonjourDiscoveryService
     private var cancellables = Set<AnyCancellable>()
+    private var cachedAllTags: [String] = []
+    private var cachedTagCounts: [String: Int] = [:]
+    private var cachedFilteredDevices: [RemoteDevice]?
 
     public init(store: DeviceStore = .shared, bonjourService: BonjourDiscoveryService = .shared,
                 sshTrust: SSHHostTrustStore = .shared, syncService: ComputerSyncService? = nil,
@@ -65,6 +80,7 @@ public final class DeviceListViewModel: ObservableObject {
         self.bonjourService = bonjourService
         self.syncService = syncService ?? ComputerSyncService(store: store)
         self.devices = store.devices
+        self.rebuildTagCache()
         if let raw = userDefaults.string(forKey: Self.sortOrderKey),
            let savedOrder = SortOrder(rawValue: raw) {
             self.sortOrder = savedOrder
@@ -119,32 +135,37 @@ public final class DeviceListViewModel: ObservableObject {
         }
     }
 
-    public var allTags: [String] {
+    private func rebuildTagCache() {
         var unique = Set<String>()
-        for dev in devices {
-            for tag in dev.tags {
-                let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { unique.insert(trimmed) }
-            }
-        }
-        return unique.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    }
-
-    public var tagCounts: [String: Int] {
         var counts: [String: Int] = [:]
         for dev in devices {
             var seenOnDevice = Set<String>()
             for tag in dev.tags {
                 let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty, seenOnDevice.insert(trimmed).inserted {
-                    counts[trimmed, default: 0] += 1
+                if !trimmed.isEmpty {
+                    unique.insert(trimmed)
+                    if seenOnDevice.insert(trimmed).inserted {
+                        counts[trimmed, default: 0] += 1
+                    }
                 }
             }
         }
-        return counts
+        cachedAllTags = unique.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        cachedTagCounts = counts
+    }
+
+    public var allTags: [String] {
+        cachedAllTags
+    }
+
+    public var tagCounts: [String: Int] {
+        cachedTagCounts
     }
 
     public var filteredDevices: [RemoteDevice] {
+        if smartFilter != .recentlyConnected, let cached = cachedFilteredDevices {
+            return cached
+        }
         let query = normalizedSearchQuery
         let activeTag = selectedTag?.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = Date()
@@ -172,7 +193,11 @@ public final class DeviceListViewModel: ObservableObject {
                 || (dev.notes?.localizedCaseInsensitiveContains(query) ?? false)
                 || dev.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
         }
-        return sortDevices(matching)
+        let sorted = sortDevices(matching)
+        if smartFilter != .recentlyConnected {
+            cachedFilteredDevices = sorted
+        }
+        return sorted
     }
 
     private func sortDevices(_ list: [RemoteDevice]) -> [RemoteDevice] {
@@ -226,10 +251,13 @@ public final class DeviceListViewModel: ObservableObject {
     @discardableResult
     public func importFromSSHConfig(contents: String) -> Int {
         let entries = SSHConfigParser.parse(contents)
-        var addedCount = 0
+        var newDevices: [RemoteDevice] = []
         for entry in entries {
             guard let sshSettings = entry.toSSHConnectionSettings() else { continue }
-            let existing = devices.contains { $0.name.caseInsensitiveCompare(entry.alias) == .orderedSame || $0.host.caseInsensitiveCompare(entry.hostName) == .orderedSame }
+            let existing = (devices + newDevices).contains {
+                $0.name.caseInsensitiveCompare(entry.alias) == .orderedSame
+                    || $0.host.caseInsensitiveCompare(entry.hostName) == .orderedSame
+            }
             guard !existing else { continue }
             let dev = RemoteDevice(
                 name: entry.alias,
@@ -242,17 +270,17 @@ public final class DeviceListViewModel: ObservableObject {
                 ssh: sshSettings,
                 tags: ["SSH"]
             )
-            _ = store.addDevice(dev)
-            addedCount += 1
+            newDevices.append(dev)
         }
-        if addedCount > 0 {
+        if !newDevices.isEmpty {
+            store.batchUpdateDevices(newDevices)
             reload()
             Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
-            statusNotice = AppLocalization.format("Imported %d computer(s)", addedCount)
+            statusNotice = AppLocalization.format("Imported %d computer(s)", newDevices.count)
         } else {
             statusNotice = AppLocalization.string("No new SSH hosts found in ~/.ssh/config")
         }
-        return addedCount
+        return newDevices.count
     }
 
     /// Reload devices from store
@@ -344,7 +372,7 @@ public final class DeviceListViewModel: ObservableObject {
         let snapshot = devices
         guard !snapshot.isEmpty else { return }
         let results = await prober.probeAll(snapshot)
-        var changed = false
+        var changedDevices: [RemoteDevice] = []
         for var dev in snapshot {
             guard let res = results[dev.id] else { continue }
             if let ms = res.latencyMs {
@@ -354,11 +382,11 @@ public final class DeviceListViewModel: ObservableObject {
             }
             if dev.isOnline != res.isReachable {
                 dev.isOnline = res.isReachable
-                _ = store.updateDevice(dev)
-                changed = true
+                changedDevices.append(dev)
             }
         }
-        if changed {
+        if !changedDevices.isEmpty {
+            store.batchUpdateDevices(changedDevices)
             reload()
         }
     }
@@ -563,20 +591,20 @@ public final class DeviceListViewModel: ObservableObject {
     public func assignTag(_ tag: String, toDeviceIDs ids: Set<UUID>) -> Int {
         let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !ids.isEmpty else { return 0 }
-        var updatedCount = 0
+        var modifiedDevices: [RemoteDevice] = []
         for dev in devices where ids.contains(dev.id) {
             let alreadyHas = dev.tags.contains { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
             guard !alreadyHas else { continue }
             var modified = dev
             modified.tags.append(trimmed)
-            _ = store.updateDevice(modified)
-            updatedCount += 1
+            modifiedDevices.append(modified)
         }
-        if updatedCount > 0 {
+        if !modifiedDevices.isEmpty {
+            store.batchUpdateDevices(modifiedDevices)
             reload()
             Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
         }
-        return updatedCount
+        return modifiedDevices.count
     }
 
     /// Remove a tag from multiple saved devices at once.
@@ -584,20 +612,20 @@ public final class DeviceListViewModel: ObservableObject {
     public func removeTag(_ tag: String, fromDeviceIDs ids: Set<UUID>) -> Int {
         let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !ids.isEmpty else { return 0 }
-        var updatedCount = 0
+        var modifiedDevices: [RemoteDevice] = []
         for dev in devices where ids.contains(dev.id) {
             let filteredTags = dev.tags.filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
             guard filteredTags.count != dev.tags.count else { continue }
             var modified = dev
             modified.tags = filteredTags
-            _ = store.updateDevice(modified)
-            updatedCount += 1
+            modifiedDevices.append(modified)
         }
-        if updatedCount > 0 {
+        if !modifiedDevices.isEmpty {
+            store.batchUpdateDevices(modifiedDevices)
             reload()
             Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
         }
-        return updatedCount
+        return modifiedDevices.count
     }
 
     /// Returns all saved devices (optionally filtered by tag) that have a configured Wake-on-LAN MAC address.

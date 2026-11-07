@@ -68,7 +68,18 @@ public final class ConnectionHistoryStore: ObservableObject {
             entries = []
             return
         }
-        entries = Array(decoded.prefix(maxEntries))
+        var reconciled = false
+        entries = Array(decoded.prefix(maxEntries)).map { entry in
+            guard entry.outcome == .active else { return entry }
+            reconciled = true
+            var updated = entry
+            updated.outcome = .completed
+            updated.endedAt = entry.endedAt ?? entry.startedAt
+            return updated
+        }
+        if reconciled {
+            persist()
+        }
     }
 
     @discardableResult

@@ -67,6 +67,11 @@ public struct HostPortReachabilityProber: Sendable {
             let connection = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
             let stateBox = ProbeOnceBox(connection: connection, continuation: continuation, start: start)
 
+            let timeoutItem = DispatchWorkItem {
+                stateBox.finish(isReachable: false)
+            }
+            stateBox.setTimeout(timeoutItem)
+
             connection.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
@@ -78,9 +83,7 @@ public struct HostPortReachabilityProber: Sendable {
                 }
             }
             connection.start(queue: queue)
-            queue.asyncAfter(deadline: .now() + timeoutSeconds) {
-                stateBox.finish(isReachable: false)
-            }
+            queue.asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutItem)
         }
     }
 }
@@ -88,6 +91,7 @@ public struct HostPortReachabilityProber: Sendable {
 private final class ProbeOnceBox: @unchecked Sendable {
     private let lock = NSLock()
     private var completed = false
+    private var timeoutItem: DispatchWorkItem?
     private let connection: NWConnection
     private let continuation: CheckedContinuation<HostPortReachabilityProber.ProbeResult, Never>
     private let start: ContinuousClock.Instant
@@ -102,6 +106,16 @@ private final class ProbeOnceBox: @unchecked Sendable {
         self.start = start
     }
 
+    func setTimeout(_ item: DispatchWorkItem) {
+        lock.lock()
+        defer { lock.unlock() }
+        if completed {
+            item.cancel()
+        } else {
+            timeoutItem = item
+        }
+    }
+
     func finish(isReachable: Bool) {
         lock.lock()
         guard !completed else {
@@ -109,8 +123,11 @@ private final class ProbeOnceBox: @unchecked Sendable {
             return
         }
         completed = true
+        let timeout = timeoutItem
+        timeoutItem = nil
         lock.unlock()
 
+        timeout?.cancel()
         let elapsed = ContinuousClock.now - start
         let ms = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
         connection.stateUpdateHandler = nil

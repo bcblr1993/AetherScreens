@@ -18,6 +18,7 @@ public final class ThumbnailStore: @unchecked Sendable {
     private let cacheDirectory: URL
     private let lock = NSLock()
     private var removedIDs = Set<UUID>()
+    private var removalGenerations: [UUID: UInt64] = [:]
     private let loadingQueue: DispatchQueue
     private final class LoadCancellation: @unchecked Sendable {
         private let lock = NSLock()
@@ -89,6 +90,7 @@ public final class ThumbnailStore: @unchecked Sendable {
 
         lock.lock()
         guard !removedIDs.contains(deviceId) else { lock.unlock(); return nil }
+        let startGen = removalGenerations[deviceId, default: 0]
         if let cached = memoryCache.object(forKey: key) {
             lock.unlock()
             return cached
@@ -110,7 +112,8 @@ public final class ThumbnailStore: @unchecked Sendable {
             kCGImageSourceCreateThumbnailWithTransform: true
            ] as CFDictionary) {
             lock.lock()
-            guard !removedIDs.contains(deviceId) else { lock.unlock(); return nil }
+            guard !removedIDs.contains(deviceId),
+                  removalGenerations[deviceId, default: 0] == startGen else { lock.unlock(); return nil }
             // A newer live snapshot can arrive while disk decoding is in progress.
             if let current = memoryCache.object(forKey: key) {
                 lock.unlock()
@@ -126,6 +129,11 @@ public final class ThumbnailStore: @unchecked Sendable {
 
     /// Save a new desktop thumbnail for a device ID
     public func saveThumbnail(_ image: CGImage, for deviceId: UUID) {
+        lock.lock()
+        guard !removedIDs.contains(deviceId) else { lock.unlock(); return }
+        let startGen = removalGenerations[deviceId, default: 0]
+        lock.unlock()
+
         let key = deviceId.uuidString as NSString
         let preview = scaledPreview(image)
         // Encoding is CPU work on the snapshot worker, not a critical section
@@ -141,7 +149,8 @@ public final class ThumbnailStore: @unchecked Sendable {
         #endif
 
         lock.lock()
-        guard !removedIDs.contains(deviceId) else { lock.unlock(); return }
+        guard !removedIDs.contains(deviceId),
+              removalGenerations[deviceId, default: 0] == startGen else { lock.unlock(); return }
         memoryCache.setObject(preview, forKey: key, cost: preview.bytesPerRow * preview.height)
         let fileURL = cacheDirectory.appendingPathComponent("\(deviceId.uuidString).jpg")
         // Keep persistence ordered against removal; encoding above cannot
@@ -151,10 +160,18 @@ public final class ThumbnailStore: @unchecked Sendable {
         changes.send(deviceId)
     }
 
+    /// Re-allow saving and loading thumbnails for a device UUID when it is re-added or re-imported.
+    public func allowThumbnails(for deviceId: UUID) {
+        lock.lock()
+        removedIDs.remove(deviceId)
+        lock.unlock()
+    }
+
     /// A removed computer must not regain a preview from an in-flight session snapshot.
     public func removeThumbnail(for deviceId: UUID) {
         lock.lock()
         removedIDs.insert(deviceId)
+        removalGenerations[deviceId, default: 0] &+= 1
         memoryCache.removeObject(forKey: deviceId.uuidString as NSString)
         for suffix in ["jpg", "png"] {
             try? fileManager.removeItem(at: cacheDirectory.appendingPathComponent("\(deviceId.uuidString).\(suffix)"))

@@ -932,7 +932,7 @@ public struct RemoteDesktopView: View {
             .accessibilityLabel(AppLocalization.string(isWindowFloating ? "Unpin Floating Window" : "Float Window on Top"))
 
             Button {
-                viewModel.saveScreenshot()
+                viewModel.saveScreenshotInBackground()
             } label: {
                 controlIcon("camera.fill")
             }
@@ -1013,7 +1013,7 @@ public struct RemoteDesktopView: View {
                 quickActionsMenu
                 Menu {
                     Button {
-                        viewModel.saveScreenshot()
+                        viewModel.saveScreenshotInBackground()
                     } label: {
                         Label(AppLocalization.string("Save Screenshot"), systemImage: "camera.fill")
                     }

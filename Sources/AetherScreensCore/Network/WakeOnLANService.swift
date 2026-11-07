@@ -50,38 +50,82 @@ public enum WakeOnLANService {
         port: UInt16 = 9,
         completion: (@Sendable (Bool) -> Void)? = nil
     ) {
-        guard let macBytes = parseMACAddress(macAddress) else {
+        guard port > 0,
+              let nwPort = NWEndpoint.Port(rawValue: port),
+              let macBytes = parseMACAddress(macAddress) else {
             completion?(false)
             return
         }
 
         let packet = createMagicPacket(macBytes: macBytes)
-
         let host = NWEndpoint.Host(broadcastHost)
-        let nwPort = NWEndpoint.Port(rawValue: port)!
 
         let udpParams = NWParameters.udp
         udpParams.allowLocalEndpointReuse = true
 
         let connection = NWConnection(host: host, port: nwPort, using: udpParams)
         let queue = DispatchQueue(label: "com.aethernative.aetherscreens.wol", qos: .utility)
+        let completionBox = WOLCompletionBox(connection: connection, completion: completion)
+
+        let timeoutItem = DispatchWorkItem {
+            completionBox.finish(false)
+        }
+        completionBox.setTimeout(timeoutItem)
 
         connection.stateUpdateHandler = { state in
             switch state {
             case .ready:
                 connection.send(content: packet, completion: .contentProcessed({ error in
-                    let success = (error == nil)
-                    connection.cancel()
-                    completion?(success)
+                    completionBox.finish(error == nil)
                 }))
-            case .failed:
-                connection.cancel()
-                completion?(false)
+            case .failed, .cancelled:
+                completionBox.finish(false)
             default:
                 break
             }
         }
 
         connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + 3.0, execute: timeoutItem)
+    }
+}
+
+private final class WOLCompletionBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completed = false
+    private var timeoutItem: DispatchWorkItem?
+    private let connection: NWConnection
+    private let completion: (@Sendable (Bool) -> Void)?
+
+    init(connection: NWConnection, completion: (@Sendable (Bool) -> Void)?) {
+        self.connection = connection
+        self.completion = completion
+    }
+
+    func setTimeout(_ item: DispatchWorkItem) {
+        lock.lock()
+        defer { lock.unlock() }
+        if completed {
+            item.cancel()
+        } else {
+            timeoutItem = item
+        }
+    }
+
+    func finish(_ success: Bool) {
+        lock.lock()
+        guard !completed else {
+            lock.unlock()
+            return
+        }
+        completed = true
+        let timeout = timeoutItem
+        timeoutItem = nil
+        lock.unlock()
+
+        timeout?.cancel()
+        connection.stateUpdateHandler = nil
+        connection.cancel()
+        completion?(success)
     }
 }

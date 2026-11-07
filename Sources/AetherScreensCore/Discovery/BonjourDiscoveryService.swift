@@ -137,11 +137,20 @@ public final class BonjourDiscoveryService: ObservableObject, @unchecked Sendabl
                 self.resolvedDevices.removeValue(forKey: key)
             }
             for (key, (name, type, domain)) in services where self.resolvers[key] == nil {
-                let resolver = BonjourServiceResolver(name: name, type: type, domain: domain) { [weak discovery = self] device in
-                    guard let discovery, discovery.activeServiceKeys.contains(key), discovery.isCurrentDiscovery(generation) else { return }
-                    discovery.resolvedDevices[key] = device
-                    discovery.publishResolvedDevices()
-                }
+                let resolver = BonjourServiceResolver(
+                    name: name,
+                    type: type,
+                    domain: domain,
+                    completion: { [weak discovery = self] device in
+                        guard let discovery, discovery.activeServiceKeys.contains(key), discovery.isCurrentDiscovery(generation) else { return }
+                        discovery.resolvedDevices[key] = device
+                        discovery.publishResolvedDevices()
+                    },
+                    onFailure: { [weak discovery = self] in
+                        guard let discovery, discovery.isCurrentDiscovery(generation) else { return }
+                        discovery.resolvers.removeValue(forKey: key)?.stop()
+                    }
+                )
                 self.resolvers[key] = resolver
                 resolver.start()
             }
@@ -166,20 +175,38 @@ public final class BonjourDiscoveryService: ObservableObject, @unchecked Sendabl
 private final class BonjourServiceResolver: NSObject, NetServiceDelegate {
     private let service: NetService
     private let completion: (DiscoveredMac) -> Void
+    private let onFailure: () -> Void
 
-    init(name: String, type: String, domain: String, completion: @escaping (DiscoveredMac) -> Void) {
+    init(
+        name: String,
+        type: String,
+        domain: String,
+        completion: @escaping (DiscoveredMac) -> Void,
+        onFailure: @escaping () -> Void = {}
+    ) {
         service = NetService(domain: domain, type: type, name: name)
         self.completion = completion
+        self.onFailure = onFailure
         super.init()
         service.delegate = self
     }
 
     func start() { service.resolve(withTimeout: 5) }
-    func stop() { service.stop() }
+    func stop() {
+        service.delegate = nil
+        service.stop()
+    }
 
     func netServiceDidResolveAddress(_ sender: NetService) {
-        guard let device = Self.resolvedDevice(name: sender.name, host: sender.hostName, port: sender.port) else { return }
+        guard let device = Self.resolvedDevice(name: sender.name, host: sender.hostName, port: sender.port) else {
+            onFailure()
+            return
+        }
         completion(device)
+    }
+
+    func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
+        onFailure()
     }
 
     static func resolvedDevice(name: String, host: String?, port: Int) -> DiscoveredMac? {

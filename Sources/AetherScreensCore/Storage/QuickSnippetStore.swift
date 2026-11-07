@@ -20,6 +20,8 @@ public struct QuickSnippet: Codable, Identifiable, Equatable, Sendable {
 @MainActor
 public final class QuickSnippetStore: ObservableObject {
     public static let shared = QuickSnippetStore()
+    public static let maxTitleLength = 120
+    public static let maxContentLength = 16_384
 
     public static let defaultSnippets: [QuickSnippet] = [
         QuickSnippet(title: "System Uptime", content: "uptime", appendReturn: true),
@@ -38,12 +40,13 @@ public final class QuickSnippetStore: ObservableObject {
     }
 
     public func add(_ snippet: QuickSnippet) {
-        let trimmedTitle = snippet.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty, !snippet.content.isEmpty else { return }
+        let trimmedTitle = String(snippet.title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxTitleLength))
+        let clampedContent = String(snippet.content.prefix(Self.maxContentLength))
+        guard !trimmedTitle.isEmpty, !clampedContent.isEmpty else { return }
         let normalized = QuickSnippet(
             id: snippet.id,
             title: trimmedTitle,
-            content: snippet.content,
+            content: clampedContent,
             appendReturn: snippet.appendReturn
         )
         snippets.append(normalized)
@@ -51,13 +54,14 @@ public final class QuickSnippetStore: ObservableObject {
     }
 
     public func update(_ snippet: QuickSnippet) {
-        let trimmedTitle = snippet.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty, !snippet.content.isEmpty,
+        let trimmedTitle = String(snippet.title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maxTitleLength))
+        let clampedContent = String(snippet.content.prefix(Self.maxContentLength))
+        guard !trimmedTitle.isEmpty, !clampedContent.isEmpty,
               let index = snippets.firstIndex(where: { $0.id == snippet.id }) else { return }
         snippets[index] = QuickSnippet(
             id: snippet.id,
             title: trimmedTitle,
-            content: snippet.content,
+            content: clampedContent,
             appendReturn: snippet.appendReturn
         )
         save()

@@ -105,6 +105,7 @@ public final class DeviceStore: @unchecked Sendable {
             bindCredential(kind: "vnc", for: device)
         }
 
+        ThumbnailStore.shared.allowThumbnails(for: device.id)
         persist()
         return passwordPersisted
     }
@@ -113,6 +114,26 @@ public final class DeviceStore: @unchecked Sendable {
     @discardableResult
     public func updateDevice(_ device: RemoteDevice, password: String? = nil) -> Bool {
         addDevice(device, password: password)
+    }
+
+    /// Batch-update or insert multiple devices in a single lock acquisition and persistence write.
+    public func batchUpdateDevices(_ updates: [RemoteDevice]) {
+        guard !updates.isEmpty else { return }
+        lock.lock()
+        defer { lock.unlock() }
+
+        for device in updates {
+            if let previous = devices.first(where: { $0.id == device.id }) {
+                captureCredentialBindings(for: [previous])
+            }
+            if let idx = devices.firstIndex(where: { $0.id == device.id }) {
+                devices[idx] = device
+            } else {
+                devices.append(device)
+            }
+            ThumbnailStore.shared.allowThumbnails(for: device.id)
+        }
+        persist()
     }
 
     /// Duplicate an existing device configuration with a new UUID and reset connection history.
@@ -238,8 +259,7 @@ public final class DeviceStore: @unchecked Sendable {
         for item in imported {
             if let idx = devices.firstIndex(where: { $0.id == item.id || ($0.host.caseInsensitiveCompare(item.host) == .orderedSame && $0.port == item.port) }) {
                 let existing = devices[idx]
-                var merged = item
-                merged = RemoteDevice(
+                let merged = RemoteDevice(
                     id: existing.id,
                     name: item.name,
                     host: item.host,
@@ -259,11 +279,18 @@ public final class DeviceStore: @unchecked Sendable {
                     desktopHeight: item.desktopHeight ?? existing.desktopHeight,
                     remoteAudioEnabled: item.remoteAudioEnabled ?? existing.remoteAudioEnabled,
                     autoFitResolution: item.autoFitResolution ?? existing.autoFitResolution,
-                    wakeBeforeConnect: item.wakeBeforeConnect ?? existing.wakeBeforeConnect
+                    wakeBeforeConnect: item.wakeBeforeConnect ?? existing.wakeBeforeConnect,
+                    sharedDirectoryPath: item.sharedDirectoryPath ?? existing.sharedDirectoryPath,
+                    sharedDirectoryReadOnly: item.sharedDirectoryReadOnly ?? existing.sharedDirectoryReadOnly,
+                    notes: item.notes ?? existing.notes,
+                    curtainOnConnect: item.curtainOnConnect ?? existing.curtainOnConnect,
+                    curtainMessage: item.curtainMessage ?? existing.curtainMessage
                 )
                 devices[idx] = merged
+                ThumbnailStore.shared.allowThumbnails(for: existing.id)
             } else {
                 devices.append(item)
+                ThumbnailStore.shared.allowThumbnails(for: item.id)
             }
         }
         persist()

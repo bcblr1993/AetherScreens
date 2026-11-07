@@ -11,6 +11,13 @@ public final class ComputerSyncService: ObservableObject {
         case synced(Date)
         case error(String)
 
+        private static let statusDateFormatter: DateFormatter = {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
+            return formatter
+        }()
+
         public var localizedDescription: String {
             switch self {
             case .disabled:
@@ -20,10 +27,7 @@ public final class ComputerSyncService: ObservableObject {
             case .syncing:
                 return AppLocalization.string("Syncing with iCloud…")
             case .synced(let date):
-                let formatter = DateFormatter()
-                formatter.dateStyle = .short
-                formatter.timeStyle = .short
-                return String(format: AppLocalization.string("Last synced: %@"), formatter.string(from: date))
+                return String(format: AppLocalization.string("Last synced: %@"), Self.statusDateFormatter.string(from: date))
             case .error(let message):
                 return String(format: AppLocalization.string("Sync failed: %@"), message)
             }

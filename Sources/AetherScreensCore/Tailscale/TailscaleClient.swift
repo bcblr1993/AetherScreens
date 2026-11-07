@@ -80,7 +80,7 @@ public final class TailscaleClient: Sendable {
             process.arguments = ["status", "--json"]
             let outPipe = Pipe()
             process.standardOutput = outPipe
-            process.standardError = Pipe()
+            process.standardError = FileHandle.nullDevice
             try process.run()
             let data = outPipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
@@ -104,9 +104,24 @@ public final class TailscaleClient: Sendable {
         self.session = session
     }
 
+    private static let tailnetAllowedCharacters: CharacterSet = {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/?#[]@")
+        return allowed
+    }()
+
+    /// Constructs the percent-encoded Tailscale REST API devices endpoint URL.
+    public func devicesEndpointURL() -> URL? {
+        guard let encodedTailnet = tailnet.addingPercentEncoding(withAllowedCharacters: Self.tailnetAllowedCharacters),
+              !encodedTailnet.isEmpty else {
+            return nil
+        }
+        return URL(string: "https://api.tailscale.com/api/v2/tailnet/\(encodedTailnet)/devices")
+    }
+
     /// Fetches all devices registered under the current Tailnet.
     public func fetchDevices() async throws -> [TailscaleDevice] {
-        guard let url = URL(string: "https://api.tailscale.com/api/v2/tailnet/\(tailnet)/devices") else {
+        guard let url = devicesEndpointURL() else {
             throw TailscaleError.invalidURL
         }
 

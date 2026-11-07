@@ -731,16 +731,18 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             }
         }
 
+        let downloadGate = RDPProgressGate()
         rdp.onFileDownloadProgress = { [weak self] fileName, offset, total in
-            guard let self else { return }
+            guard let self, downloadGate.shouldPublish(fileName: fileName, offset: offset, total: total) else { return }
             Task { @MainActor [weak self] in
                 guard let self, let attempt = self.activeDownloadAttempts[fileName] else { return }
                 self.fileTransfers.recordProgress(offset, for: attempt)
             }
         }
 
+        let uploadGate = RDPProgressGate()
         rdp.onFileUploadProgress = { [weak self] fileName, offset, total in
-            guard let self else { return }
+            guard let self, uploadGate.shouldPublish(fileName: fileName, offset: offset, total: total) else { return }
             Task { @MainActor [weak self] in
                 guard let self, let attempt = self.activeUploadAttempts[fileName] else { return }
                 self.fileTransfers.recordProgress(offset, for: attempt)
@@ -1626,6 +1628,13 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         return fullImage
     }
 
+    private static let screenshotDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
+
     /// Save a lossless PNG screenshot of the remote session to disk.
     @discardableResult
     public func saveScreenshot(toDirectory directory: URL? = nil) -> URL? {
@@ -1637,27 +1646,52 @@ public final class SessionViewModel: ObservableObject, Identifiable {
             .replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let timestamp = formatter.string(from: Date())
+        let timestamp = Self.screenshotDateFormatter.string(from: Date())
         let filename = "AetherScreens-\(safeName.isEmpty ? "Remote" : safeName)-\(timestamp).png"
         let fileURL = targetDir.appendingPathComponent(filename)
 
+        guard Self.writePNG(cgImage, to: fileURL) else { return nil }
+
+        let message = String(format: AppLocalization.string("Screenshot saved: %@"), filename)
+        showFileUploadNotice(message)
+        return fileURL
+    }
+
+    /// Capture screenshot on MainActor and encode/write PNG on a background utility task to avoid blocking UI frames on 4K/5K desktops.
+    public func saveScreenshotInBackground(toDirectory directory: URL? = nil) {
+        guard let cgImage = captureScreenshotImage() else { return }
+        let targetDir = directory
+            ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let safeName = device.name
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let timestamp = Self.screenshotDateFormatter.string(from: Date())
+        let filename = "AetherScreens-\(safeName.isEmpty ? "Remote" : safeName)-\(timestamp).png"
+        let fileURL = targetDir.appendingPathComponent(filename)
+
+        Task.detached(priority: .utility) { [weak self] in
+            guard Self.writePNG(cgImage, to: fileURL) else { return }
+            await MainActor.run {
+                guard let self else { return }
+                let message = String(format: AppLocalization.string("Screenshot saved: %@"), filename)
+                self.showFileUploadNotice(message)
+            }
+        }
+    }
+
+    nonisolated private static func writePNG(_ cgImage: CGImage, to fileURL: URL) -> Bool {
         guard let destination = CGImageDestinationCreateWithURL(
             fileURL as CFURL,
             UTType.png.identifier as CFString,
             1,
             nil
         ) else {
-            return nil
+            return false
         }
         CGImageDestinationAddImage(destination, cgImage, nil)
-        guard CGImageDestinationFinalize(destination) else { return nil }
-
-        let message = String(format: AppLocalization.string("Screenshot saved: %@"), filename)
-        showFileUploadNotice(message)
-        return fileURL
+        return CGImageDestinationFinalize(destination)
     }
 
     /// Copy a lossless screenshot of the remote session to the local clipboard.
@@ -1948,6 +1982,35 @@ public final class SessionViewModel: ObservableObject, Identifiable {
     /// Direct key event for macOS native keyboard passthrough
     public func sendNativeKey(down: Bool, keySym: UInt32) {
         sendRawKeyEvent(down: down, keySym: keySym)
+    }
+}
+
+private final class RDPProgressGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lastPublishedUptime: [String: TimeInterval] = [:]
+    private let minInterval: TimeInterval
+
+    init(minInterval: TimeInterval = 0.05) {
+        self.minInterval = minInterval
+    }
+
+    func shouldPublish(fileName: String, offset: UInt64, total: UInt64) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if offset == 0 || offset >= total {
+            if offset >= total {
+                lastPublishedUptime.removeValue(forKey: fileName)
+            } else {
+                lastPublishedUptime[fileName] = ProcessInfo.processInfo.systemUptime
+            }
+            return true
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        if let last = lastPublishedUptime[fileName], now - last < minInterval {
+            return false
+        }
+        lastPublishedUptime[fileName] = now
+        return true
     }
 }
 
