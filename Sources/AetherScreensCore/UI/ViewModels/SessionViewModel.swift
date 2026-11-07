@@ -1500,6 +1500,26 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         releaseActiveOnceModifiers()
     }
 
+    /// Execute a predefined Windows / Linux shortcut
+    public func executeWindowsShortcut(_ shortcut: MacKeyMap.WindowsShortcut) {
+        guard canSendRemoteCommands else { return }
+        let sequence = shortcut.keySequence
+        for item in sequence {
+            sendRawKeyEvent(down: item.down, keySym: item.key)
+        }
+        releaseActiveOnceModifiers()
+    }
+
+    /// Send a reusable quick snippet to the remote session, optionally appending Return.
+    public func executeQuickSnippet(_ snippet: QuickSnippet) {
+        guard canSendRemoteCommands, !snippet.content.isEmpty else { return }
+        sendTextString(snippet.content)
+        if snippet.appendReturn {
+            sendRawKeyEvent(down: true, keySym: MacKeyMap.return)
+            sendRawKeyEvent(down: false, keySym: MacKeyMap.return)
+        }
+    }
+
     /// Resolved password for the active session (in-memory or saved in Keychain).
     public var availableSessionPassword: String? {
         if isRDP, let pwd = rdpClient?.password, !pwd.isEmpty { return pwd }

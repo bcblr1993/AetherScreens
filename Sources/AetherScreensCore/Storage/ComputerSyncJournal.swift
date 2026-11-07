@@ -21,6 +21,7 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
     public var remoteAudioEnabled: Bool?
     public var autoFitResolution: Bool?
     public var wakeBeforeConnect: Bool?
+    public var sharedDirectoryPath: String?
 
     public init(device: RemoteDevice) {
         id = device.id; name = device.name; host = device.host; port = device.port
@@ -34,6 +35,7 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
         remoteAudioEnabled = device.remoteAudioEnabled
         autoFitResolution = device.autoFitResolution
         wakeBeforeConnect = device.wakeBeforeConnect
+        sharedDirectoryPath = device.sharedDirectoryPath
     }
 
     fileprivate var isValid: Bool {

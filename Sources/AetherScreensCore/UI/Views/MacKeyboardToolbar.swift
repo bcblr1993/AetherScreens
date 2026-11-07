@@ -152,9 +152,37 @@ public struct MacKeyboardToolbar: View {
         switch action {
         case .actions:
             Menu {
-                ForEach(MacKeyMap.MacShortcut.allCases) { shortcut in
-                    Button { viewModel.executeShortcut(shortcut) } label: {
-                        Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
+                if viewModel.device.deviceType == .windows || viewModel.isRDP {
+                    Button {
+                        viewModel.triggerSystemAction(.controlAltDelete)
+                    } label: {
+                        Label(AppLocalization.string("Send Ctrl-Alt-Delete"), systemImage: "keyboard")
+                    }
+                    Divider()
+                    ForEach(MacKeyMap.WindowsShortcut.allCases) { shortcut in
+                        Button { viewModel.executeWindowsShortcut(shortcut) } label: {
+                            Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
+                        }
+                    }
+                } else {
+                    ForEach(MacKeyMap.MacShortcut.allCases) { shortcut in
+                        Button { viewModel.executeShortcut(shortcut) } label: {
+                            Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
+                        }
+                    }
+                }
+                if !QuickSnippetStore.shared.snippets.isEmpty {
+                    Divider()
+                    Menu {
+                        ForEach(QuickSnippetStore.shared.snippets) { snippet in
+                            Button {
+                                viewModel.executeQuickSnippet(snippet)
+                            } label: {
+                                Label(snippet.title, systemImage: snippet.appendReturn ? "terminal.fill" : "text.insert")
+                            }
+                        }
+                    } label: {
+                        Label(AppLocalization.string("Quick Snippets"), systemImage: "text.badge.plus")
                     }
                 }
             } label: {

@@ -169,4 +169,51 @@ public enum MacKeyMap {
             }
         }
     }
+
+    /// Predefined Windows / Linux Remote Desktop Shortcuts
+    public enum WindowsShortcut: String, CaseIterable, Identifiable, Sendable {
+        case taskManager = "Task Manager (Ctrl+Shift+Esc)"
+        case lockWorkstation = "Lock PC (Win+L)"
+        case runDialog = "Run Command (Win+R)"
+        case taskView = "Task View (Win+Tab)"
+        case showDesktop = "Show Desktop (Win+D)"
+        case fileExplorer = "File Explorer (Win+E)"
+
+        public var id: String { rawValue }
+
+        public var iconName: String {
+            switch self {
+            case .taskManager: return "gauge.with.dots.needle.67percent"
+            case .lockWorkstation: return "lock.fill"
+            case .runDialog: return "terminal"
+            case .taskView: return "rectangle.3.group"
+            case .showDesktop: return "menubar.rectangle"
+            case .fileExplorer: return "folder"
+            }
+        }
+
+        public var keySequence: [(key: UInt32, down: Bool)] {
+            switch self {
+            case .taskManager:
+                return [
+                    (controlLeft, true), (shiftLeft, true), (escape, true),
+                    (escape, false), (shiftLeft, false), (controlLeft, false)
+                ]
+            case .lockWorkstation:
+                let key = UInt32(Character("l").asciiValue!)
+                return [(commandLeft, true), (key, true), (key, false), (commandLeft, false)]
+            case .runDialog:
+                let key = UInt32(Character("r").asciiValue!)
+                return [(commandLeft, true), (key, true), (key, false), (commandLeft, false)]
+            case .taskView:
+                return [(commandLeft, true), (tab, true), (tab, false), (commandLeft, false)]
+            case .showDesktop:
+                let key = UInt32(Character("d").asciiValue!)
+                return [(commandLeft, true), (key, true), (key, false), (commandLeft, false)]
+            case .fileExplorer:
+                let key = UInt32(Character("e").asciiValue!)
+                return [(commandLeft, true), (key, true), (key, false), (commandLeft, false)]
+            }
+        }
+    }
 }

@@ -21,6 +21,7 @@ public struct AddDeviceSheet: View {
     @State private var desktopResolution = "1920x1080"
     @State private var remoteAudioEnabled = true
     @State private var autoFitResolution = false
+    @State private var sharedDirectoryPath = ""
     @State private var saveComputer = false
     @State private var sshDraft = SSHConnectionDraft()
     @State private var saveError: String?
@@ -49,6 +50,7 @@ public struct AddDeviceSheet: View {
         let dh = remoteProtocol == .rdp ? (dims.count == 2 ? dims[1] : 1080) : nil
         let audio = remoteProtocol == .rdp ? remoteAudioEnabled : nil
         let autoFit = remoteProtocol == .rdp ? autoFitResolution : nil
+        let sharedDir = remoteProtocol == .rdp ? sharedDirectoryPath : nil
         return ConnectionRequest(host: host, port: portString, name: includesSavedDetails ? name : "",
                           username: username, password: password, type: deviceType,
                           remoteProtocol: remoteProtocol,
@@ -57,7 +59,7 @@ public struct AddDeviceSheet: View {
                           isFavorite: isFavorite, tags: tags,
                           desktopWidth: dw, desktopHeight: dh,
                           remoteAudioEnabled: audio, autoFitResolution: autoFit,
-                          wakeBeforeConnect: wakeBeforeConnect)
+                          wakeBeforeConnect: wakeBeforeConnect, sharedDirectoryPath: sharedDir)
     }
 
     public var body: some View {
@@ -132,6 +134,8 @@ public struct AddDeviceSheet: View {
                         }
                         Toggle(AppLocalization.string("Auto-Fit Resolution"), isOn: $autoFitResolution)
                         Toggle(AppLocalization.string("Remote Audio Playback"), isOn: $remoteAudioEnabled)
+                        TextField(AppLocalization.string("Shared Folder Path (Optional)"), text: $sharedDirectoryPath)
+                            .autocorrectionDisabled()
                     }
                 }
 

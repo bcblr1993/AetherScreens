@@ -57,6 +57,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
     public var remoteAudioEnabled: Bool?
     public var autoFitResolution: Bool?
     public var wakeBeforeConnect: Bool?
+    public var sharedDirectoryPath: String?
 
     public init(
         id: UUID = UUID(),
@@ -78,7 +79,8 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         desktopHeight: Int? = nil,
         remoteAudioEnabled: Bool? = nil,
         autoFitResolution: Bool? = nil,
-        wakeBeforeConnect: Bool? = nil
+        wakeBeforeConnect: Bool? = nil,
+        sharedDirectoryPath: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -100,10 +102,11 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.remoteAudioEnabled = remoteAudioEnabled
         self.autoFitResolution = autoFitResolution
         self.wakeBeforeConnect = wakeBeforeConnect
+        self.sharedDirectoryPath = sharedDirectoryPath
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution, wakeBeforeConnect
+        case id, name, host, port, deviceType, remoteProtocol, authMethod, username, isOnline, lastConnected, isTailscaleNode, macAddress, ssh, isFavorite, tags, desktopWidth, desktopHeight, remoteAudioEnabled, autoFitResolution, wakeBeforeConnect, sharedDirectoryPath
     }
 
     public init(from decoder: Decoder) throws {
@@ -130,6 +133,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         self.remoteAudioEnabled = try container.decodeIfPresent(Bool.self, forKey: .remoteAudioEnabled)
         self.autoFitResolution = try container.decodeIfPresent(Bool.self, forKey: .autoFitResolution)
         self.wakeBeforeConnect = try container.decodeIfPresent(Bool.self, forKey: .wakeBeforeConnect)
+        self.sharedDirectoryPath = try container.decodeIfPresent(String.self, forKey: .sharedDirectoryPath)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -154,6 +158,7 @@ public struct RemoteDevice: Codable, Identifiable, Equatable, Sendable {
         try container.encodeIfPresent(remoteAudioEnabled, forKey: .remoteAudioEnabled)
         try container.encodeIfPresent(autoFitResolution, forKey: .autoFitResolution)
         try container.encodeIfPresent(wakeBeforeConnect, forKey: .wakeBeforeConnect)
+        try container.encodeIfPresent(sharedDirectoryPath, forKey: .sharedDirectoryPath)
     }
 
     /// Creates a RemoteDevice from a Tailscale node

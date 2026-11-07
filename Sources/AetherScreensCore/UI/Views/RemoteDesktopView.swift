@@ -26,6 +26,7 @@ public struct RemoteDesktopView: View {
     @State private var droppedUploadURL: URL?
     @State private var isUploadDropTargeted = false
     @State private var showingFileDownload = false
+    @State private var isWindowFloating = false
     @State private var topBarAutoHide = SessionTopBarAutoHide()
     private let managesSessionLifecycle: Bool
     private let onDisconnect: (() -> Void)?
@@ -892,6 +893,13 @@ public struct RemoteDesktopView: View {
                         Label(AppLocalization.string("Switch to Next Display"), systemImage: "arrow.left.arrow.right.square")
                     }
                 }
+                Divider()
+                Button {
+                    let targetSize = viewModel.activeCropRect?.size ?? viewModel.remoteDesktopSize
+                    SessionWindowManager.shared.fitWindowToRemoteAspectRatio(for: viewModel, remoteSize: targetSize)
+                } label: {
+                    Label(AppLocalization.string("Fit Window to Aspect Ratio"), systemImage: "aspectratio")
+                }
             } label: {
                 controlIcon(displayManager.selectedDisplayId == 0 ? "display.2" : "display")
             }
@@ -901,6 +909,14 @@ public struct RemoteDesktopView: View {
             .fixedSize()
             .help(AppLocalization.string("Switch Remote Display"))
             .accessibilityLabel(AppLocalization.string("Switch Remote Display"))
+
+            Button {
+                isWindowFloating = SessionWindowManager.shared.toggleFloating(for: viewModel)
+            } label: {
+                controlIcon(isWindowFloating ? "pin.fill" : "pin")
+            }
+            .help(AppLocalization.string(isWindowFloating ? "Unpin Floating Window" : "Float Window on Top"))
+            .accessibilityLabel(AppLocalization.string(isWindowFloating ? "Unpin Floating Window" : "Float Window on Top"))
 
             Button {
                 viewModel.saveScreenshot()
@@ -1205,10 +1221,25 @@ public struct RemoteDesktopView: View {
                 } label: {
                     Label(AppLocalization.string("Send Ctrl-Alt-Delete"), systemImage: "keyboard")
                 }
-                Button {
-                    viewModel.triggerSystemAction(.lockScreen)
-                } label: {
-                    Label(AppLocalization.string("Lock Screen"), systemImage: "lock")
+                Divider()
+                ForEach(MacKeyMap.WindowsShortcut.allCases) { shortcut in
+                    Button {
+                        viewModel.executeWindowsShortcut(shortcut)
+                    } label: {
+                        Label(AppLocalization.string(shortcut.rawValue), systemImage: shortcut.iconName)
+                    }
+                }
+            }
+            if !QuickSnippetStore.shared.snippets.isEmpty {
+                Divider()
+                Menu(AppLocalization.string("Quick Snippets")) {
+                    ForEach(QuickSnippetStore.shared.snippets) { snippet in
+                        Button {
+                            viewModel.executeQuickSnippet(snippet)
+                        } label: {
+                            Label(snippet.title, systemImage: snippet.appendReturn ? "terminal.fill" : "text.insert")
+                        }
+                    }
                 }
             }
         } label: {

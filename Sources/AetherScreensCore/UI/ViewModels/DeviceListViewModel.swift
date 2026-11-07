@@ -93,6 +93,20 @@ public final class DeviceListViewModel: ObservableObject {
         return unique.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
+    public var tagCounts: [String: Int] {
+        var counts: [String: Int] = [:]
+        for dev in devices {
+            var seenOnDevice = Set<String>()
+            for tag in dev.tags {
+                let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty, seenOnDevice.insert(trimmed).inserted {
+                    counts[trimmed, default: 0] += 1
+                }
+            }
+        }
+        return counts
+    }
+
     public var filteredDevices: [RemoteDevice] {
         let query = normalizedSearchQuery
         let activeTag = selectedTag?.trimmingCharacters(in: .whitespacesAndNewlines)

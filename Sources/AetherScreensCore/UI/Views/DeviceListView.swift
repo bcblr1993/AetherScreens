@@ -166,11 +166,37 @@ public struct DeviceListView: View {
 
     #if os(macOS)
     private var sidebarContent: some View {
-        List(DeviceCategory.allCases, selection: $selectedCategory) { category in
-            // Native sidebar badges keep every count in one style.
-            Label(AppLocalization.string(category.rawValue), systemImage: category.icon)
-                .badge(sidebarCount(for: category))
-                .tag(category)
+        List(selection: $selectedCategory) {
+            Section(AppLocalization.string("Library")) {
+                ForEach(DeviceCategory.allCases) { category in
+                    // Native sidebar badges keep every count in one style.
+                    Label(AppLocalization.string(category.rawValue), systemImage: category.icon)
+                        .badge(sidebarCount(for: category))
+                        .tag(category)
+                }
+            }
+            if !viewModel.allTags.isEmpty {
+                Section(AppLocalization.string("Tags")) {
+                    ForEach(viewModel.allTags, id: \.self) { tag in
+                        let isSelected = viewModel.selectedTag?.caseInsensitiveCompare(tag) == .orderedSame
+                        Button {
+                            withAnimation(libraryTransitionAnimation) {
+                                viewModel.selectedTag = isSelected ? nil : tag
+                            }
+                        } label: {
+                            HStack {
+                                Label(tag, systemImage: isSelected ? "tag.fill" : "tag")
+                                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                                Spacer()
+                                Text("\(viewModel.tagCounts[tag] ?? 0)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
         .toolbar {
@@ -627,6 +653,19 @@ public struct DeviceListView: View {
             viewModel.statusNotice = "Connection link copied"
         } label: {
             Label(AppLocalization.string("Copy Connection Link"), systemImage: "link")
+        }
+
+        Button {
+            let shareable = ConnectionLink.connectURL(for: device).absoluteString
+            #if canImport(UIKit)
+            UIPasteboard.general.string = shareable
+            #elseif canImport(AppKit)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(shareable, forType: .string)
+            #endif
+            viewModel.statusNotice = "Shareable link copied"
+        } label: {
+            Label(AppLocalization.string("Copy Shareable Connect Link"), systemImage: "square.and.arrow.up")
         }
 
         if let mac = device.macAddress, !mac.isEmpty {

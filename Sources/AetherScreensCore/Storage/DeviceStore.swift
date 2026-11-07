@@ -429,6 +429,7 @@ public final class DeviceStore: @unchecked Sendable {
             let remoteAudioEnabled = metadata.remoteAudioEnabled ?? local?.remoteAudioEnabled
             let autoFitResolution = metadata.autoFitResolution ?? local?.autoFitResolution
             let wakeBeforeConnect = metadata.wakeBeforeConnect ?? local?.wakeBeforeConnect
+            let sharedDirectoryPath = metadata.sharedDirectoryPath ?? local?.sharedDirectoryPath
             let device = RemoteDevice(
                 id: metadata.id, name: metadata.name, host: metadata.host, port: metadata.port,
                 deviceType: metadata.deviceType,
@@ -444,7 +445,8 @@ public final class DeviceStore: @unchecked Sendable {
                 desktopHeight: desktopHeight,
                 remoteAudioEnabled: remoteAudioEnabled,
                 autoFitResolution: autoFitResolution,
-                wakeBeforeConnect: wakeBeforeConnect)
+                wakeBeforeConnect: wakeBeforeConnect,
+                sharedDirectoryPath: sharedDirectoryPath)
             if let index { candidate[index] = device }
             else { candidate.append(device) }
         }

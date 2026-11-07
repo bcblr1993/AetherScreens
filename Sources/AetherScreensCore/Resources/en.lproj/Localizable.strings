@@ -762,4 +762,19 @@
 "AetherScreens is Locked" = "AetherScreens is Locked";
 "No saved computers yet" = "No saved computers yet";
 "Show AetherScreens Library" = "Show AetherScreens Library";
+"Library" = "Library";
+"Tags" = "Tags";
+"Copy Shareable Connect Link" = "Copy Shareable Connect Link";
+"Shareable link copied" = "Shareable link copied";
+"Fit Window to Aspect Ratio" = "Fit Window to Aspect Ratio";
+"Float Window on Top" = "Float Window on Top";
+"Unpin Floating Window" = "Unpin Floating Window";
+"Task Manager (Ctrl+Shift+Esc)" = "Task Manager (Ctrl+Shift+Esc)";
+"Lock PC (Win+L)" = "Lock PC (Win+L)";
+"Run Command (Win+R)" = "Run Command (Win+R)";
+"Task View (Win+Tab)" = "Task View (Win+Tab)";
+"Show Desktop (Win+D)" = "Show Desktop (Win+D)";
+"File Explorer (Win+E)" = "File Explorer (Win+E)";
+"Quick Snippets" = "Quick Snippets";
+"Shared Folder Path (Optional)" = "Shared Folder Path (Optional)";
 

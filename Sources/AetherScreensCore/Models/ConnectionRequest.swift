@@ -17,7 +17,7 @@ public struct ConnectionRequest {
                   isFavorite: Bool = false, tags: [String] = [],
                   desktopWidth: Int? = nil, desktopHeight: Int? = nil,
                   remoteAudioEnabled: Bool? = nil, autoFitResolution: Bool? = nil,
-                  wakeBeforeConnect: Bool? = nil) {
+                  wakeBeforeConnect: Bool? = nil, sharedDirectoryPath: String? = nil) {
         var address = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if address.hasPrefix("[") && address.hasSuffix("]") {
             address = String(address.dropFirst().dropLast())
@@ -29,6 +29,7 @@ public struct ConnectionRequest {
         let account = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let mac = macAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sharedDir = sharedDirectoryPath?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.password = password.isEmpty ? nil : password
         self.sshPassword = ssh == nil || sshPassword.isEmpty ? nil : sshPassword
         if case .privateKey = ssh?.authentication { self.sshPrivateKey = sshPrivateKey }
@@ -49,6 +50,7 @@ public struct ConnectionRequest {
                               isFavorite: isFavorite, tags: tags,
                               desktopWidth: desktopWidth, desktopHeight: desktopHeight,
                               remoteAudioEnabled: remoteAudioEnabled, autoFitResolution: autoFitResolution,
-                              wakeBeforeConnect: mac.isEmpty ? nil : wakeBeforeConnect)
+                              wakeBeforeConnect: mac.isEmpty ? nil : wakeBeforeConnect,
+                              sharedDirectoryPath: (sharedDir?.isEmpty == false) ? sharedDir : nil)
     }
 }

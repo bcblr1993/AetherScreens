@@ -462,6 +462,25 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
         public let ioStatus: UInt32
     }
 
+    public struct QueryInformationResponse: Equatable, Sendable {
+        public let completionID: UInt32
+        public let ioStatus: UInt32
+        public let isDirectory: Bool
+        public let fileSize: UInt64
+    }
+
+    public struct DirectoryEntry: Equatable, Sendable {
+        public let name: String
+        public let isDirectory: Bool
+        public let fileSize: UInt64
+    }
+
+    public struct QueryDirectoryResponse: Equatable, Sendable {
+        public let completionID: UInt32
+        public let ioStatus: UInt32
+        public let entries: [DirectoryEntry]
+    }
+
     public let deviceID: UInt32
     public let rootDirectory: URL
     private let lock = NSLock()
@@ -535,6 +554,73 @@ public final class RDPSharedDirectoryDrive: @unchecked Sendable {
             return CloseResponse(completionID: completionID, ioStatus: 0xC000_0008)
         }
         return CloseResponse(completionID: completionID, ioStatus: 0x0000_0000)
+    }
+
+    public func handleQueryInformation(completionID: UInt32, fileID: UInt32) -> QueryInformationResponse {
+        lock.lock()
+        let url = openFiles[fileID]
+        lock.unlock()
+        guard let url else {
+            return QueryInformationResponse(completionID: completionID, ioStatus: 0xC000_0008, isDirectory: false, fileSize: 0)
+        }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else {
+            return QueryInformationResponse(completionID: completionID, ioStatus: 0xC000_000F, isDirectory: false, fileSize: 0)
+        }
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let size = (attrs?[.size] as? NSNumber)?.uint64Value ?? 0
+        return QueryInformationResponse(
+            completionID: completionID,
+            ioStatus: 0x0000_0000,
+            isDirectory: isDir.boolValue,
+            fileSize: isDir.boolValue ? 0 : size
+        )
+    }
+
+    public func handleQueryDirectory(completionID: UInt32, fileID: UInt32, pattern: String = "*") -> QueryDirectoryResponse {
+        lock.lock()
+        let dirURL = openFiles[fileID]
+        lock.unlock()
+        guard let dirURL else {
+            return QueryDirectoryResponse(completionID: completionID, ioStatus: 0xC000_0008, entries: [])
+        }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDir), isDir.boolValue else {
+            return QueryDirectoryResponse(completionID: completionID, ioStatus: 0xC000_0103, entries: [])
+        }
+        guard let itemURLs = try? FileManager.default.contentsOfDirectory(
+            at: dirURL,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return QueryDirectoryResponse(completionID: completionID, ioStatus: 0xC000_0001, entries: [])
+        }
+
+        let normalizedPattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        var results: [DirectoryEntry] = []
+        for itemURL in itemURLs {
+            let name = itemURL.lastPathComponent
+            if !Self.matchesWildcard(name: name, pattern: normalizedPattern) {
+                continue
+            }
+            let values = try? itemURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+            let itemIsDir = values?.isDirectory ?? false
+            let itemSize = UInt64(max(0, values?.fileSize ?? 0))
+            results.append(DirectoryEntry(name: name, isDirectory: itemIsDir, fileSize: itemIsDir ? 0 : itemSize))
+        }
+        results.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return QueryDirectoryResponse(completionID: completionID, ioStatus: 0x0000_0000, entries: results)
+    }
+
+    private static func matchesWildcard(name: String, pattern: String) -> Bool {
+        if pattern.isEmpty || pattern == "*" || pattern == "*.*" {
+            return true
+        }
+        if pattern.hasPrefix("*.") {
+            let suffix = String(pattern.dropFirst(1)).lowercased()
+            return name.lowercased().hasSuffix(suffix)
+        }
+        return name.caseInsensitiveCompare(pattern) == .orderedSame
     }
 }
 

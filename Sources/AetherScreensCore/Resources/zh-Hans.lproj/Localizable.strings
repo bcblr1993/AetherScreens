@@ -762,4 +762,19 @@
 "AetherScreens is Locked" = "AetherScreens 已锁定";
 "No saved computers yet" = "暂无已保存的电脑";
 "Show AetherScreens Library" = "打开 AetherScreens 主窗口";
+"Library" = "设备库";
+"Tags" = "标签分组";
+"Copy Shareable Connect Link" = "复制可分享连接链接";
+"Shareable link copied" = "已复制可分享连接链接";
+"Fit Window to Aspect Ratio" = "窗口贴合远端画面比例";
+"Float Window on Top" = "置顶悬浮此窗口";
+"Unpin Floating Window" = "取消窗口置顶悬浮";
+"Task Manager (Ctrl+Shift+Esc)" = "任务管理器 (Ctrl+Shift+Esc)";
+"Lock PC (Win+L)" = "锁定电脑 (Win+L)";
+"Run Command (Win+R)" = "运行命令 (Win+R)";
+"Task View (Win+Tab)" = "任务视图 (Win+Tab)";
+"Show Desktop (Win+D)" = "显示桌面 (Win+D)";
+"File Explorer (Win+E)" = "文件资源管理器 (Win+E)";
+"Quick Snippets" = "快捷命令片段";
+"Shared Folder Path (Optional)" = "共享文件夹路径（可选）";
 
