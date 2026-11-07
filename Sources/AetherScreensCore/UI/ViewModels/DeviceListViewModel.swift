@@ -15,6 +15,16 @@ public final class DeviceListViewModel: ObservableObject {
         public var id: String { rawValue }
     }
 
+    public enum SmartFilter: String, CaseIterable, Identifiable, Sendable {
+        case all = "All Computers"
+        case onlineOnly = "Online Only"
+        case sshTunneled = "SSH Tunneled"
+        case tailscale = "Tailscale Nodes"
+        case recentlyConnected = "Connected in Last 7 Days"
+
+        public var id: String { rawValue }
+    }
+
     public static let sortOrderKey = "com.aethernative.aetherscreens.library.sortOrder"
 
     @Published public var devices: [RemoteDevice] = []
@@ -22,6 +32,7 @@ public final class DeviceListViewModel: ObservableObject {
     @Published public var isSearchingBonjour: Bool = false
     @Published public var searchText: String = ""
     @Published public var selectedTag: String? = nil
+    @Published public var smartFilter: SmartFilter = .all
     @Published public var sortOrder: SortOrder = .custom {
         didSet {
             userDefaults.set(sortOrder.rawValue, forKey: Self.sortOrderKey)
@@ -136,7 +147,20 @@ public final class DeviceListViewModel: ObservableObject {
     public var filteredDevices: [RemoteDevice] {
         let query = normalizedSearchQuery
         let activeTag = selectedTag?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
         let matching = devices.filter { dev in
+            switch smartFilter {
+            case .all:
+                break
+            case .onlineOnly:
+                if !dev.isOnline { return false }
+            case .sshTunneled:
+                if dev.ssh == nil { return false }
+            case .tailscale:
+                if !dev.isTailscaleNode { return false }
+            case .recentlyConnected:
+                guard let last = dev.lastConnected, now.timeIntervalSince(last) <= 7 * 86_400 else { return false }
+            }
             if let activeTag, !activeTag.isEmpty {
                 let matchesTag = dev.tags.contains { $0.caseInsensitiveCompare(activeTag) == .orderedSame }
                 if !matchesTag { return false }
@@ -532,6 +556,74 @@ public final class DeviceListViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Assign a tag to multiple saved devices at once.
+    @discardableResult
+    public func assignTag(_ tag: String, toDeviceIDs ids: Set<UUID>) -> Int {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !ids.isEmpty else { return 0 }
+        var updatedCount = 0
+        for dev in devices where ids.contains(dev.id) {
+            let alreadyHas = dev.tags.contains { $0.caseInsensitiveCompare(trimmed) == .orderedSame }
+            guard !alreadyHas else { continue }
+            var modified = dev
+            modified.tags.append(trimmed)
+            _ = store.updateDevice(modified)
+            updatedCount += 1
+        }
+        if updatedCount > 0 {
+            reload()
+            Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+        }
+        return updatedCount
+    }
+
+    /// Remove a tag from multiple saved devices at once.
+    @discardableResult
+    public func removeTag(_ tag: String, fromDeviceIDs ids: Set<UUID>) -> Int {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !ids.isEmpty else { return 0 }
+        var updatedCount = 0
+        for dev in devices where ids.contains(dev.id) {
+            let filteredTags = dev.tags.filter { $0.caseInsensitiveCompare(trimmed) != .orderedSame }
+            guard filteredTags.count != dev.tags.count else { continue }
+            var modified = dev
+            modified.tags = filteredTags
+            _ = store.updateDevice(modified)
+            updatedCount += 1
+        }
+        if updatedCount > 0 {
+            reload()
+            Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+        }
+        return updatedCount
+    }
+
+    /// Returns all saved devices (optionally filtered by tag) that have a configured Wake-on-LAN MAC address.
+    public func wakeableDevices(matchingTag tag: String? = nil) -> [RemoteDevice] {
+        let trimmedTag = tag?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return devices.filter { dev in
+            guard let mac = dev.macAddress?.trimmingCharacters(in: .whitespacesAndNewlines), !mac.isEmpty else { return false }
+            if let trimmedTag, !trimmedTag.isEmpty {
+                return dev.tags.contains { $0.caseInsensitiveCompare(trimmedTag) == .orderedSame }
+            }
+            return true
+        }
+    }
+
+    /// Sends Wake-on-LAN magic packets to all wakeable devices (optionally restricted to a specific tag).
+    @discardableResult
+    public func wakeAllDevices(matchingTag tag: String? = nil) -> Int {
+        let targets = wakeableDevices(matchingTag: tag)
+        guard !targets.isEmpty else { return 0 }
+        for dev in targets {
+            if let mac = dev.macAddress {
+                WakeOnLANService.wakeDevice(macAddress: mac)
+            }
+        }
+        statusNotice = AppLocalization.format("Sent Wake-on-LAN to %d computer(s)", targets.count)
+        return targets.count
     }
 
     /// Sync online devices from Tailscale API (or zero-config local Tailscale CLI on macOS)

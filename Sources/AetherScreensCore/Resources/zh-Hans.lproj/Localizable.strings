@@ -818,6 +818,14 @@
 "Brightness Down" = "屏幕亮度减小";
 "Enable Curtain Mode on Connect" = "连接时自动启用隐私幕布";
 "Curtain Message (Optional)" = "自定义隐私幕布提示语（可选）";
+"Smart Filter" = "智能筛选";
+"All Computers" = "全部电脑";
+"Online Only" = "仅显示在线电脑";
+"SSH Tunneled" = "已启用 SSH 隧道";
+"Tailscale Nodes" = "Tailscale 节点";
+"Connected in Last 7 Days" = "最近 7 天连接过";
+"Wake All Wakeable Computers" = "一键唤醒所有支持 WOL 的电脑";
+"Sent Wake-on-LAN to %d computer(s)" = "已向 %d 台电脑发送远程唤醒包";
 
 
 

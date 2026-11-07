@@ -564,6 +564,33 @@ public struct DeviceListView: View {
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                 Menu {
+                    Picker(AppLocalization.string("Smart Filter"), selection: $viewModel.smartFilter) {
+                        ForEach(DeviceListViewModel.SmartFilter.allCases) { filter in
+                            Text(AppLocalization.string(filter.rawValue)).tag(filter)
+                        }
+                    }
+                    if !viewModel.wakeableDevices().isEmpty {
+                        Divider()
+                        Button {
+                            _ = viewModel.wakeAllDevices()
+                        } label: {
+                            Label(AppLocalization.string("Wake All Wakeable Computers"), systemImage: "power")
+                        }
+                    }
+                } label: {
+                    Image(systemName: viewModel.smartFilter == .all ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(viewModel.smartFilter == .all ? Color.secondary : Color.accentColor)
+                        .frame(width: 30, height: 30)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(AppLocalization.string("Smart Filter"))
+                .accessibilityLabel(AppLocalization.string("Smart Filter"))
+
+                Menu {
                     Picker(AppLocalization.string("Sort Order"), selection: $viewModel.sortOrder) {
                         ForEach(DeviceListViewModel.SortOrder.allCases) { order in
                             Text(AppLocalization.string(order.rawValue)).tag(order)
@@ -651,6 +678,15 @@ public struct DeviceListView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        if !viewModel.wakeableDevices(matchingTag: tag).isEmpty {
+                            Button {
+                                _ = viewModel.wakeAllDevices(matchingTag: tag)
+                            } label: {
+                                Label(AppLocalization.string("Wake All Wakeable Computers"), systemImage: "power")
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 20)

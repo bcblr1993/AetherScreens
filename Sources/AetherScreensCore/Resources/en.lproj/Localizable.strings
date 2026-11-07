@@ -818,6 +818,14 @@
 "Brightness Down" = "Brightness Down";
 "Enable Curtain Mode on Connect" = "Enable Curtain Mode on Connect";
 "Curtain Message (Optional)" = "Curtain Message (Optional)";
+"Smart Filter" = "Smart Filter";
+"All Computers" = "All Computers";
+"Online Only" = "Online Only";
+"SSH Tunneled" = "SSH Tunneled";
+"Tailscale Nodes" = "Tailscale Nodes";
+"Connected in Last 7 Days" = "Connected in Last 7 Days";
+"Wake All Wakeable Computers" = "Wake All Wakeable Computers";
+"Sent Wake-on-LAN to %d computer(s)" = "Sent Wake-on-LAN to %d computer(s)";
 
 
 
