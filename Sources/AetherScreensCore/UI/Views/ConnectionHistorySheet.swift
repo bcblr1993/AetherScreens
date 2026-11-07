@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Sheet displaying recent connection sessions, durations, protocols, and outcomes.
 public struct ConnectionHistorySheet: View {
+    @ObservedObject private var languageSettings = AppLanguageSettings.shared
     @ObservedObject private var store: ConnectionHistoryStore
     @Environment(\.dismiss) private var dismiss
     public let filterDevice: RemoteDevice?

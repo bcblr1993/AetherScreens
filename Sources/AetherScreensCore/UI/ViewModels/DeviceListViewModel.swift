@@ -127,6 +127,16 @@ public final class DeviceListViewModel: ObservableObject {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public var hasActiveFilters: Bool {
+        !normalizedSearchQuery.isEmpty || selectedTag != nil || smartFilter != .all
+    }
+
+    public func resetFilters() {
+        searchText = ""
+        selectedTag = nil
+        smartFilter = .all
+    }
+
     public var filteredNearbyMacs: [DiscoveredMac] {
         let query = normalizedSearchQuery
         guard !query.isEmpty else { return discoveredNearbyMacs }
@@ -578,9 +588,9 @@ public final class DeviceListViewModel: ObservableObject {
         WakeOnLANService.wakeDevice(macAddress: mac) { [weak self] success in
             Task { @MainActor in
                 if success {
-                    self?.statusNotice = "Wake-on-LAN Magic Packet sent to \(device.name)"
+                    self?.statusNotice = AppLocalization.format("Wake-on-LAN Magic Packet sent to %@", device.name)
                 } else {
-                    self?.errorMessage = "Failed to send Wake-on-LAN packet. Check MAC format."
+                    self?.errorMessage = AppLocalization.string("Failed to send Wake-on-LAN packet. Check MAC format.")
                 }
             }
         }

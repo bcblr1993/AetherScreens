@@ -79,6 +79,7 @@ public struct QuickSnippetsSheet: View {
                                     .buttonStyle(.bordered)
                                     .controlSize(.small)
                                     .help(AppLocalization.string("Send"))
+                                    .accessibilityLabel(AppLocalization.string("Send"))
                                 }
                                 Button {
                                     editingSnippet = snippet
@@ -90,6 +91,7 @@ public struct QuickSnippetsSheet: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .help(AppLocalization.string("Edit"))
+                                .accessibilityLabel(AppLocalization.string("Edit"))
 
                                 Button(role: .destructive) {
                                     if editingSnippet?.id == snippet.id { clearForm() }
@@ -99,6 +101,7 @@ public struct QuickSnippetsSheet: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .help(AppLocalization.string("Delete"))
+                                .accessibilityLabel(AppLocalization.string("Delete"))
                             }
                             .padding(.vertical, 2)
                         }

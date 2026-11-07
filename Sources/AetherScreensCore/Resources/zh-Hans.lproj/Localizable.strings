@@ -829,6 +829,20 @@
 "Category" = "日志模块";
 "All Categories" = "全部模块";
 "Clear filter" = "清除筛选";
+"Edit Quick Snippet" = "编辑快捷命令片段";
+"Snippet Title (e.g. Restart Nginx)" = "片段标题（例如：重启 Nginx）";
+"Command or Text Content" = "命令或文本内容";
+"Append Return (⏎) After Sending" = "发送后自动附加回车键 (⏎)";
+"No saved snippets yet" = "暂无已保存的快捷片段";
+"Reset Defaults" = "恢复默认";
+"Could not read ~/.ssh/config" = "无法读取 ~/.ssh/config 配置文件";
+"Wake-on-LAN Magic Packet sent to %@" = "已向 %@ 发送远程唤醒魔术包";
+"Failed to send Wake-on-LAN packet. Check MAC format." = "发送远程唤醒包失败，请检查 MAC 地址格式。";
+"Could not remove the SSH password from Keychain. The computer was kept." = "无法从钥匙串移除 SSH 密码，已保留该电脑配置。";
+"No matching computers" = "未找到匹配的电脑";
+"Reset Filters" = "重置筛选条件";
+"Send" = "发送";
+"Edit" = "编辑";
 
 
 

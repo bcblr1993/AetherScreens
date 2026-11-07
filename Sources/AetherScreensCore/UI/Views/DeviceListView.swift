@@ -976,23 +976,37 @@ public struct DeviceListView: View {
     }
 
     private var emptyStateView: some View {
-        VStack(spacing: 20) {
+        let isFiltered = viewModel.hasActiveFilters
+        return VStack(spacing: 20) {
             Image(systemName: "display.2")
                 .font(.system(size: 38, weight: .ultraLight))
                 .foregroundStyle(.secondary)
                 .frame(width: 88, height: 88)
                 .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 24))
 
-            Text(AppLocalization.string(viewModel.normalizedSearchQuery.isEmpty ? "No computers here yet" : "No matching computers"))
+            Text(AppLocalization.string(isFiltered ? "No matching computers" : "No computers here yet"))
                 .font(.system(size: 20, weight: .semibold))
 
-            Text(AppLocalization.string(viewModel.normalizedSearchQuery.isEmpty ? "Add a computer to start a remote session. You can also sync devices from your tailnet." : "Try a different name or address."))
+            Text(AppLocalization.string(isFiltered ? "Try a different name or address." : "Add a computer to start a remote session. You can also sync devices from your tailnet."))
                 .font(.system(size: 14))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-            if viewModel.normalizedSearchQuery.isEmpty && selectedCategory == .all {
+            if isFiltered {
+                Button {
+                    withAnimation(libraryTransitionAnimation) {
+                        viewModel.resetFilters()
+                    }
+                } label: {
+                    Label(AppLocalization.string("Reset Filters"), systemImage: "arrow.counterclockwise")
+                        .font(.system(size: 14, weight: .semibold))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.bordered)
+                .padding(.top, 6)
+            } else if selectedCategory == .all {
                 Button {
                     showingAddSheet = true
                 } label: {
@@ -1092,9 +1106,12 @@ private struct DeviceListRowView: View {
                             .foregroundStyle(.orange)
                             .frame(width: 28, height: 28)
                             .background(Color.orange.opacity(0.14), in: Circle())
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help(AppLocalization.string("Wake Mac (WOL)"))
+                    .accessibilityLabel(AppLocalization.string("Wake Mac (WOL)"))
                 }
 
                 Button(action: onEdit) {
@@ -1103,9 +1120,12 @@ private struct DeviceListRowView: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 28, height: 28)
                         .background(Color.secondary.opacity(0.1), in: Circle())
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(AppLocalization.string("Edit Computer..."))
+                .accessibilityLabel(AppLocalization.string("Edit Computer..."))
 
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 12, weight: .semibold))
@@ -1291,7 +1311,7 @@ public struct TailscaleSettingsSheet: View {
             }
         }
         #if os(macOS)
-        .frame(width: 540, height: 480)
+        .frame(minWidth: 540, idealWidth: 560, minHeight: 520, idealHeight: 580)
         #endif
     }
 }

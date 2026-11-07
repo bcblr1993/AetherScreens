@@ -389,9 +389,30 @@ public final class MacNativeInputView: NSView, NSTextInputClient {
         return markedText.attributedSubstring(from: range)
     }
     public func characterIndex(for point: NSPoint) -> Int { 0 }
+
+    /// Computes the local view-coordinate anchor rect for the macOS IME candidate window,
+    /// tracking the active pointer location when inside view bounds and falling back to the view midpoint.
+    public func candidateRectInViewBounds(preferredViewPoint: NSPoint? = nil) -> NSRect {
+        let rawPoint: NSPoint
+        if let preferredViewPoint {
+            rawPoint = preferredViewPoint
+        } else if let windowPoint = lastPointerWindowLocation {
+            rawPoint = convert(windowPoint, from: nil)
+        } else {
+            rawPoint = NSPoint(x: bounds.midX, y: bounds.midY)
+        }
+        guard bounds.width > 0, bounds.height > 0 else {
+            return NSRect(x: rawPoint.x, y: rawPoint.y, width: 1, height: 20)
+        }
+        let clampedX = min(max(bounds.minX, rawPoint.x), max(bounds.minX, bounds.maxX - 1))
+        let clampedY = min(max(bounds.minY, rawPoint.y), max(bounds.minY, bounds.maxY - 20))
+        return NSRect(x: clampedX, y: clampedY, width: 1, height: 20)
+    }
+
     public func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
         actualRange?.pointee = range
-        return window?.convertToScreen(convert(NSRect(x: bounds.midX, y: bounds.midY, width: 1, height: 20), to: nil)) ?? .zero
+        let viewRect = candidateRectInViewBounds()
+        return window?.convertToScreen(convert(viewRect, to: nil)) ?? viewRect
     }
 
     private func mapMacKeyCode(_ keyCode: UInt16, characters: String?) -> UInt32? {

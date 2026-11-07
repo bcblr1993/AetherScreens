@@ -829,6 +829,20 @@
 "Category" = "Category";
 "All Categories" = "All Categories";
 "Clear filter" = "Clear filter";
+"Edit Quick Snippet" = "Edit Quick Snippet";
+"Snippet Title (e.g. Restart Nginx)" = "Snippet Title (e.g. Restart Nginx)";
+"Command or Text Content" = "Command or Text Content";
+"Append Return (⏎) After Sending" = "Append Return (⏎) After Sending";
+"No saved snippets yet" = "No saved snippets yet";
+"Reset Defaults" = "Reset Defaults";
+"Could not read ~/.ssh/config" = "Could not read ~/.ssh/config";
+"Wake-on-LAN Magic Packet sent to %@" = "Wake-on-LAN Magic Packet sent to %@";
+"Failed to send Wake-on-LAN packet. Check MAC format." = "Failed to send Wake-on-LAN packet. Check MAC format.";
+"Could not remove the SSH password from Keychain. The computer was kept." = "Could not remove the SSH password from Keychain. The computer was kept.";
+"No matching computers" = "No matching computers";
+"Reset Filters" = "Reset Filters";
+"Send" = "Send";
+"Edit" = "Edit";
 
 
 
