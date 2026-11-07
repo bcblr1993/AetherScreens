@@ -18,6 +18,7 @@ public struct AddDeviceSheet: View {
     @State private var wakeBeforeConnect: Bool = false
     @State private var isFavorite = false
     @State private var tagsString = ""
+    @State private var notes = ""
     @State private var desktopResolution = "1920x1080"
     @State private var remoteAudioEnabled = true
     @State private var autoFitResolution = false
@@ -59,7 +60,8 @@ public struct AddDeviceSheet: View {
                           isFavorite: isFavorite, tags: tags,
                           desktopWidth: dw, desktopHeight: dh,
                           remoteAudioEnabled: audio, autoFitResolution: autoFit,
-                          wakeBeforeConnect: wakeBeforeConnect, sharedDirectoryPath: sharedDir)
+                          wakeBeforeConnect: wakeBeforeConnect, sharedDirectoryPath: sharedDir,
+                          notes: includesSavedDetails ? notes : nil)
     }
 
     public var body: some View {
@@ -175,6 +177,8 @@ public struct AddDeviceSheet: View {
                             #if canImport(UIKit)
                             .textInputAutocapitalization(.never)
                             #endif
+                        TextField(AppLocalization.string("Notes (Optional)"), text: $notes)
+                            .accessibilityIdentifier("add-notes-input")
                     }
 
                     Section(

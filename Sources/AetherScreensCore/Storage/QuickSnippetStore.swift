@@ -21,6 +21,12 @@ public struct QuickSnippet: Codable, Identifiable, Equatable, Sendable {
 public final class QuickSnippetStore: ObservableObject {
     public static let shared = QuickSnippetStore()
 
+    public static let defaultSnippets: [QuickSnippet] = [
+        QuickSnippet(title: "System Uptime", content: "uptime", appendReturn: true),
+        QuickSnippet(title: "Disk Usage (df -h)", content: "df -h", appendReturn: true),
+        QuickSnippet(title: "Docker Containers", content: "docker ps", appendReturn: true)
+    ]
+
     @Published public private(set) var snippets: [QuickSnippet] = []
 
     private let defaults: UserDefaults
@@ -44,8 +50,39 @@ public final class QuickSnippetStore: ObservableObject {
         save()
     }
 
+    public func update(_ snippet: QuickSnippet) {
+        let trimmedTitle = snippet.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, !snippet.content.isEmpty,
+              let index = snippets.firstIndex(where: { $0.id == snippet.id }) else { return }
+        snippets[index] = QuickSnippet(
+            id: snippet.id,
+            title: trimmedTitle,
+            content: snippet.content,
+            appendReturn: snippet.appendReturn
+        )
+        save()
+    }
+
+    public func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        var updated = snippets
+        let itemsToMove = source.map { updated[$0] }
+        for idx in source.sorted(by: >) {
+            updated.remove(at: idx)
+        }
+        let adjustedDestination = destination - source.filter { $0 < destination }.count
+        let clampedDestination = min(max(0, adjustedDestination), updated.count)
+        updated.insert(contentsOf: itemsToMove, at: clampedDestination)
+        snippets = updated
+        save()
+    }
+
     public func remove(id: UUID) {
         snippets.removeAll { $0.id == id }
+        save()
+    }
+
+    public func resetToDefaults() {
+        snippets = Self.defaultSnippets
         save()
     }
 
@@ -56,11 +93,7 @@ public final class QuickSnippetStore: ObservableObject {
             return
         }
         if seedDefaultsIfEmpty {
-            self.snippets = [
-                QuickSnippet(title: "System Uptime", content: "uptime", appendReturn: true),
-                QuickSnippet(title: "Disk Usage (df -h)", content: "df -h", appendReturn: true),
-                QuickSnippet(title: "Docker Containers", content: "docker ps", appendReturn: true)
-            ]
+            self.snippets = Self.defaultSnippets
             save()
         }
     }

@@ -39,12 +39,34 @@ public final class MultiDisplayManager: ObservableObject, @unchecked Sendable {
     private var selection = 0
     private var layoutSize: CGSize?
     private var lastFramebufferSize = CGSize(width: 2560, height: 1600)
+    private var boundDeviceID: UUID?
+    private var preferenceStore: DisplaySelectionStore?
+    private var preferredSelectionID: Int?
     public var onDisplaySelected: (@Sendable (DisplayInfo?) -> Void)?
 
     public init() {
         let initial = [Self.fullDisplay(width: 2560, height: 1600)]
         availableDisplays = initial
         snapshot = initial
+    }
+
+    public func bindDevicePreferences(deviceID: UUID, store: DisplaySelectionStore = .shared) {
+        self.boundDeviceID = deviceID
+        self.preferenceStore = store
+        if let saved = store.load(for: deviceID) {
+            self.virtualSplitMode = saved.virtualSplitMode
+            self.preferredSelectionID = saved.selectedDisplayID
+            self.selection = saved.selectedDisplayID
+            self.selectedDisplayId = saved.selectedDisplayID
+        }
+    }
+
+    private func persistCurrentPreference() {
+        guard let deviceID = boundDeviceID, let store = preferenceStore else { return }
+        store.save(
+            DisplaySelectionPreference(selectedDisplayID: selectedDisplayId, virtualSplitMode: virtualSplitMode),
+            for: deviceID
+        )
     }
 
     private static func fullDisplay(width: Int, height: Int) -> DisplayInfo {
@@ -107,6 +129,7 @@ public final class MultiDisplayManager: ObservableObject, @unchecked Sendable {
             layoutSize = nil
             replaceDisplays(Self.virtualDisplays(width: w, height: h, mode: mode))
         }
+        persistCurrentPreference()
     }
 
     public func cycleNextDisplay() {
@@ -135,7 +158,11 @@ public final class MultiDisplayManager: ObservableObject, @unchecked Sendable {
     private func replaceDisplays(_ displays: [DisplayInfo], forceSelection: Int? = nil) {
         lock.lock()
         let previous = snapshot.first { $0.id == selection }
-        let nextID = forceSelection ?? (displays.contains { $0.id == selection } ? selection : 0)
+        let candidateSelection = forceSelection ?? preferredSelectionID ?? selection
+        let nextID = displays.contains { $0.id == candidateSelection } ? candidateSelection : 0
+        if displays.contains(where: { $0.id == candidateSelection }) {
+            preferredSelectionID = nil
+        }
         snapshot = displays
         selection = nextID
         let next = displays.first { $0.id == nextID }
@@ -150,8 +177,10 @@ public final class MultiDisplayManager: ObservableObject, @unchecked Sendable {
         lock.lock()
         guard let display = snapshot.first(where: { $0.id == id }), selection != id else { lock.unlock(); return }
         selection = id
+        preferredSelectionID = nil
         lock.unlock()
         selectedDisplayId = id
+        persistCurrentPreference()
         onDisplaySelected?(display)
     }
 

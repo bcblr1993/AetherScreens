@@ -17,6 +17,8 @@ public final class DeviceListViewModel: ObservableObject {
     @Published public var errorMessage: String?
     @Published public var statusNotice: String?
     @Published public var syncService: ComputerSyncService
+    @Published public private(set) var lastProbeLatencyMs: [UUID: Int] = [:]
+    @Published public private(set) var isProbingReachability: Bool = false
 
     private let store: DeviceStore
     private let sshCredentials: SSHCredentialStore
@@ -119,6 +121,7 @@ public final class DeviceListViewModel: ObservableObject {
             return dev.name.localizedCaseInsensitiveContains(query)
                 || dev.host.localizedCaseInsensitiveContains(query)
                 || (dev.username?.localizedCaseInsensitiveContains(query) ?? false)
+                || (dev.notes?.localizedCaseInsensitiveContains(query) ?? false)
                 || dev.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
         }
     }
@@ -236,6 +239,44 @@ public final class DeviceListViewModel: ObservableObject {
         }
         reload()
         Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+    }
+
+    /// Duplicate an existing device configuration
+    @discardableResult
+    public func duplicateDevice(_ device: RemoteDevice) -> RemoteDevice {
+        let copy = store.duplicateDevice(device)
+        reload()
+        Task { [weak self] in await self?.syncService.notifyLibraryChanged() }
+        statusNotice = AppLocalization.format("Duplicated '%@'", device.name)
+        return copy
+    }
+
+    /// Probe saved computers via TCP handshake and update their online status and latency
+    public func probeSavedDevicesReachability(using prober: HostPortReachabilityProber = HostPortReachabilityProber()) async {
+        guard !isProbingReachability else { return }
+        isProbingReachability = true
+        defer { isProbingReachability = false }
+
+        let snapshot = devices
+        guard !snapshot.isEmpty else { return }
+        let results = await prober.probeAll(snapshot)
+        var changed = false
+        for var dev in snapshot {
+            guard let res = results[dev.id] else { continue }
+            if let ms = res.latencyMs {
+                lastProbeLatencyMs[dev.id] = ms
+            } else {
+                lastProbeLatencyMs.removeValue(forKey: dev.id)
+            }
+            if dev.isOnline != res.isReachable {
+                dev.isOnline = res.isReachable
+                _ = store.updateDevice(dev)
+                changed = true
+            }
+        }
+        if changed {
+            reload()
+        }
     }
 
     /// Toggle favorite status of a device and persist

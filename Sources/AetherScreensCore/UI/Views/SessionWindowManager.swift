@@ -9,6 +9,7 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
     public static let shared = SessionWindowManager()
     private let registry = SessionRegistry.shared
     private var controllers: [UUID: NSWindowController] = [:]
+    private var auxiliaryControllers: [String: NSWindowController] = [:]
 
     /// Only the minimum size constrains the window. The default options also apply the content's
     /// intrinsic size, so a wide child (such as the keyboard toolbar) would resize and move the window.
@@ -56,6 +57,34 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
     }
 
     public func close(_ id: UUID) { controllers[id]?.window?.close() }
+
+    public func openAuxiliaryDisplayWindow(for session: SessionViewModel, display: DisplayInfo) {
+        let key = "\(session.device.id.uuidString)_display_\(display.id)"
+        if let existing = auxiliaryControllers[key]?.window {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        let view = AuxiliaryDisplayWindowView(session: session, display: display)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 960, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "\(session.device.name) — \(AppLocalization.message(display.name)) (\(display.resolutionDescription))"
+        window.minSize = NSSize(width: 640, height: 420)
+        window.isReleasedWhenClosed = false
+        window.contentView = Self.makeHostingView(view)
+        window.delegate = self
+        window.center()
+        if let primary = self.window(for: session) {
+            _ = window.cascadeTopLeft(from: NSPoint(x: primary.frame.minX + 36, y: primary.frame.maxY - 36))
+        }
+        let controller = NSWindowController(window: window)
+        auxiliaryControllers[key] = controller
+        controller.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+    }
 
     private func window(for session: SessionViewModel) -> NSWindow? {
         for (id, controller) in controllers {
@@ -138,14 +167,46 @@ public final class SessionWindowManager: NSObject, NSWindowDelegate {
     }
 
     public func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              let id = controllers.first(where: { $0.value.window === window })?.key else { return }
+        guard let window = notification.object as? NSWindow else { return }
+        if let auxKey = auxiliaryControllers.first(where: { $0.value.window === window })?.key {
+            auxiliaryControllers.removeValue(forKey: auxKey)
+            return
+        }
+        guard let id = controllers.first(where: { $0.value.window === window })?.key else { return }
         if let session = registry.remove(id) {
             session.endSession()
             session.client.disconnect()
             session.rdpClient?.disconnect()
         }
         controllers.removeValue(forKey: id)
+    }
+}
+
+private struct AuxiliaryDisplayWindowView: View {
+    @ObservedObject var session: SessionViewModel
+    let display: DisplayInfo
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let cgImage = croppedDisplayImage {
+                Image(decorative: cgImage, scale: 1.0)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                ProgressView()
+                    .tint(.white)
+            }
+        }
+    }
+
+    private var croppedDisplayImage: CGImage? {
+        guard let full = session.currentImage ?? session.framebuffer.makeCGImage() else { return nil }
+        guard display.id != 0 else { return full }
+        let fullRect = CGRect(x: 0, y: 0, width: full.width, height: full.height)
+        let clamped = display.bounds.integral.intersection(fullRect)
+        guard clamped.width > 0, clamped.height > 0 else { return full }
+        return full.cropping(to: clamped) ?? full
     }
 }
 

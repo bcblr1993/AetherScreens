@@ -477,6 +477,15 @@ public struct DeviceListView: View {
         .help(AppLocalization.string("Sync Tailscale Online Nodes"))
         .accessibilityLabel(AppLocalization.string("Sync Tailscale Devices"))
 
+        Button {
+            Task { await viewModel.probeSavedDevicesReachability() }
+        } label: {
+            Label(AppLocalization.string("Check Reachability"), systemImage: "wave.3.right")
+        }
+        .disabled(viewModel.isProbingReachability || viewModel.devices.isEmpty)
+        .help(AppLocalization.string("Check Reachability"))
+        .accessibilityLabel(AppLocalization.string("Check Reachability"))
+
         Menu {
             Button {
                 do {
@@ -640,6 +649,12 @@ public struct DeviceListView: View {
             editingDevice = device
         } label: {
             Label(AppLocalization.string("Edit Computer..."), systemImage: "pencil")
+        }
+
+        Button {
+            _ = viewModel.duplicateDevice(device)
+        } label: {
+            Label(AppLocalization.string("Duplicate Computer"), systemImage: "plus.square.on.square")
         }
 
         Button {

@@ -777,4 +777,22 @@
 "File Explorer (Win+E)" = "文件资源管理器 (Win+E)";
 "Quick Snippets" = "快捷命令片段";
 "Shared Folder Path (Optional)" = "共享文件夹路径（可选）";
+"Manage Quick Snippets…" = "管理快捷命令片段…";
+"New Quick Snippet" = "新建快捷命令片段";
+"Edit Snippet" = "编辑命令片段";
+"Snippet Title" = "片段标题";
+"Command or Text" = "命令或文本内容";
+"Press Return After Typing" = "输入后自动按下回车键";
+"Update Snippet" = "更新片段";
+"Add Snippet" = "添加片段";
+"Saved Snippets" = "已保存的快捷片段";
+"No quick snippets configured yet." = "尚未配置快捷命令片段。";
+"Send Now" = "立即发送";
+"Restore Defaults" = "恢复默认片段";
+"Open Display in New Window" = "在独立窗口打开此显示器";
+"Check Reachability" = "检测在线连通性";
+"Duplicate Computer" = "创建电脑配置副本";
+"Duplicated '%@'" = "已复制“%@”";
+"Notes (Optional)" = "备注说明（可选）";
+
 

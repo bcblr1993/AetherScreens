@@ -777,4 +777,22 @@
 "File Explorer (Win+E)" = "File Explorer (Win+E)";
 "Quick Snippets" = "Quick Snippets";
 "Shared Folder Path (Optional)" = "Shared Folder Path (Optional)";
+"Manage Quick Snippets…" = "Manage Quick Snippets…";
+"New Quick Snippet" = "New Quick Snippet";
+"Edit Snippet" = "Edit Snippet";
+"Snippet Title" = "Snippet Title";
+"Command or Text" = "Command or Text";
+"Press Return After Typing" = "Press Return After Typing";
+"Update Snippet" = "Update Snippet";
+"Add Snippet" = "Add Snippet";
+"Saved Snippets" = "Saved Snippets";
+"No quick snippets configured yet." = "No quick snippets configured yet.";
+"Send Now" = "Send Now";
+"Restore Defaults" = "Restore Defaults";
+"Open Display in New Window" = "Open Display in New Window";
+"Check Reachability" = "Check Reachability";
+"Duplicate Computer" = "Duplicate Computer";
+"Duplicated '%@'" = "Duplicated '%@'";
+"Notes (Optional)" = "Notes (Optional)";
+
 

@@ -347,7 +347,11 @@ public final class SessionViewModel: ObservableObject, Identifiable {
         self.remoteDesktopSize = initialDesktopSize
         self.trackpadEngine = TrackpadEngine(remoteWidth: initialDesktopSize.width, remoteHeight: initialDesktopSize.height)
         self.curtainManager = CurtainModeManager()
-        self.multiDisplayManager = MultiDisplayManager()
+        let displayMgr = MultiDisplayManager()
+        if !isTemporary {
+            displayMgr.bindDevicePreferences(deviceID: device.id)
+        }
+        self.multiDisplayManager = displayMgr
         self.metrics = PerformanceMetrics()
 
         let renderer = MetalScreenRenderer(metrics: self.metrics)

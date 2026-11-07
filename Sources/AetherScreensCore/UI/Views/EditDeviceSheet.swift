@@ -21,6 +21,7 @@ public struct EditDeviceSheet: View {
     @State private var disconnectAction: DisconnectAction = .none
     @State private var isFavorite: Bool = false
     @State private var tagsString: String = ""
+    @State private var notes: String = ""
     @State private var desktopResolution: String = "1920x1080"
     @State private var remoteAudioEnabled: Bool = true
     @State private var autoFitResolution: Bool = false
@@ -73,6 +74,8 @@ public struct EditDeviceSheet: View {
                         #if canImport(UIKit)
                         .textInputAutocapitalization(.never)
                         #endif
+                    TextField(AppLocalization.string("Notes (Optional)"), text: $notes)
+                        .accessibilityIdentifier("edit-notes-input")
                 }
 
                 Section(header: Text(AppLocalization.string("Protocol & System"))) {
@@ -213,6 +216,8 @@ public struct EditDeviceSheet: View {
                             .split(separator: ",")
                             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                             .filter { !$0.isEmpty }
+                        let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+                        updatedDev.notes = trimmedNotes.isEmpty ? nil : trimmedNotes
                         
                         let newPassword = isPasswordModified ? (password.isEmpty ? nil : password) : DeviceStore.shared.getPassword(for: device)
                         if isPasswordModified && password.isEmpty {
@@ -261,6 +266,7 @@ public struct EditDeviceSheet: View {
                 wakeBeforeConnect = device.wakeBeforeConnect ?? false
                 isFavorite = device.isFavorite
                 tagsString = device.tags.joined(separator: ", ")
+                notes = device.notes ?? ""
                 if let savedPwd = DeviceStore.shared.getPassword(for: device) {
                     password = savedPwd
                 }

@@ -22,6 +22,7 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
     public var autoFitResolution: Bool?
     public var wakeBeforeConnect: Bool?
     public var sharedDirectoryPath: String?
+    public var notes: String?
 
     public init(device: RemoteDevice) {
         id = device.id; name = device.name; host = device.host; port = device.port
@@ -36,11 +37,13 @@ public struct ComputerSyncMetadata: Codable, Equatable, Sendable {
         autoFitResolution = device.autoFitResolution
         wakeBeforeConnect = device.wakeBeforeConnect
         sharedDirectoryPath = device.sharedDirectoryPath
+        notes = device.notes
     }
 
     fileprivate var isValid: Bool {
         name.utf8.count <= 4096 && host.utf8.count <= 1024
             && (username?.utf8.count ?? 0) <= 1024 && (macAddress?.utf8.count ?? 0) <= 128
+            && (notes?.utf8.count ?? 0) <= 4096
             && (tags?.count ?? 0) <= 64
             && ConnectionRequest(host: host, port: String(port)) != nil
     }

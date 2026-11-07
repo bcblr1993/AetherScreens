@@ -26,6 +26,7 @@ public struct RemoteDesktopView: View {
     @State private var droppedUploadURL: URL?
     @State private var isUploadDropTargeted = false
     @State private var showingFileDownload = false
+    @State private var showingQuickSnippets = false
     @State private var isWindowFloating = false
     @State private var topBarAutoHide = SessionTopBarAutoHide()
     private let managesSessionLifecycle: Bool
@@ -55,7 +56,7 @@ public struct RemoteDesktopView: View {
         #if os(macOS)
         return viewModel.sessionState != .connected || !viewModel.hasReceivedFirstFrame
             || viewModel.isAwaitingAutomaticReconnect || viewModel.isObserveOnly || voiceOverEnabled
-            || showingLogs || showingKeyboardCustomization || showingDisplayQuality
+            || showingLogs || showingKeyboardCustomization || showingDisplayQuality || showingQuickSnippets
             || showingFileUpload || showingFileDownload
             || viewModel.isPromptingPassword || viewModel.sshPrompt != nil
         #else
@@ -317,6 +318,11 @@ public struct RemoteDesktopView: View {
         }
         .sheet(isPresented: $showingFileDownload) {
             FileDownloadSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingQuickSnippets) {
+            QuickSnippetsSheet { snippet in
+                viewModel.executeQuickSnippet(snippet)
+            }
         }
     }
 
@@ -892,6 +898,13 @@ public struct RemoteDesktopView: View {
                     } label: {
                         Label(AppLocalization.string("Switch to Next Display"), systemImage: "arrow.left.arrow.right.square")
                     }
+                    if displayManager.selectedDisplayId != 0, let current = displayManager.currentDisplay {
+                        Button {
+                            SessionWindowManager.shared.openAuxiliaryDisplayWindow(for: viewModel, display: current)
+                        } label: {
+                            Label(AppLocalization.string("Open Display in New Window"), systemImage: "macwindow.badge.plus")
+                        }
+                    }
                 }
                 Divider()
                 Button {
@@ -1230,16 +1243,22 @@ public struct RemoteDesktopView: View {
                     }
                 }
             }
-            if !QuickSnippetStore.shared.snippets.isEmpty {
-                Divider()
-                Menu(AppLocalization.string("Quick Snippets")) {
-                    ForEach(QuickSnippetStore.shared.snippets) { snippet in
-                        Button {
-                            viewModel.executeQuickSnippet(snippet)
-                        } label: {
-                            Label(snippet.title, systemImage: snippet.appendReturn ? "terminal.fill" : "text.insert")
-                        }
+            Divider()
+            Menu(AppLocalization.string("Quick Snippets")) {
+                ForEach(QuickSnippetStore.shared.snippets) { snippet in
+                    Button {
+                        viewModel.executeQuickSnippet(snippet)
+                    } label: {
+                        Label(snippet.title, systemImage: snippet.appendReturn ? "terminal.fill" : "text.insert")
                     }
+                }
+                if !QuickSnippetStore.shared.snippets.isEmpty {
+                    Divider()
+                }
+                Button {
+                    showingQuickSnippets = true
+                } label: {
+                    Label(AppLocalization.string("Manage Quick Snippets…"), systemImage: "slider.horizontal.3")
                 }
             }
         } label: {
